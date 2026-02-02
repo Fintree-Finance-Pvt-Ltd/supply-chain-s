@@ -1,0 +1,124 @@
+import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { useDispatch, useSelector } from 'react-redux'
+import { fetchCases } from '../../store/slices/caseSlice'
+import DataTable from '../../components/DataTable'
+import StatusBadge from '../../components/StatusBadge'
+import LoadingSpinner from '../../components/LoadingSpinner'
+import { CASE_STATUS, CASE_STATUS_LABELS } from '../../constants/caseStatus'
+import { formatDate } from '../../utils/format'
+import { FiPlus, FiEye } from 'react-icons/fi'
+
+const RMDashboard = () => {
+  const navigate = useNavigate()
+  const dispatch = useDispatch()
+  const { cases, isLoading } = useSelector((state) => state.cases)
+  const [activeTab, setActiveTab] = useState('all')
+
+  useEffect(() => {
+    dispatch(fetchCases())
+  }, [dispatch])
+
+  const tabs = [
+    { id: 'all', label: 'All Cases' },
+    { id: CASE_STATUS.DRAFT, label: 'Draft' },
+    { id: CASE_STATUS.SUBMITTED, label: 'Submitted' },
+    { id: CASE_STATUS.CREDIT_APPROVED, label: 'Credit Approved' },
+    { id: CASE_STATUS.POST_SANCTION_PENDING, label: 'Post Sanction' },
+    { id: CASE_STATUS.OPERATIONS_APPROVED, label: 'Operations Approved' },
+    { id: CASE_STATUS.FULLY_ONBOARDED, label: 'Fully Onboarded' },
+  ]
+
+  const filteredCases = activeTab === 'all' 
+    ? cases 
+    : cases.filter(c => c.status === activeTab)
+
+  const columns = [
+    {
+      key: 'name',
+      label: 'Customer Name',
+      render: (_, row) => row.name || row.customerName,
+    },
+    {
+      key: 'mobile',
+      label: 'Mobile',
+      render: (_, row) => row.mobile || row.mobileNumber,
+    },
+    {
+      key: 'pan',
+      label: 'PAN',
+      render: (_, row) => row.pan || row.panNumber,
+    },
+    {
+      key: 'status',
+      label: 'Status',
+      render: (value) => <StatusBadge status={value} label={CASE_STATUS_LABELS[value]} />,
+    },
+    {
+      key: 'createdAt',
+      label: 'Created',
+      render: (value) => formatDate(value),
+    },
+  ]
+
+  const handleRowClick = (row) => {
+    if (row.status === CASE_STATUS.POST_SANCTION_PENDING) {
+      navigate(`/rm/customer/${row.id}/post-sanction`)
+    } else if (row.status === CASE_STATUS.DRAFT) {
+      navigate(`/rm/customer/new?id=${row.id}`)
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">RM Dashboard</h1>
+          <p className="text-gray-600 mt-2">Manage customer onboarding cases</p>
+        </div>
+        <button
+          onClick={() => navigate('/rm/customer/new')}
+          className="btn-primary flex items-center space-x-2"
+        >
+          <FiPlus className="h-5 w-5" />
+          <span>New Customer</span>
+        </button>
+      </div>
+
+      <div className="card">
+        <div className="border-b border-gray-200">
+          <nav className="flex space-x-8">
+            {tabs.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === tab.id
+                    ? 'border-primary-500 text-primary-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </nav>
+        </div>
+
+        <div className="mt-6">
+          {isLoading ? (
+            <LoadingSpinner />
+          ) : (
+            <DataTable
+              data={filteredCases}
+              columns={columns}
+              onRowClick={handleRowClick}
+            />
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export default RMDashboard
+
