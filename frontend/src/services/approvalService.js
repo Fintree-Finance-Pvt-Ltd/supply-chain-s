@@ -40,5 +40,29 @@ export const approvalService = {
       throw error
     }
   },
+
+  getFlows: async () => {
+    try {
+      const response = await api.get('/approvals/flows')
+      return {
+        data: response.data.success ? response.data.data : []
+      }
+    } catch (error) {
+      console.error('Error fetching approval flows:', error)
+      throw error
+    }
+  },
+
+  updateFlow: async (flowType, steps) => {
+    try {
+      const response = await api.put(`/approvals/flows/${flowType}`, { steps })
+      return {
+        data: response.data.success ? response.data.data : null
+      }
+    } catch (error) {
+      console.error('Error updating approval flow:', error)
+      throw error
+    }
+  },
 }
 

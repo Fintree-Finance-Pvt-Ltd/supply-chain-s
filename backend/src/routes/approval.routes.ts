@@ -26,5 +26,19 @@ router.post(
 // Get approval history
 router.get('/:id/history', approvalController.getApprovalHistory);
 
+// Get all approval flows (Admin only)
+router.get(
+  '/flows',
+  roleMiddleware([ROLES.ADMIN]),
+  approvalController.getFlows
+);
+
+// Update approval flow (Admin only)
+router.put(
+  '/flows/:flowType',
+  roleMiddleware([ROLES.ADMIN]),
+  approvalController.updateFlow
+);
+
 export default router;
 

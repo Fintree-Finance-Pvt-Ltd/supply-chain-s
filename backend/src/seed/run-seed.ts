@@ -25,20 +25,25 @@ async function seed() {
     // Create Roles
     console.log('Creating roles...');
     const roles = [
-      { name: ROLES.ADMIN, label: 'Admin', description: 'System Administrator' },
-      { name: ROLES.RELATIONSHIP_MANAGER, label: 'Relationship Manager', description: 'Manages customer relationships' },
-      { name: ROLES.CREDIT_TEAM, label: 'Credit Team', description: 'Credit review and sanction' },
-      { name: ROLES.OPERATIONS_TEAM, label: 'Operations Team', description: 'Operations verification' },
-      { name: ROLES.CFO, label: 'CFO', description: 'Chief Financial Officer' },
-      { name: ROLES.CEO, label: 'CEO', description: 'Chief Executive Officer' },
-      { name: ROLES.MD, label: 'Managing Director', description: 'Managing Director' },
+      { id: '550e8400-e29b-41d4-a716-446655440001', name: ROLES.ADMIN, label: 'Admin', description: 'System Administrator' },
+      { id: '550e8400-e29b-41d4-a716-446655440002', name: ROLES.RELATIONSHIP_MANAGER, label: 'Relationship Manager', description: 'Manages customer relationships' },
+      { id: '550e8400-e29b-41d4-a716-446655440003', name: ROLES.CREDIT_TEAM, label: 'Credit Team', description: 'Credit review and sanction' },
+      { id: '550e8400-e29b-41d4-a716-446655440004', name: ROLES.OPERATIONS_TEAM, label: 'Operations Team', description: 'Operations verification' },
+      { id: '550e8400-e29b-41d4-a716-446655440005', name: ROLES.CFO, label: 'CFO', description: 'Chief Financial Officer' },
+      { id: '550e8400-e29b-41d4-a716-446655440006', name: ROLES.CEO, label: 'CEO', description: 'Chief Executive Officer' },
+      { id: '550e8400-e29b-41d4-a716-446655440007', name: ROLES.MD, label: 'Managing Director', description: 'Managing Director' },
     ];
 
     const savedRoles: Role[] = [];
     for (const roleData of roles) {
       let role = await roleRepository.findOne({ where: { name: roleData.name } });
       if (!role) {
-        role = roleRepository.create(roleData);
+        role = roleRepository.create({
+          id: roleData.id,
+          name: roleData.name,
+          label: roleData.label,
+          description: roleData.description
+        });
         role = await roleRepository.save(role);
       }
       savedRoles.push(role);

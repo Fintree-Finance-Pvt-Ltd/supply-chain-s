@@ -3,6 +3,7 @@ import { Routes, Route, Navigate } from 'react-router-dom'
 import { useDispatch } from 'react-redux'
 import { checkAuth } from './store/slices/authSlice'
 import ProtectedRoute from './components/ProtectedRoute'
+import { Toaster } from 'react-hot-toast'
 import { ROLES } from './constants/roles'
 
 // Layouts
@@ -45,137 +46,140 @@ function App() {
   }, [dispatch])
 
   return (
-    <Routes>
-      <Route path="/login" element={<Login />} />
-      <Route path="/unauthorized" element={<Unauthorized />} />
-      
-      <Route
-        path="/"
-        element={
-          <ProtectedRoute>
-            <MainLayout />
-          </ProtectedRoute>
-        }
-      >
-        {/* Admin Routes */}
-        <Route
-          path="admin"
-          element={
-            <ProtectedRoute allowedRoles={[ROLES.ADMIN]}>
-              <AdminDashboard />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="admin/users"
-          element={
-            <ProtectedRoute allowedRoles={[ROLES.ADMIN]}>
-              <UserManagement />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="admin/roles"
-          element={
-            <ProtectedRoute allowedRoles={[ROLES.ADMIN]}>
-              <RoleManagement />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="admin/approval-flows"
-          element={
-            <ProtectedRoute allowedRoles={[ROLES.ADMIN]}>
-              <ApprovalFlowConfig />
-            </ProtectedRoute>
-          }
-        />
+    <>
+      <Toaster position="top-right" />
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        <Route path="/unauthorized" element={<Unauthorized />} />
 
-        {/* RM Routes */}
         <Route
-          path="rm/dashboard"
+          path="/"
           element={
-            <ProtectedRoute allowedRoles={[ROLES.RELATIONSHIP_MANAGER]}>
-              <RMDashboard />
+            <ProtectedRoute>
+              <MainLayout />
             </ProtectedRoute>
           }
-        />
-        <Route
-          path="rm/customer/new"
-          element={
-            <ProtectedRoute allowedRoles={[ROLES.RELATIONSHIP_MANAGER]}>
-              <NewCustomerOnboarding />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="rm/customer/:id/post-sanction"
-          element={
-            <ProtectedRoute allowedRoles={[ROLES.RELATIONSHIP_MANAGER]}>
-              <PostSanction />
-            </ProtectedRoute>
-          }
-        />
+        >
+          {/* Admin Routes */}
+          <Route
+            path="admin"
+            element={
+              <ProtectedRoute allowedRoles={[ROLES.ADMIN]}>
+                <AdminDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="admin/users"
+            element={
+              <ProtectedRoute allowedRoles={[ROLES.ADMIN]}>
+                <UserManagement />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="admin/roles"
+            element={
+              <ProtectedRoute allowedRoles={[ROLES.ADMIN]}>
+                <RoleManagement />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="admin/approval-flows"
+            element={
+              <ProtectedRoute allowedRoles={[ROLES.ADMIN]}>
+                <ApprovalFlowConfig />
+              </ProtectedRoute>
+            }
+          />
 
-        {/* Credit Routes */}
-        <Route
-          path="credit/dashboard"
-          element={
-            <ProtectedRoute allowedRoles={[ROLES.CREDIT_TEAM]}>
-              <CreditDashboard />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="credit/case/:id"
-          element={
-            <ProtectedRoute allowedRoles={[ROLES.CREDIT_TEAM]}>
-              <CreditCaseDetail />
-            </ProtectedRoute>
-          }
-        />
+          {/* RM Routes */}
+          <Route
+            path="rm/dashboard"
+            element={
+              <ProtectedRoute allowedRoles={[ROLES.RELATIONSHIP_MANAGER]}>
+                <RMDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="rm/customer/new"
+            element={
+              <ProtectedRoute allowedRoles={[ROLES.RELATIONSHIP_MANAGER]}>
+                <NewCustomerOnboarding />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="rm/customer/:id/post-sanction"
+            element={
+              <ProtectedRoute allowedRoles={[ROLES.RELATIONSHIP_MANAGER]}>
+                <PostSanction />
+              </ProtectedRoute>
+            }
+          />
 
-        {/* Management Routes */}
-        <Route
-          path="management/dashboard"
-          element={
-            <ProtectedRoute allowedRoles={[ROLES.CEO, ROLES.CFO, ROLES.MD]}>
-              <ManagementDashboard />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="management/approval/:id"
-          element={
-            <ProtectedRoute allowedRoles={[ROLES.CEO, ROLES.CFO, ROLES.MD]}>
-              <ApprovalScreen />
-            </ProtectedRoute>
-          }
-        />
+          {/* Credit Routes */}
+          <Route
+            path="credit/dashboard"
+            element={
+              <ProtectedRoute allowedRoles={[ROLES.CREDIT_TEAM]}>
+                <CreditDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="credit/case/:id"
+            element={
+              <ProtectedRoute allowedRoles={[ROLES.CREDIT_TEAM]}>
+                <CreditCaseDetail />
+              </ProtectedRoute>
+            }
+          />
 
-        {/* Operations Routes */}
-        <Route
-          path="operations/dashboard"
-          element={
-            <ProtectedRoute allowedRoles={[ROLES.OPERATIONS_TEAM]}>
-              <OperationsDashboard />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="operations/case/:id"
-          element={
-            <ProtectedRoute allowedRoles={[ROLES.OPERATIONS_TEAM]}>
-              <OperationsCaseScreen />
-            </ProtectedRoute>
-          }
-        />
+          {/* Management Routes */}
+          <Route
+            path="management/dashboard"
+            element={
+              <ProtectedRoute allowedRoles={[ROLES.CEO, ROLES.CFO, ROLES.MD]}>
+                <ManagementDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="management/approval/:id"
+            element={
+              <ProtectedRoute allowedRoles={[ROLES.CEO, ROLES.CFO, ROLES.MD]}>
+                <ApprovalScreen />
+              </ProtectedRoute>
+            }
+          />
 
-        {/* Default redirect - handled by MainLayout */}
-        <Route path="/" element={<Navigate to="/dashboard" replace />} />
-        <Route path="/dashboard" element={<div />} />
-      </Route>
-    </Routes>
+          {/* Operations Routes */}
+          <Route
+            path="operations/dashboard"
+            element={
+              <ProtectedRoute allowedRoles={[ROLES.OPERATIONS_TEAM]}>
+                <OperationsDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="operations/case/:id"
+            element={
+              <ProtectedRoute allowedRoles={[ROLES.OPERATIONS_TEAM]}>
+                <OperationsCaseScreen />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Default redirect - handled by MainLayout */}
+          <Route path="/" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/dashboard" element={<div />} />
+        </Route>
+      </Routes>
+    </>
   )
 }
 

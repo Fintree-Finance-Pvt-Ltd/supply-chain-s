@@ -1,6 +1,6 @@
 import { AppDataSource } from '../config/database';
 import { Customer, CaseStatusHistory, User } from '../entities';
-import { CASE_STATUS } from '../config/constants';
+import { CASE_STATUS, CaseStatus } from '../config/constants';
 import { Repository } from 'typeorm';
 
 export class CustomerService {
@@ -18,7 +18,7 @@ export class CustomerService {
     pan: string;
     aadhaar?: string;
     electricityBillNo?: string;
-    rmId: string;
+    rmId: number;
   }): Promise<Customer> {
     // Check if PAN already exists
     const existing = await this.customerRepository.findOne({
@@ -70,7 +70,7 @@ export class CustomerService {
 
   async getCustomers(filters: {
     status?: string;
-    rmId?: string;
+    rmId?: number;
   }): Promise<Customer[]> {
     const queryBuilder = this.customerRepository.createQueryBuilder('customer');
 
@@ -92,7 +92,7 @@ export class CustomerService {
   async updateStatus(
     customerId: string,
     newStatus: string,
-    changedBy: string,
+    changedBy: number,
     remarks?: string
   ): Promise<Customer> {
     const customer = await this.customerRepository.findOne({
@@ -104,14 +104,14 @@ export class CustomerService {
     }
 
     const previousStatus = customer.status;
-    customer.status = newStatus as CASE_STATUS;
+    customer.status = newStatus as CaseStatus;
 
     const savedCustomer = await this.customerRepository.save(customer);
 
     // Create status history
     await this.createStatusHistory(
       customerId,
-      newStatus as CASE_STATUS,
+      newStatus as CaseStatus,
       changedBy,
       previousStatus,
       remarks
@@ -122,15 +122,15 @@ export class CustomerService {
 
   private async createStatusHistory(
     customerId: string,
-    status: CASE_STATUS,
-    changedBy: string,
+    status: CaseStatus,
+    changedBy: number,
     previousStatus?: string,
     remarks?: string
   ): Promise<CaseStatusHistory> {
     const history = this.statusHistoryRepository.create({
       customerId,
       status,
-      previousStatus: previousStatus as CASE_STATUS,
+      previousStatus: previousStatus as CaseStatus,
       changedBy,
       remarks,
     });

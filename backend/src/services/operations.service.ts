@@ -1,50 +1,72 @@
 import { AppDataSource } from '../config/database';
 import { OperationsCheck, Customer } from '../entities';
-import { ApprovalService } from './approval.service';
-import { CustomerService } from './customer.service';
-import { CASE_STATUS, APPROVAL_FLOW_TYPES } from '../config/constants';
 import { Repository } from 'typeorm';
+import { ApprovalService } from './approval.service';
+import { CASE_STATUS } from '../config/constants';
 
 export class OperationsService {
   private operationsCheckRepository: Repository<OperationsCheck>;
+  private customerRepository: Repository<Customer>;
   private approvalService: ApprovalService;
-  private customerService: CustomerService;
 
   constructor() {
     this.operationsCheckRepository = AppDataSource.getRepository(OperationsCheck);
+    this.customerRepository = AppDataSource.getRepository(Customer);
     this.approvalService = new ApprovalService();
-    this.customerService = new CustomerService();
   }
 
-  async createOperationsCheck(data: {
-    customerId: string;
-    opsUserId: string;
-    documentsVerified?: boolean;
-    esignVerified?: boolean;
-    enachVerified?: boolean;
-    opsRemarks?: string;
-  }): Promise<OperationsCheck> {
-    const customer = await AppDataSource.getRepository(Customer).findOne({
-      where: { id: data.customerId },
+  /**
+   * Submit post-sanction completion and trigger operations approval
+   */
+  async submitPostSanction(
+    customerId: string,
+    userId: number,
+    data?: {
+      documentsVerified?: boolean;
+      esignVerified?: boolean;
+      enachVerified?: boolean;
+      remarks?: string;
+    }
+  ): Promise<OperationsCheck> {
+    // Verify customer exists and is in POST_SANCTION_PENDING status
+    const customer = await this.customerRepository.findOne({
+      where: { id: customerId },
     });
 
     if (!customer) {
       throw new Error('Customer not found');
     }
 
-    const opsCheck = this.operationsCheckRepository.create({
-      ...data,
+    if (customer.status !== CASE_STATUS.POST_SANCTION_PENDING) {
+      throw new Error('Customer is not in post-sanction pending status');
+    }
+
+    // Create operations check
+    const operationsCheck = this.operationsCheckRepository.create({
+      customerId,
+      opsUserId: userId.toString(),
+      documentsVerified: data?.documentsVerified ?? false,
+      esignVerified: data?.esignVerified ?? false,
+      enachVerified: data?.enachVerified ?? false,
+      opsRemarks: data?.remarks ?? undefined,
       status: 'pending',
     });
 
-    const savedCheck = await this.operationsCheckRepository.save(opsCheck);
+    const savedOpsCheck = await this.operationsCheckRepository.save(operationsCheck);
 
-    // Create approval instance
-    await this.approvalService.createOperationsApproval(savedCheck.id);
+    // Update customer status to POST_SANCTION_COMPLETED
+    customer.status = CASE_STATUS.POST_SANCTION_COMPLETED;
+    await this.customerRepository.save(customer);
 
-    return savedCheck;
+    // Create operations approval instance
+    await this.approvalService.createOperationsApproval(savedOpsCheck.id);
+
+    return savedOpsCheck;
   }
 
+  /**
+   * Get pending operations checks
+   */
   async getPendingChecks(): Promise<OperationsCheck[]> {
     return await this.operationsCheckRepository.find({
       where: { status: 'pending' },
@@ -53,6 +75,9 @@ export class OperationsService {
     });
   }
 
+  /**
+   * Get operations check by ID
+   */
   async getCheckById(id: string): Promise<OperationsCheck | null> {
     return await this.operationsCheckRepository.findOne({
       where: { id },
@@ -69,6 +94,9 @@ export class OperationsService {
     });
   }
 
+  /**
+   * Update operations check
+   */
   async updateCheck(
     id: string,
     data: Partial<OperationsCheck>
@@ -81,22 +109,6 @@ export class OperationsService {
 
     Object.assign(opsCheck, data);
 
-    // If all verifications are complete and approved, update customer status
-    if (
-      opsCheck.status === 'approved' &&
-      opsCheck.documentsVerified &&
-      opsCheck.esignVerified &&
-      opsCheck.enachVerified
-    ) {
-      await this.customerService.updateStatus(
-        opsCheck.customerId,
-        CASE_STATUS.FULLY_ONBOARDED,
-        data.opsUserId || opsCheck.opsUserId || '',
-        'Operations verification completed'
-      );
-    }
-
     return await this.operationsCheckRepository.save(opsCheck);
   }
 }
-

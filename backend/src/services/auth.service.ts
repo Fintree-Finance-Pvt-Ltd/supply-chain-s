@@ -57,7 +57,7 @@ export class AuthService {
     };
   }
 
-  async logout(userId: string): Promise<void> {
+  async logout(userId: number): Promise<void> {
     // In a stateless JWT system, logout is handled client-side
     // But we can track logout events or invalidate tokens if needed
     // For now, just return success

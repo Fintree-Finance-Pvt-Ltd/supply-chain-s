@@ -22,5 +22,12 @@ router.put(
   operationsController.updateCheck
 );
 
+// RM submits post-sanction completion
+router.post(
+  '/post-sanction/:customerId/submit',
+  roleMiddleware([ROLES.RELATIONSHIP_MANAGER]),
+  operationsController.submitPostSanction
+);
+
 export default router;
 

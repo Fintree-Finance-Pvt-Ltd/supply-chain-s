@@ -35,8 +35,8 @@ export class CreditSanction {
   @Column({ type: 'text', nullable: true })
   creditRemarks: string;
 
-  @Column({ type: 'uuid' })
-  creditOfficerId: string;
+  @Column({ type: 'int' })
+  creditOfficerId: number;
 
   @Column({ type: 'varchar', length: 50, default: 'pending' })
   status: string; // pending, approved, rejected

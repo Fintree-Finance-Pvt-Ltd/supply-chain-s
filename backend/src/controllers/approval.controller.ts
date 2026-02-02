@@ -20,7 +20,7 @@ export class ApprovalController {
       }
 
       const approvals = await this.approvalService.getPendingApprovalsForUser(
-        req.userId
+        parseInt(req.userId)
       );
 
       res.json({
@@ -58,7 +58,7 @@ export class ApprovalController {
 
       const approvalInstance = await this.approvalService.processApproval(
         id,
-        req.userId,
+        parseInt(req.userId),
         action,
         comments
       );
@@ -90,6 +90,49 @@ export class ApprovalController {
       res.status(500).json({
         success: false,
         message: error.message || 'Failed to fetch approval history',
+      });
+    }
+  };
+
+  getFlows = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const flows = await this.approvalService.getFlows();
+      res.json({
+        success: true,
+        data: flows,
+      });
+    } catch (error: any) {
+      res.status(500).json({
+        success: false,
+        message: error.message || 'Failed to fetch approval flows',
+      });
+    }
+  };
+
+  updateFlow = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { flowType } = req.params;
+      const { steps } = req.body;
+
+      if (!steps || !Array.isArray(steps)) {
+        res.status(400).json({
+          success: false,
+          message: 'Invalid steps configuration',
+        });
+        return;
+      }
+
+      const flow = await this.approvalService.updateFlow(flowType, steps);
+
+      res.json({
+        success: true,
+        data: flow,
+        message: 'Approval flow updated successfully',
+      });
+    } catch (error: any) {
+      res.status(400).json({
+        success: false,
+        message: error.message || 'Failed to update approval flow',
       });
     }
   };

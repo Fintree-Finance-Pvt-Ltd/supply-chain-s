@@ -14,8 +14,8 @@ export class UserRole {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ type: 'uuid' })
-  userId: string;
+  @Column({ type: 'int' })
+  userId: number;
 
   @Column({ type: 'uuid' })
   roleId: string;
@@ -23,8 +23,8 @@ export class UserRole {
   @Column({ type: 'boolean', default: true })
   isActive: boolean;
 
-  @Column({ type: 'uuid', nullable: true })
-  assignedBy: string; // User who assigned this role
+  @Column({ type: 'int', nullable: true })
+  assignedBy: number | null; // User who assigned this role
 
   @CreateDateColumn()
   createdAt: Date;

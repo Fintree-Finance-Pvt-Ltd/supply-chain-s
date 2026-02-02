@@ -34,11 +34,11 @@ export class ApprovalInstance {
   @Column({ type: 'int', default: 0 })
   currentStep: number; // Current step in the approval flow (0-indexed)
 
-  @Column({ type: 'uuid', nullable: true })
-  currentApproverId: string; // User who should approve next
+  @Column({ type: 'int', nullable: true })
+  currentApproverId: number | null; // User who should approve next
 
   @Column({ type: 'text', nullable: true })
-  remarks: string;
+  remarks: string | null;
 
   @CreateDateColumn()
   createdAt: Date;

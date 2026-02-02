@@ -20,7 +20,7 @@ export class CustomerController {
 
       const customer = await this.customerService.createCustomer({
         ...req.body,
-        rmId: req.body.rmId || req.userId,
+        rmId: req.body.rmId ? parseInt(req.body.rmId) : parseInt(req.userId),
       });
 
       res.status(201).json({
@@ -41,7 +41,7 @@ export class CustomerController {
 
       const customers = await this.customerService.getCustomers({
         status: status as string,
-        rmId: rmId as string,
+        rmId: rmId ? parseInt(rmId as string) : undefined,
       });
 
       res.json({
@@ -113,7 +113,7 @@ export class CustomerController {
       const customer = await this.customerService.updateStatus(
         id,
         'submitted',
-        req.userId,
+        parseInt(req.userId),
         'Case submitted to credit team'
       );
 

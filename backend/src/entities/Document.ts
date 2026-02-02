@@ -34,14 +34,14 @@ export class Document {
   @Column({ type: 'bigint', nullable: true })
   fileSize: number; // in bytes
 
-  @Column({ type: 'uuid' })
-  uploadedBy: string;
+  @Column({ type: 'int' })
+  uploadedBy: number;
 
   @Column({ type: 'boolean', default: false })
   verified: boolean;
 
-  @Column({ type: 'uuid', nullable: true })
-  verifiedBy: string;
+  @Column({ type: 'int', nullable: true })
+  verifiedBy: number | null;
 
   @Column({ type: 'timestamp', nullable: true })
   verifiedAt: Date;

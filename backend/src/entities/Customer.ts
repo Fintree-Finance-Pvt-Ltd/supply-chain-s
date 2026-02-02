@@ -42,8 +42,8 @@ export class Customer {
   @Column({ type: 'boolean', default: false })
   kycVerified: boolean;
 
-  @Column({ type: 'uuid' })
-  rmId: string; // Relationship Manager who created this
+  @Column({ type: 'int' })
+  rmId: number; // Relationship Manager who created this
 
   @Column({ type: 'text', nullable: true })
   remarks: string;

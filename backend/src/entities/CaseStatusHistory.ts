@@ -24,8 +24,8 @@ export class CaseStatusHistory {
   @Column({ type: 'enum', enum: Object.values(CASE_STATUS), nullable: true })
   previousStatus: string;
 
-  @Column({ type: 'uuid' })
-  changedBy: string;
+  @Column({ type: 'int' })
+  changedBy: number;
 
   @Column({ type: 'text', nullable: true })
   remarks: string;

@@ -37,5 +37,17 @@ export const operationsService = {
       throw new Error(message)
     }
   },
+
+  submitPostSanction: async (customerId, data) => {
+    try {
+      const response = await api.post(`/operations/post-sanction/${customerId}/submit`, data)
+      return {
+        data: response.data.success ? response.data.data : null
+      }
+    } catch (error) {
+      const message = error.response?.data?.message || error.message || 'Failed to submit post-sanction'
+      throw new Error(message)
+    }
+  },
 }
 

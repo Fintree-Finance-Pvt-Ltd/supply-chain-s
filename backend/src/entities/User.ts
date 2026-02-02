@@ -17,8 +17,8 @@ import { CaseStatusHistory } from './CaseStatusHistory';
 
 @Entity('users')
 export class User {
-  @PrimaryGeneratedColumn('uuid')
-  id: string;
+  @PrimaryGeneratedColumn('increment')
+  id: number;
 
   @Column({ type: 'varchar', length: 255, unique: true })
   email: string;

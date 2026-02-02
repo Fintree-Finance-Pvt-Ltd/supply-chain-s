@@ -77,5 +77,36 @@ export class OperationsController {
       });
     }
   };
+
+  submitPostSanction = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { customerId } = req.params;
+
+      if (!req.userId) {
+        res.status(401).json({
+          success: false,
+          message: 'Authentication required',
+        });
+        return;
+      }
+
+      const opsCheck = await this.operationsService.submitPostSanction(
+        customerId,
+        parseInt(req.userId),
+        req.body
+      );
+
+      res.json({
+        success: true,
+        data: opsCheck,
+        message: 'Post-sanction submitted successfully to operations team',
+      });
+    } catch (error: any) {
+      res.status(400).json({
+        success: false,
+        message: error.message || 'Failed to submit post-sanction',
+      });
+    }
+  };
 }
 

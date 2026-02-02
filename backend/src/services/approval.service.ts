@@ -8,8 +8,10 @@ import {
   OperationsCheck,
   User,
   UserRole,
+  Role,
+  Customer,
 } from '../entities';
-import { APPROVAL_STATUS, APPROVAL_FLOW_TYPES } from '../config/constants';
+import { APPROVAL_STATUS, APPROVAL_FLOW_TYPES, CASE_STATUS } from '../config/constants';
 import { Repository } from 'typeorm';
 
 /**
@@ -25,6 +27,7 @@ export class ApprovalService {
   private operationsCheckRepository: Repository<OperationsCheck>;
   private userRepository: Repository<User>;
   private userRoleRepository: Repository<UserRole>;
+  private customerRepository: Repository<Customer>;
 
   constructor() {
     this.approvalFlowRepository = AppDataSource.getRepository(ApprovalFlow);
@@ -35,6 +38,7 @@ export class ApprovalService {
     this.operationsCheckRepository = AppDataSource.getRepository(OperationsCheck);
     this.userRepository = AppDataSource.getRepository(User);
     this.userRoleRepository = AppDataSource.getRepository(UserRole);
+    this.customerRepository = AppDataSource.getRepository(Customer);
   }
 
   /**
@@ -119,7 +123,7 @@ export class ApprovalService {
    */
   async processApproval(
     approvalInstanceId: string,
-    approverId: string,
+    approverId: number,
     action: string,
     comments?: string
   ): Promise<ApprovalInstance> {
@@ -154,7 +158,7 @@ export class ApprovalService {
     const approvalAction = this.approvalActionRepository.create({
       approvalInstanceId,
       approverId,
-      action: action as APPROVAL_STATUS,
+      action: action as string,
       stepOrder: currentStep.stepOrder,
       comments,
     });
@@ -165,7 +169,7 @@ export class ApprovalService {
     if (action === APPROVAL_STATUS.REJECTED) {
       approvalInstance.status = APPROVAL_STATUS.REJECTED;
       approvalInstance.completedAt = new Date();
-      approvalInstance.remarks = comments;
+      approvalInstance.remarks = comments || null;
 
       // Update related entity status
       await this.updateRelatedEntityStatus(approvalInstance, APPROVAL_STATUS.REJECTED);
@@ -199,7 +203,7 @@ export class ApprovalService {
   /**
    * Get next approver for a role
    */
-  private async getNextApprover(roleId: string | null): Promise<string | null> {
+  private async getNextApprover(roleId: string | null): Promise<number | null> {
     if (!roleId) {
       return null;
     }
@@ -218,27 +222,51 @@ export class ApprovalService {
    */
   private async updateRelatedEntityStatus(
     approvalInstance: ApprovalInstance,
-    status: APPROVAL_STATUS
+    status: string
   ): Promise<void> {
     if (approvalInstance.creditSanctionId) {
       const creditSanction = await this.creditSanctionRepository.findOne({
         where: { id: approvalInstance.creditSanctionId },
+        relations: ['customer'],
       });
 
       if (creditSanction) {
         creditSanction.status = status;
         await this.creditSanctionRepository.save(creditSanction);
+
+        // When credit sanction is approved, update customer status to POST_SANCTION_PENDING
+        if (status === APPROVAL_STATUS.APPROVED && creditSanction.customer) {
+          const customer = creditSanction.customer;
+          customer.status = CASE_STATUS.POST_SANCTION_PENDING;
+          await this.customerRepository.save(customer);
+        } else if (status === APPROVAL_STATUS.REJECTED && creditSanction.customer) {
+          const customer = creditSanction.customer;
+          customer.status = CASE_STATUS.REJECTED;
+          await this.customerRepository.save(customer);
+        }
       }
     }
 
     if (approvalInstance.operationsCheckId) {
       const opsCheck = await this.operationsCheckRepository.findOne({
         where: { id: approvalInstance.operationsCheckId },
+        relations: ['customer'],
       });
 
       if (opsCheck) {
         opsCheck.status = status;
         await this.operationsCheckRepository.save(opsCheck);
+
+        // When operations is approved, update customer status to FULLY_ONBOARDED
+        if (status === APPROVAL_STATUS.APPROVED && opsCheck.customer) {
+          const customer = opsCheck.customer;
+          customer.status = CASE_STATUS.FULLY_ONBOARDED;
+          await this.customerRepository.save(customer);
+        } else if (status === APPROVAL_STATUS.REJECTED && opsCheck.customer) {
+          const customer = opsCheck.customer;
+          customer.status = CASE_STATUS.REJECTED;
+          await this.customerRepository.save(customer);
+        }
       }
     }
   }
@@ -246,7 +274,7 @@ export class ApprovalService {
   /**
    * Get pending approvals for a user
    */
-  async getPendingApprovalsForUser(userId: string): Promise<ApprovalInstance[]> {
+  async getPendingApprovalsForUser(userId: number): Promise<ApprovalInstance[]> {
     return await this.approvalInstanceRepository.find({
       where: {
         currentApproverId: userId,
@@ -273,6 +301,80 @@ export class ApprovalService {
       where: { approvalInstanceId },
       relations: ['approver'],
       order: { createdAt: 'ASC' },
+    });
+  }
+
+  /**
+   * Get all approval flows with steps
+   */
+  async getFlows(): Promise<ApprovalFlow[]> {
+    return await this.approvalFlowRepository.find({
+      relations: ['steps', 'steps.approverRole'],
+      order: { name: 'ASC' },
+    });
+  }
+
+  /**
+   * Update approval flow steps
+   */
+  async updateFlow(
+    flowType: string,
+    steps: { roleId: string; order: number; name?: string }[]
+  ): Promise<ApprovalFlow> {
+    const flow = await this.approvalFlowRepository.findOne({
+      where: { flowType },
+    });
+
+    if (!flow) {
+      throw new Error(`Approval flow not found for type: ${flowType}`);
+    }
+
+    // Transactional update
+    return await AppDataSource.transaction(async (transactionalEntityManager) => {
+      // 1. Delete existing steps
+      await transactionalEntityManager.delete(ApprovalStep, {
+        approvalFlowId: flow.id,
+      });
+
+      // 2. Create new steps
+      const newSteps = [];
+      const roleRepository = transactionalEntityManager.getRepository(Role); // Helper to find roles
+
+      for (const stepData of steps) {
+        let roleId = stepData.roleId;
+
+        // Check if roleId is a UUID or a Role Name
+        // Valid UUID regex (simple check)
+        const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(roleId);
+
+        if (!isUUID) {
+          // Try to find role by name
+          const role = await roleRepository.findOne({ where: { name: roleId } });
+          if (role) {
+            roleId = role.id;
+          } else {
+            console.warn(`Role not found for name: ${stepData.roleId}, skipping step.`);
+            throw new Error(`Invalid role: ${stepData.roleId}`);
+          }
+        }
+
+        const step = transactionalEntityManager.create(ApprovalStep, {
+          approvalFlowId: flow.id,
+          approverRoleId: roleId,
+          stepOrder: stepData.order,
+          stepName: stepData.name || 'Approval Step',
+          isRequired: true,
+        });
+        newSteps.push(step);
+      }
+
+      await transactionalEntityManager.save(ApprovalStep, newSteps);
+
+      // Return updated flow
+      return await transactionalEntityManager.findOne(ApprovalFlow, {
+        where: { id: flow.id },
+        relations: ['steps', 'steps.approverRole'],
+      }) as ApprovalFlow;
     });
   }
 }

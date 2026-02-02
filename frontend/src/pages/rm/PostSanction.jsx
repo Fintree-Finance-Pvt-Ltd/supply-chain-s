@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useDispatch, useSelector } from 'react-redux'
 import { fetchCaseById, updateCase } from '../../store/slices/caseSlice'
 import { documentService } from '../../services/documentService'
+import { operationsService } from '../../services/operationsService'
 import DocumentUploader from '../../components/DocumentUploader'
 import LoadingSpinner from '../../components/LoadingSpinner'
 import { FiFileText, FiCheck } from 'react-icons/fi'
@@ -12,7 +13,7 @@ const PostSanction = () => {
   const navigate = useNavigate()
   const dispatch = useDispatch()
   const { currentCase, isLoading } = useSelector((state) => state.cases)
-  
+
   const [documents, setDocuments] = useState([])
   const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -50,7 +51,7 @@ const PostSanction = () => {
         alert('Customer ID not found')
         return
       }
-      
+
       const result = await documentService.uploadDocument(customerId, file, documentType)
       if (result.data) {
         setDocuments([...documents, result.data])
@@ -82,18 +83,15 @@ const PostSanction = () => {
   const handleSubmitToOps = async () => {
     setIsSubmitting(true)
     try {
-      // Update customer status to post_sanction_completed
-      await dispatch(updateCase({ 
-        id, 
-        data: { 
-          status: 'post_sanction_completed' 
-        } 
-      })).unwrap()
-      
-      // Note: Backend should create operations check automatically when status changes
-      // If not, we may need to call operations service to create check
-      
-      alert('Case submitted to Operations Team')
+      // Call operations service to submit post-sanction
+      await operationsService.submitPostSanction(id, {
+        documentsVerified: true,
+        esignVerified: true,
+        enachVerified: true,
+        remarks: 'Post-sanction activities completed by RM',
+      })
+
+      alert('Case submitted to Operations Team successfully')
       navigate('/rm/dashboard')
     } catch (error) {
       alert('Failed to submit: ' + (error.message || error))

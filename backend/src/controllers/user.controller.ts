@@ -51,7 +51,7 @@ export class UserController {
   getUserById = async (req: Request, res: Response): Promise<void> => {
     try {
       const { id } = req.params;
-      const user = await this.userService.getUserById(id);
+      const user = await this.userService.getUserById(parseInt(id));
 
       if (!user) {
         res.status(404).json({
@@ -78,7 +78,7 @@ export class UserController {
   updateUser = async (req: Request, res: Response): Promise<void> => {
     try {
       const { id } = req.params;
-      const user = await this.userService.updateUser(id, req.body);
+      const user = await this.userService.updateUser(parseInt(id), req.body);
 
       const { password, ...userWithoutPassword } = user;
 
@@ -97,7 +97,7 @@ export class UserController {
   deleteUser = async (req: Request, res: Response): Promise<void> => {
     try {
       const { id } = req.params;
-      await this.userService.deleteUser(id);
+      await this.userService.deleteUser(parseInt(id));
 
       res.json({
         success: true,
@@ -126,7 +126,7 @@ export class UserController {
       const userRole = await this.userService.assignRole(
         userId,
         roleId,
-        req.userId
+        req.userId ? parseInt(req.userId) : undefined
       );
 
       res.json({

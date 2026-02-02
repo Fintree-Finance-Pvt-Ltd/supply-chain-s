@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
-import { fetchUsers, createUser, assignRole } from '../../store/slices/userSlice'
+import { fetchUsers, fetchRoles, createUser, assignRole } from '../../store/slices/userSlice'
 import DataTable from '../../components/DataTable'
 import LoadingSpinner from '../../components/LoadingSpinner'
 import { FiPlus } from 'react-icons/fi'
@@ -18,6 +18,7 @@ const UserManagement = () => {
 
   useEffect(() => {
     dispatch(fetchUsers())
+    dispatch(fetchRoles())
   }, [dispatch])
 
   const handleCreateUser = async (e) => {
@@ -35,8 +36,8 @@ const UserManagement = () => {
   const columns = [
     { key: 'name', label: 'Name' },
     { key: 'email', label: 'Email' },
-    { 
-      key: 'role', 
+    {
+      key: 'role',
       label: 'Role',
       render: (value) => <span className="badge bg-blue-100 text-blue-800">{value}</span>
     },

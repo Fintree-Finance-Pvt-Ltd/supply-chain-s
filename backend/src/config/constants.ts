@@ -21,6 +21,8 @@ export const CASE_STATUS = {
   REJECTED: 'rejected',
 } as const;
 
+export type CaseStatus = typeof CASE_STATUS[keyof typeof CASE_STATUS];
+
 // Approval Status
 export const APPROVAL_STATUS = {
   PENDING: 'pending',

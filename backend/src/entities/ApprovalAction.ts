@@ -18,8 +18,8 @@ export class ApprovalAction {
   @Column({ type: 'uuid' })
   approvalInstanceId: string;
 
-  @Column({ type: 'uuid' })
-  approverId: string;
+  @Column({ type: 'int' })
+  approverId: number;
 
   @Column({ type: 'enum', enum: Object.values(APPROVAL_STATUS) })
   action: string; // approved, rejected
