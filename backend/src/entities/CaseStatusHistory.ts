@@ -12,11 +12,11 @@ import { CASE_STATUS } from '../config/constants';
 
 @Entity('case_status_history')
 export class CaseStatusHistory {
-  @PrimaryGeneratedColumn('uuid')
-  id: string;
+  @PrimaryGeneratedColumn('increment')
+  id: number;
 
-  @Column({ type: 'uuid' })
-  customerId: string;
+  @Column({ type: 'int' })
+  customerId: number;
 
   @Column({ type: 'enum', enum: Object.values(CASE_STATUS) })
   status: string;
@@ -42,4 +42,5 @@ export class CaseStatusHistory {
   @JoinColumn({ name: 'changedBy' })
   changedByUser: User;
 }
+
 

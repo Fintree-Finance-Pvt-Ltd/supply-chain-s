@@ -19,7 +19,7 @@ export class UserService {
     email: string;
     password: string;
     mobile?: string;
-    roleId?: string;
+    roleId?: number;
   }): Promise<User> {
     // Check if user exists
     const existingUser = await this.userRepository.findOne({
@@ -93,7 +93,7 @@ export class UserService {
     await this.userRepository.save(user);
   }
 
-  async assignRole(userId: number, roleId: string, assignedBy?: number): Promise<UserRole> {
+  async assignRole(userId: number, roleId: number, assignedBy?: number): Promise<UserRole> {
     // Check if role assignment already exists
     const existing = await this.userRoleRepository.findOne({
       where: { userId, roleId },
@@ -113,7 +113,7 @@ export class UserService {
     return await this.userRoleRepository.save(userRole);
   }
 
-  async removeRole(userId: number, roleId: string): Promise<void> {
+  async removeRole(userId: number, roleId: number): Promise<void> {
     const userRole = await this.userRoleRepository.findOne({
       where: { userId, roleId },
     });
@@ -124,4 +124,6 @@ export class UserService {
     }
   }
 }
+
+
 

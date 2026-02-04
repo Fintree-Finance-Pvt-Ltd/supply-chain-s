@@ -18,8 +18,8 @@ import { CASE_STATUS } from '../config/constants';
 
 @Entity('customers')
 export class Customer {
-  @PrimaryGeneratedColumn('uuid')
-  id: string;
+  @PrimaryGeneratedColumn('increment')
+  id: number;
 
   @Column({ type: 'varchar', length: 255 })
   name: string;
@@ -74,4 +74,5 @@ export class Customer {
   @OneToMany(() => CaseStatusHistory, (history) => history.customer)
   statusHistory: CaseStatusHistory[];
 }
+
 

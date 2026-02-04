@@ -358,3 +358,4 @@ curl -X POST http://localhost:3000/api/customers \
 
 **Backend is production-ready and fully integrated with the frontend architecture!**
 
+

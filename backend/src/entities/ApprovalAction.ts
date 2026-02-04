@@ -12,11 +12,11 @@ import { APPROVAL_STATUS } from '../config/constants';
 
 @Entity('approval_actions')
 export class ApprovalAction {
-  @PrimaryGeneratedColumn('uuid')
-  id: string;
+  @PrimaryGeneratedColumn('increment')
+  id: number;
 
-  @Column({ type: 'uuid' })
-  approvalInstanceId: string;
+  @Column({ type: 'int' })
+  approvalInstanceId: number;
 
   @Column({ type: 'int' })
   approverId: number;
@@ -42,4 +42,5 @@ export class ApprovalAction {
   @JoinColumn({ name: 'approverId' })
   approver: User;
 }
+
 

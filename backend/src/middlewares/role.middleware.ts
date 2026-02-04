@@ -17,7 +17,7 @@ export const roleMiddleware = (allowedRoles: string[]) => {
 
       const userRoleRepository = AppDataSource.getRepository(UserRole);
       const userRoles = await userRoleRepository.find({
-        where: { userId: req.userId, isActive: true },
+        where: { userId: req.userId!, isActive: true },
         relations: ['role'],
       });
 
@@ -42,4 +42,6 @@ export const roleMiddleware = (allowedRoles: string[]) => {
  * Middleware to check if user is admin
  */
 export const adminMiddleware = roleMiddleware([ROLES.ADMIN]);
+
+
 

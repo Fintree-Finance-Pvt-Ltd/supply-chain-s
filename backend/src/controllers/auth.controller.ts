@@ -44,7 +44,7 @@ export class AuthController {
         return;
       }
 
-      await this.authService.logout(req.userId);
+      await this.authService.logout(Number(req.userId));
 
       res.json({
         success: true,

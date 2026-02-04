@@ -10,3 +10,4 @@ router.post('/logout', authMiddleware, authController.logout);
 
 export default router;
 
+

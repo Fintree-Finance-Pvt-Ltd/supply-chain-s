@@ -12,13 +12,13 @@ export class DocumentService {
   }
 
   async uploadDocument(data: {
-    customerId: string;
+    customerId: number;
     documentType: string;
     fileName: string;
     filePath: string;
     mimeType?: string;
     fileSize?: number;
-    uploadedBy: string;
+    uploadedBy: number;
   }): Promise<Document> {
     // Verify customer exists
     const customer = await this.customerRepository.findOne({
@@ -33,7 +33,7 @@ export class DocumentService {
     return await this.documentRepository.save(document);
   }
 
-  async getDocumentsByCustomer(customerId: string): Promise<Document[]> {
+  async getDocumentsByCustomer(customerId: number): Promise<Document[]> {
     return await this.documentRepository.find({
       where: { customerId },
       relations: ['uploadedByUser'],
@@ -41,7 +41,7 @@ export class DocumentService {
     });
   }
 
-  async getDocumentById(id: string): Promise<Document | null> {
+  async getDocumentById(id: number): Promise<Document | null> {
     return await this.documentRepository.findOne({
       where: { id },
       relations: ['customer', 'uploadedByUser'],
@@ -49,8 +49,8 @@ export class DocumentService {
   }
 
   async verifyDocument(
-    id: string,
-    verifiedBy: string,
+    id: number,
+    verifiedBy: number,
     remarks?: string
   ): Promise<Document> {
     const document = await this.documentRepository.findOne({ where: { id } });
@@ -62,12 +62,14 @@ export class DocumentService {
     document.verified = true;
     document.verifiedBy = verifiedBy;
     document.verifiedAt = new Date();
-    document.remarks = remarks;
+    if (remarks !== undefined) {
+      document.remarks = remarks;
+    }
 
     return await this.documentRepository.save(document);
   }
 
-  async deleteDocument(id: string): Promise<void> {
+  async deleteDocument(id: number): Promise<void> {
     const document = await this.documentRepository.findOne({ where: { id } });
 
     if (!document) {
@@ -77,4 +79,6 @@ export class DocumentService {
     await this.documentRepository.remove(document);
   }
 }
+
+
 

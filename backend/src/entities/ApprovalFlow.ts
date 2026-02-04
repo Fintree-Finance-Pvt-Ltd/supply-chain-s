@@ -12,8 +12,8 @@ import { APPROVAL_FLOW_TYPES } from '../config/constants';
 
 @Entity('approval_flows')
 export class ApprovalFlow {
-  @PrimaryGeneratedColumn('uuid')
-  id: string;
+  @PrimaryGeneratedColumn('increment')
+  id: number;
 
   @Column({ type: 'varchar', length: 255 })
   name: string; // e.g., 'Credit Sanction Approval'
@@ -43,4 +43,5 @@ export class ApprovalFlow {
   @OneToMany(() => ApprovalInstance, (instance) => instance.approvalFlow)
   instances: ApprovalInstance[];
 }
+
 

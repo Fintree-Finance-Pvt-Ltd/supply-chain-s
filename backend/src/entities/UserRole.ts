@@ -11,14 +11,14 @@ import { Role } from './Role';
 
 @Entity('user_roles')
 export class UserRole {
-  @PrimaryGeneratedColumn('uuid')
-  id: string;
+  @PrimaryGeneratedColumn('increment')
+  id: number;
 
   @Column({ type: 'int' })
   userId: number;
 
-  @Column({ type: 'uuid' })
-  roleId: string;
+  @Column({ type: 'int' })
+  roleId: number;
 
   @Column({ type: 'boolean', default: true })
   isActive: boolean;
@@ -38,4 +38,5 @@ export class UserRole {
   @JoinColumn({ name: 'roleId' })
   role: Role;
 }
+
 

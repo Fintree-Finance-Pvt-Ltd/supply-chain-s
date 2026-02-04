@@ -12,14 +12,14 @@ import { Role } from './Role';
 
 @Entity('approval_steps')
 export class ApprovalStep {
-  @PrimaryGeneratedColumn('uuid')
-  id: string;
+  @PrimaryGeneratedColumn('increment')
+  id: number;
 
-  @Column({ type: 'uuid' })
-  approvalFlowId: string;
+  @Column({ type: 'int' })
+  approvalFlowId: number;
 
-  @Column({ type: 'uuid', nullable: true })
-  approverRoleId: string; // Role that can approve at this step
+  @Column({ type: 'int', nullable: true })
+  approverRoleId: number; // Role that can approve at this step
 
   @Column({ type: 'int' })
   stepOrder: number; // 1, 2, 3... for sequential approval
@@ -48,4 +48,5 @@ export class ApprovalStep {
   @JoinColumn({ name: 'approverRoleId' })
   approverRole: Role;
 }
+
 

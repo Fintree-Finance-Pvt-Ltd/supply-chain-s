@@ -14,8 +14,8 @@ import { ApprovalStep } from './ApprovalStep';
 
 @Entity('roles')
 export class Role {
-  @PrimaryGeneratedColumn('uuid')
-  id: string;
+  @PrimaryGeneratedColumn('increment')
+  id: number;
 
   @Column({ type: 'varchar', length: 100, unique: true })
   name: string; // e.g., 'admin', 'relationship_manager'
@@ -45,4 +45,5 @@ export class Role {
   @OneToMany(() => ApprovalStep, (step) => step.approverRole)
   approvalSteps: ApprovalStep[];
 }
+
 

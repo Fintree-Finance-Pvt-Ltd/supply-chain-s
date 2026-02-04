@@ -11,11 +11,11 @@ import { Customer } from './Customer';
 
 @Entity('post_sanctions')
 export class PostSanction {
-  @PrimaryGeneratedColumn('uuid')
-  id: string;
+  @PrimaryGeneratedColumn('increment')
+  id: number;
 
-  @Column({ type: 'uuid' })
-  customerId: string;
+  @Column({ type: 'int' })
+  customerId: number;
 
   @Column({ type: 'varchar', length: 50, default: 'pending' })
   esignStatus: string; // pending, completed, failed
@@ -40,4 +40,5 @@ export class PostSanction {
   @JoinColumn({ name: 'customerId' })
   customer: Customer;
 }
+
 

@@ -13,11 +13,11 @@ import { DOCUMENT_TYPES } from '../config/constants';
 
 @Entity('documents')
 export class Document {
-  @PrimaryGeneratedColumn('uuid')
-  id: string;
+  @PrimaryGeneratedColumn('increment')
+  id: number;
 
-  @Column({ type: 'uuid' })
-  customerId: string;
+  @Column({ type: 'int' })
+  customerId: number;
 
   @Column({ type: 'enum', enum: Object.values(DOCUMENT_TYPES) })
   documentType: string;
@@ -64,4 +64,5 @@ export class Document {
   @JoinColumn({ name: 'uploadedBy' })
   uploadedByUser: User;
 }
+
 

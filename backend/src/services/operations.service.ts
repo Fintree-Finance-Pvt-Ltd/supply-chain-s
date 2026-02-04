@@ -19,7 +19,7 @@ export class OperationsService {
    * Submit post-sanction completion and trigger operations approval
    */
   async submitPostSanction(
-    customerId: string,
+    customerId: number,
     userId: number,
     data?: {
       documentsVerified?: boolean;
@@ -44,7 +44,7 @@ export class OperationsService {
     // Create operations check
     const operationsCheck = this.operationsCheckRepository.create({
       customerId,
-      opsUserId: userId.toString(),
+      opsUserId: userId,
       documentsVerified: data?.documentsVerified ?? false,
       esignVerified: data?.esignVerified ?? false,
       enachVerified: data?.enachVerified ?? false,
@@ -78,7 +78,7 @@ export class OperationsService {
   /**
    * Get operations check by ID
    */
-  async getCheckById(id: string): Promise<OperationsCheck | null> {
+  async getCheckById(id: number): Promise<OperationsCheck | null> {
     return await this.operationsCheckRepository.findOne({
       where: { id },
       relations: [
@@ -98,7 +98,7 @@ export class OperationsService {
    * Update operations check
    */
   async updateCheck(
-    id: string,
+    id: number,
     data: Partial<OperationsCheck>
   ): Promise<OperationsCheck> {
     const opsCheck = await this.operationsCheckRepository.findOne({ where: { id } });
@@ -112,3 +112,5 @@ export class OperationsService {
     return await this.operationsCheckRepository.save(opsCheck);
   }
 }
+
+

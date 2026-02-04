@@ -20,7 +20,8 @@ export class CreditController {
 
       const sanction = await this.creditService.createSanction({
         ...req.body,
-        creditOfficerId: req.userId,
+        customerId: Number(req.body.customerId),
+        creditOfficerId: req.userId!,
       });
 
       res.status(201).json({
@@ -55,7 +56,7 @@ export class CreditController {
   getSanctionById = async (req: Request, res: Response): Promise<void> => {
     try {
       const { id } = req.params;
-      const sanction = await this.creditService.getSanctionById(id);
+      const sanction = await this.creditService.getSanctionById(Number(id));
 
       if (!sanction) {
         res.status(404).json({
@@ -80,7 +81,7 @@ export class CreditController {
   updateSanction = async (req: Request, res: Response): Promise<void> => {
     try {
       const { id } = req.params;
-      const sanction = await this.creditService.updateSanction(id, req.body);
+      const sanction = await this.creditService.updateSanction(Number(id), req.body);
 
       res.json({
         success: true,
@@ -94,4 +95,6 @@ export class CreditController {
     }
   };
 }
+
+
 

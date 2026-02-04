@@ -17,13 +17,13 @@ export class CreditService {
   }
 
   async createSanction(data: {
-    customerId: string;
+    customerId: number;
     sanctionAmount: number;
     tenure: number;
     interestRate: number;
     conditions?: string;
     creditRemarks?: string;
-    creditOfficerId: string;
+    creditOfficerId: number;
   }): Promise<CreditSanction> {
     // Check if customer exists
     const customer = await AppDataSource.getRepository(Customer).findOne({
@@ -67,7 +67,7 @@ export class CreditService {
     });
   }
 
-  async getSanctionById(id: string): Promise<CreditSanction | null> {
+  async getSanctionById(id: number): Promise<CreditSanction | null> {
     return await this.creditSanctionRepository.findOne({
       where: { id },
       relations: [
@@ -84,7 +84,7 @@ export class CreditService {
   }
 
   async updateSanction(
-    id: string,
+    id: number,
     data: Partial<CreditSanction>
   ): Promise<CreditSanction> {
     const sanction = await this.creditSanctionRepository.findOne({ where: { id } });
@@ -97,4 +97,6 @@ export class CreditService {
     return await this.creditSanctionRepository.save(sanction);
   }
 }
+
+
 

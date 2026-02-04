@@ -1,10 +1,11 @@
-import jwt from 'jsonwebtoken';
+import jwt, { SignOptions } from 'jsonwebtoken';
 import * as dotenv from 'dotenv';
 
 dotenv.config();
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
-const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
+const JWT_EXPIRES_IN: SignOptions['expiresIn'] =
+  (process.env.JWT_EXPIRES_IN as any) || '7d';
 
 export interface JWTPayload {
   userId: number;
@@ -13,9 +14,10 @@ export interface JWTPayload {
 }
 
 export const generateToken = (payload: JWTPayload): string => {
-  return jwt.sign(payload, JWT_SECRET, {
+  const options: SignOptions = {
     expiresIn: JWT_EXPIRES_IN,
-  });
+  };
+  return jwt.sign(payload, JWT_SECRET as string, options);
 };
 
 export const verifyToken = (token: string): JWTPayload => {
@@ -25,4 +27,6 @@ export const verifyToken = (token: string): JWTPayload => {
     throw new Error('Invalid or expired token');
   }
 };
+
+
 

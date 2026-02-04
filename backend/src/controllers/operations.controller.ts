@@ -27,7 +27,7 @@ export class OperationsController {
   getCheckById = async (req: Request, res: Response): Promise<void> => {
     try {
       const { id } = req.params;
-      const check = await this.operationsService.getCheckById(id);
+      const check = await this.operationsService.getCheckById(Number(id));
 
       if (!check) {
         res.status(404).json({
@@ -61,9 +61,9 @@ export class OperationsController {
         return;
       }
 
-      const check = await this.operationsService.updateCheck(id, {
+      const check = await this.operationsService.updateCheck(Number(id), {
         ...req.body,
-        opsUserId: req.userId,
+        opsUserId: req.userId!,
       });
 
       res.json({
@@ -91,8 +91,8 @@ export class OperationsController {
       }
 
       const opsCheck = await this.operationsService.submitPostSanction(
-        customerId,
-        parseInt(req.userId),
+        Number(customerId),
+        req.userId!,
         req.body
       );
 
@@ -109,4 +109,6 @@ export class OperationsController {
     }
   };
 }
+
+
 

@@ -10,8 +10,8 @@ import { RolePermission } from './RolePermission';
 
 @Entity('permissions')
 export class Permission {
-  @PrimaryGeneratedColumn('uuid')
-  id: string;
+  @PrimaryGeneratedColumn('increment')
+  id: number;
 
   @Column({ type: 'varchar', length: 100, unique: true })
   name: string; // e.g., 'users.create', 'cases.view'
@@ -38,4 +38,5 @@ export class Permission {
   @OneToMany(() => RolePermission, (rolePermission) => rolePermission.permission)
   rolePermissions: RolePermission[];
 }
+
 

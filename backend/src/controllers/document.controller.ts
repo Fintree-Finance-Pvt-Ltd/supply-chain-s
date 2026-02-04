@@ -37,13 +37,13 @@ export class DocumentController {
       }
 
       const document = await this.documentService.uploadDocument({
-        customerId,
+        customerId: Number(customerId),
         documentType,
         fileName: req.file.originalname,
         filePath: req.file.path,
         mimeType: req.file.mimetype,
         fileSize: req.file.size,
-        uploadedBy: req.userId,
+        uploadedBy: req.userId!,
       });
 
       res.status(201).json({
@@ -62,7 +62,7 @@ export class DocumentController {
   getDocumentsByCustomer = async (req: Request, res: Response): Promise<void> => {
     try {
       const { customerId } = req.params;
-      const documents = await this.documentService.getDocumentsByCustomer(customerId);
+      const documents = await this.documentService.getDocumentsByCustomer(Number(customerId));
 
       res.json({
         success: true,
@@ -90,8 +90,8 @@ export class DocumentController {
       }
 
       const document = await this.documentService.verifyDocument(
-        id,
-        req.userId,
+        Number(id),
+        req.userId!,
         remarks
       );
 
@@ -111,7 +111,7 @@ export class DocumentController {
   deleteDocument = async (req: Request, res: Response): Promise<void> => {
     try {
       const { id } = req.params;
-      await this.documentService.deleteDocument(id);
+      await this.documentService.deleteDocument(Number(id));
 
       res.json({
         success: true,
@@ -125,4 +125,5 @@ export class DocumentController {
     }
   };
 }
+
 

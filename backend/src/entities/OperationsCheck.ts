@@ -14,11 +14,11 @@ import { ApprovalInstance } from './ApprovalInstance';
 
 @Entity('operations_checks')
 export class OperationsCheck {
-  @PrimaryGeneratedColumn('uuid')
-  id: string;
+  @PrimaryGeneratedColumn('increment')
+  id: number;
 
-  @Column({ type: 'uuid' })
-  customerId: string;
+  @Column({ type: 'int' })
+  customerId: number;
 
   @Column({ type: 'boolean', default: false })
   documentsVerified: boolean;
@@ -32,8 +32,8 @@ export class OperationsCheck {
   @Column({ type: 'text', nullable: true })
   opsRemarks: string;
 
-  @Column({ type: 'uuid', nullable: true })
-  opsUserId: string;
+  @Column({ type: 'int', nullable: true })
+  opsUserId: number;
 
   @Column({ type: 'varchar', length: 50, default: 'pending' })
   status: string; // pending, approved, rejected
@@ -56,4 +56,5 @@ export class OperationsCheck {
   @OneToMany(() => ApprovalInstance, (instance) => instance.operationsCheck)
   approvalInstances: ApprovalInstance[];
 }
+
 

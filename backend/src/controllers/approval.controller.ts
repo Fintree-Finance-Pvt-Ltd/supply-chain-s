@@ -20,7 +20,7 @@ export class ApprovalController {
       }
 
       const approvals = await this.approvalService.getPendingApprovalsForUser(
-        parseInt(req.userId)
+        req.userId
       );
 
       res.json({
@@ -57,8 +57,8 @@ export class ApprovalController {
       }
 
       const approvalInstance = await this.approvalService.processApproval(
-        id,
-        parseInt(req.userId),
+        Number(id),
+        req.userId,
         action,
         comments
       );
@@ -80,7 +80,7 @@ export class ApprovalController {
     try {
       const { id } = req.params;
 
-      const history = await this.approvalService.getApprovalHistory(id);
+      const history = await this.approvalService.getApprovalHistory(Number(id));
 
       res.json({
         success: true,
@@ -137,4 +137,6 @@ export class ApprovalController {
     }
   };
 }
+
+
 

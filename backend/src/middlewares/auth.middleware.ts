@@ -8,7 +8,7 @@ declare global {
   namespace Express {
     interface Request {
       user?: User;
-      userId?: string;
+      userId?: number;
       userRole?: string;
     }
   }
@@ -53,4 +53,6 @@ export const authMiddleware = async (
     res.status(401).json({ message: error.message || 'Invalid token' });
   }
 };
+
+
 

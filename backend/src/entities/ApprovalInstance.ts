@@ -16,17 +16,17 @@ import { APPROVAL_STATUS } from '../config/constants';
 
 @Entity('approval_instances')
 export class ApprovalInstance {
-  @PrimaryGeneratedColumn('uuid')
-  id: string;
+  @PrimaryGeneratedColumn('increment')
+  id: number;
 
-  @Column({ type: 'uuid' })
-  approvalFlowId: string;
+  @Column({ type: 'int' })
+  approvalFlowId: number;
 
-  @Column({ type: 'uuid', nullable: true })
-  creditSanctionId: string; // For credit sanction approvals
+  @Column({ type: 'int', nullable: true })
+  creditSanctionId: number; // For credit sanction approvals
 
-  @Column({ type: 'uuid', nullable: true })
-  operationsCheckId: string; // For operations approvals
+  @Column({ type: 'int', nullable: true })
+  operationsCheckId: number; // For operations approvals
 
   @Column({ type: 'enum', enum: Object.values(APPROVAL_STATUS), default: APPROVAL_STATUS.PENDING })
   status: string;
@@ -65,4 +65,5 @@ export class ApprovalInstance {
   @OneToMany(() => ApprovalAction, (action) => action.approvalInstance, { cascade: true })
   actions: ApprovalAction[];
 }
+
 

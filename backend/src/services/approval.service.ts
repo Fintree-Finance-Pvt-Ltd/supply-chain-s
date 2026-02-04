@@ -45,7 +45,7 @@ export class ApprovalService {
    * Create an approval instance for credit sanction
    */
   async createCreditSanctionApproval(
-    creditSanctionId: string,
+    creditSanctionId: number,
     flowType: string = APPROVAL_FLOW_TYPES.CREDIT_SANCTION
   ): Promise<ApprovalInstance> {
     // Get the approval flow
@@ -85,7 +85,7 @@ export class ApprovalService {
    * Create an approval instance for operations check
    */
   async createOperationsApproval(
-    operationsCheckId: string
+    operationsCheckId: number
   ): Promise<ApprovalInstance> {
     const flowType = APPROVAL_FLOW_TYPES.OPERATIONS;
 
@@ -122,7 +122,7 @@ export class ApprovalService {
    * Process approval action (approve/reject)
    */
   async processApproval(
-    approvalInstanceId: string,
+    approvalInstanceId: number,
     approverId: number,
     action: string,
     comments?: string
@@ -203,7 +203,7 @@ export class ApprovalService {
   /**
    * Get next approver for a role
    */
-  private async getNextApprover(roleId: string | null): Promise<number | null> {
+  private async getNextApprover(roleId: number | null): Promise<number | null> {
     if (!roleId) {
       return null;
     }
@@ -296,7 +296,7 @@ export class ApprovalService {
   /**
    * Get approval history for an instance
    */
-  async getApprovalHistory(approvalInstanceId: string): Promise<ApprovalAction[]> {
+  async getApprovalHistory(approvalInstanceId: number): Promise<ApprovalAction[]> {
     return await this.approvalActionRepository.find({
       where: { approvalInstanceId },
       relations: ['approver'],
@@ -319,7 +319,7 @@ export class ApprovalService {
    */
   async updateFlow(
     flowType: string,
-    steps: { roleId: string; order: number; name?: string }[]
+    steps: { roleId: number | string; order: number; name?: string }[]
   ): Promise<ApprovalFlow> {
     const flow = await this.approvalFlowRepository.findOne({
       where: { flowType },
@@ -337,30 +337,26 @@ export class ApprovalService {
       });
 
       // 2. Create new steps
-      const newSteps = [];
+      const newSteps: ApprovalStep[] = [];
       const roleRepository = transactionalEntityManager.getRepository(Role); // Helper to find roles
 
       for (const stepData of steps) {
-        let roleId = stepData.roleId;
+        let roleIdToUse: number;
 
-        // Check if roleId is a UUID or a Role Name
-        // Valid UUID regex (simple check)
-        const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(roleId);
-
-        if (!isUUID) {
-          // Try to find role by name
-          const role = await roleRepository.findOne({ where: { name: roleId } });
-          if (role) {
-            roleId = role.id;
-          } else {
+        if (typeof stepData.roleId === 'number') {
+          roleIdToUse = stepData.roleId;
+        } else {
+          const role = await roleRepository.findOne({ where: { name: stepData.roleId } });
+          if (!role) {
             console.warn(`Role not found for name: ${stepData.roleId}, skipping step.`);
             throw new Error(`Invalid role: ${stepData.roleId}`);
           }
+          roleIdToUse = role.id;
         }
 
         const step = transactionalEntityManager.create(ApprovalStep, {
           approvalFlowId: flow.id,
-          approverRoleId: roleId,
+          approverRoleId: roleIdToUse,
           stepOrder: stepData.order,
           stepName: stepData.name || 'Approval Step',
           isRequired: true,
@@ -378,4 +374,5 @@ export class ApprovalService {
     });
   }
 }
+
 

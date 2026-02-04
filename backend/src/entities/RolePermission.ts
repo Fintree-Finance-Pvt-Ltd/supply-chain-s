@@ -11,14 +11,14 @@ import { Permission } from './Permission';
 
 @Entity('role_permissions')
 export class RolePermission {
-  @PrimaryGeneratedColumn('uuid')
-  id: string;
+  @PrimaryGeneratedColumn('increment')
+  id: number;
 
-  @Column({ type: 'uuid' })
-  roleId: string;
+  @Column({ type: 'int' })
+  roleId: number;
 
-  @Column({ type: 'uuid' })
-  permissionId: string;
+  @Column({ type: 'int' })
+  permissionId: number;
 
   @CreateDateColumn()
   createdAt: Date;
@@ -32,4 +32,5 @@ export class RolePermission {
   @JoinColumn({ name: 'permissionId' })
   permission: Permission;
 }
+
 

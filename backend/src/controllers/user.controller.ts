@@ -124,9 +124,9 @@ export class UserController {
       }
 
       const userRole = await this.userService.assignRole(
-        userId,
-        roleId,
-        req.userId ? parseInt(req.userId) : undefined
+        Number(userId),
+        Number(roleId),
+        req.userId
       );
 
       res.json({
@@ -141,4 +141,6 @@ export class UserController {
     }
   };
 }
+
+
 

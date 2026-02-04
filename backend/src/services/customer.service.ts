@@ -42,7 +42,7 @@ export class CustomerService {
     return savedCustomer;
   }
 
-  async updateCustomer(id: string, data: Partial<Customer>): Promise<Customer> {
+  async updateCustomer(id: number, data: Partial<Customer>): Promise<Customer> {
     const customer = await this.customerRepository.findOne({ where: { id } });
 
     if (!customer) {
@@ -53,7 +53,7 @@ export class CustomerService {
     return await this.customerRepository.save(customer);
   }
 
-  async getCustomerById(id: string): Promise<Customer | null> {
+  async getCustomerById(id: number): Promise<Customer | null> {
     return await this.customerRepository.findOne({
       where: { id },
       relations: [
@@ -90,7 +90,7 @@ export class CustomerService {
   }
 
   async updateStatus(
-    customerId: string,
+    customerId: number,
     newStatus: string,
     changedBy: number,
     remarks?: string
@@ -121,7 +121,7 @@ export class CustomerService {
   }
 
   private async createStatusHistory(
-    customerId: string,
+    customerId: number,
     status: CaseStatus,
     changedBy: number,
     previousStatus?: string,
@@ -138,4 +138,6 @@ export class CustomerService {
     return await this.statusHistoryRepository.save(history);
   }
 }
+
+
 

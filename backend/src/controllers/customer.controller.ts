@@ -20,7 +20,7 @@ export class CustomerController {
 
       const customer = await this.customerService.createCustomer({
         ...req.body,
-        rmId: req.body.rmId ? parseInt(req.body.rmId) : parseInt(req.userId),
+        rmId: req.body.rmId ? parseInt(req.body.rmId) : req.userId!,
       });
 
       res.status(201).json({
@@ -59,7 +59,7 @@ export class CustomerController {
   getCustomerById = async (req: Request, res: Response): Promise<void> => {
     try {
       const { id } = req.params;
-      const customer = await this.customerService.getCustomerById(id);
+      const customer = await this.customerService.getCustomerById(Number(id));
 
       if (!customer) {
         res.status(404).json({
@@ -84,7 +84,7 @@ export class CustomerController {
   updateCustomer = async (req: Request, res: Response): Promise<void> => {
     try {
       const { id } = req.params;
-      const customer = await this.customerService.updateCustomer(id, req.body);
+      const customer = await this.customerService.updateCustomer(Number(id), req.body);
 
       res.json({
         success: true,
@@ -111,9 +111,9 @@ export class CustomerController {
       }
 
       const customer = await this.customerService.updateStatus(
-        id,
+        Number(id),
         'submitted',
-        parseInt(req.userId),
+        req.userId!,
         'Case submitted to credit team'
       );
 
@@ -130,4 +130,6 @@ export class CustomerController {
     }
   };
 }
+
+
 

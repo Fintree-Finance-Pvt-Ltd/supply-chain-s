@@ -14,11 +14,11 @@ import { ApprovalInstance } from './ApprovalInstance';
 
 @Entity('credit_sanctions')
 export class CreditSanction {
-  @PrimaryGeneratedColumn('uuid')
-  id: string;
+  @PrimaryGeneratedColumn('increment')
+  id: number;
 
-  @Column({ type: 'uuid' })
-  customerId: string;
+  @Column({ type: 'int' })
+  customerId: number;
 
   @Column({ type: 'decimal', precision: 15, scale: 2 })
   sanctionAmount: number;
@@ -59,4 +59,5 @@ export class CreditSanction {
   @OneToMany(() => ApprovalInstance, (instance) => instance.creditSanction)
   approvalInstances: ApprovalInstance[];
 }
+
 
