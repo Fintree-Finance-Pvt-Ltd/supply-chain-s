@@ -15,18 +15,22 @@ export class CustomerService {
   async createCustomer(data: {
     name: string;
     mobile: string;
-    pan: string;
-    aadhaar?: string;
+    email?: string;
+    companyType?: string;
+    companyName?: string;
+    gstNumber?: string;
     electricityBillNo?: string;
     rmId: number;
   }): Promise<Customer> {
-    // Check if PAN already exists
-    const existing = await this.customerRepository.findOne({
-      where: { pan: data.pan },
-    });
+    // Check if GST already exists (if provided)
+    if (data.gstNumber) {
+      const existing = await this.customerRepository.findOne({
+        where: { gstNumber: data.gstNumber },
+      });
 
-    if (existing) {
-      throw new Error('Customer with this PAN already exists');
+      if (existing) {
+        throw new Error('Customer with this GST number already exists');
+      }
     }
 
     const customer = this.customerRepository.create({
@@ -59,6 +63,7 @@ export class CustomerService {
       relations: [
         'rm',
         'documents',
+        'kycDetails',
         'creditSanctions',
         'postSanctions',
         'operationsChecks',

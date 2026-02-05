@@ -22,6 +22,12 @@ export class Document {
   @Column({ type: 'enum', enum: Object.values(DOCUMENT_TYPES) })
   documentType: string;
 
+  @Column({ type: 'varchar', length: 50, default: 'applicant' })
+  applicantType: string; // 'applicant' or 'co-applicant'
+
+  @Column({ type: 'int', default: 0 })
+  applicantIndex: number; // 0 for main applicant, 1,2,3... for co-applicants
+
   @Column({ type: 'varchar', length: 255 })
   fileName: string;
 

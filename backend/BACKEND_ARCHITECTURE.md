@@ -132,21 +132,23 @@ draft → submitted → credit_approved → post_sanction_pending
 
 ### Core Tables
 
-1. **users** - System users
-2. **roles** - User roles
-3. **permissions** - System permissions
-4. **user_roles** - User-role assignments
-5. **role_permissions** - Role-permission mappings
-6. **customers** - Customer records
-7. **documents** - Uploaded documents
-8. **credit_sanctions** - Credit sanction details
-9. **post_sanctions** - Post-sanction activities
-10. **operations_checks** - Operations verification
+> **ID strategy:** All primary keys are `INT AUTO_INCREMENT` and all foreign keys reference these numeric IDs (no UUIDs are used).
+
+1. **users** - System users (`id` int, auto-increment)
+2. **roles** - User roles (`id` int, auto-increment)
+3. **permissions** - System permissions (`id` int, auto-increment)
+4. **user_roles** - User-role assignments (FKs: `userId`, `roleId`)
+5. **role_permissions** - Role-permission mappings (FKs: `roleId`, `permissionId`)
+6. **customers** - Customer records (`id` int, referenced by many modules)
+7. **documents** - Uploaded documents (FK: `customerId` → `customers.id`)
+8. **credit_sanctions** - Credit sanction details (FK: `customerId`)
+9. **post_sanctions** - Post-sanction activities (FK: `customerId`)
+10. **operations_checks** - Operations verification (FKs: `customerId`, `opsUserId`)
 11. **approval_flows** - Approval flow configurations
-12. **approval_steps** - Approval step definitions
-13. **approval_instances** - Active approval processes
-14. **approval_actions** - Approval history/actions
-15. **case_status_history** - Status change audit
+12. **approval_steps** - Approval step definitions (FKs: `approvalFlowId`, `approverRoleId`)
+13. **approval_instances** - Active approval processes (FKs: `approvalFlowId`, `creditSanctionId`, `operationsCheckId`)
+14. **approval_actions** - Approval history/actions (FKs: `approvalInstanceId`, `approverId`)
+15. **case_status_history** - Status change audit (FKs: `customerId`, `changedBy`)
 
 ## API Endpoints Summary
 

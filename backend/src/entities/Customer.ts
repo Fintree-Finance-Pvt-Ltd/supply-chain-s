@@ -14,7 +14,8 @@ import { CreditSanction } from './CreditSanction';
 import { PostSanction } from './PostSanction';
 import { OperationsCheck } from './OperationsCheck';
 import { CaseStatusHistory } from './CaseStatusHistory';
-import { CASE_STATUS } from '../config/constants';
+import { KycDetail } from './KycDetail';
+import { CASE_STATUS, COMPANY_TYPES } from '../config/constants';
 
 @Entity('customers')
 export class Customer {
@@ -27,11 +28,17 @@ export class Customer {
   @Column({ type: 'varchar', length: 20 })
   mobile: string;
 
-  @Column({ type: 'varchar', length: 10, unique: true })
-  pan: string;
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  email: string;
 
-  @Column({ type: 'varchar', length: 12, nullable: true })
-  aadhaar: string;
+  @Column({ type: 'enum', enum: Object.values(COMPANY_TYPES), nullable: true })
+  companyType: string;
+
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  companyName: string;
+
+  @Column({ type: 'varchar', length: 15, nullable: true, unique: true })
+  gstNumber: string;
 
   @Column({ type: 'varchar', length: 100, nullable: true })
   electricityBillNo: string;
@@ -61,6 +68,9 @@ export class Customer {
 
   @OneToMany(() => Document, (document) => document.customer)
   documents: Document[];
+
+  @OneToMany(() => KycDetail, (kycDetail) => kycDetail.customer)
+  kycDetails: KycDetail[];
 
   @OneToMany(() => CreditSanction, (sanction) => sanction.customer)
   creditSanctions: CreditSanction[];

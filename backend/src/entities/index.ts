@@ -6,6 +6,7 @@ export { UserRole } from './UserRole';
 export { RolePermission } from './RolePermission';
 export { Customer } from './Customer';
 export { Document } from './Document';
+export { KycDetail } from './KycDetail';
 export { CreditSanction } from './CreditSanction';
 export { PostSanction } from './PostSanction';
 export { OperationsCheck } from './OperationsCheck';

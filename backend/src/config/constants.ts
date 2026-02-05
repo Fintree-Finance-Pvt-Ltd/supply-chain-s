@@ -38,7 +38,59 @@ export const DOCUMENT_TYPES = {
   SANCTION_LETTER: 'sanction_letter',
   ESIGN_DOCUMENT: 'esign_document',
   ENACH_DOCUMENT: 'enach_document',
+
+  // KYC Documents
+  GST_CERTIFICATE: 'gst_certificate',
+  MSME_CERTIFICATE: 'msme_certificate',
+
+  // Company Documents
+  COI: 'coi', // Certificate of Incorporation
+  MOA: 'moa', // Memorandum of Association
+  AOA: 'aoa', // Articles of Association
+  LIST_OF_DIRECTORS: 'list_of_directors',
+  COMPANY_PAN: 'company_pan',
+  PARTNERSHIP_DEED: 'partnership_deed',
+  LLP_DEED: 'llp_deed',
+
+  // Address Proof
+  OFFICE_ELECTRICITY_BILL: 'office_electricity_bill',
+  RENT_AGREEMENT: 'rent_agreement',
+  RESIDENCE_ELECTRICITY_BILL: 'residence_electricity_bill',
+
+  // Financial Documents
+  ITR_FY_2223: 'itr_fy_2223',
+  ITR_FY_2324: 'itr_fy_2324',
+  ITR_FY_2425: 'itr_fy_2425',
+  AUDITED_FINANCIALS_2122: 'audited_financials_2122',
+  AUDITED_FINANCIALS_2223: 'audited_financials_2223',
+  AUDITED_FINANCIALS_2324: 'audited_financials_2324',
+  AUDITED_FINANCIALS_2425: 'audited_financials_2425',
+  BANK_STATEMENT: 'bank_statement',
+
+  // GST & Sales
+  GSTR_3B: 'gstr_3b',
+  SALES_PURCHASE: 'sales_purchase',
+
+  // Other Business Documents
+  DEBTOR_AGEING: 'debtor_ageing',
+  OBLIGATION_SHEET: 'obligation_sheet',
+
   OTHER: 'other',
+} as const;
+
+// Company Types
+export const COMPANY_TYPES = {
+  PROPRIETORSHIP: 'Proprietorship',
+  PARTNERSHIP: 'Partnership',
+  PVT_LTD: 'Pvt Ltd / Ltd',
+  LLP: 'LLP',
+} as const;
+
+// KYC Types
+export const KYC_TYPES = {
+  PAN: 'PAN',
+  GST: 'GST',
+  AADHAAR: 'AADHAAR',
 } as const;
 
 // Approval Flow Types

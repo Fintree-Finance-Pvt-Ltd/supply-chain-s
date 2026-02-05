@@ -258,13 +258,13 @@ All API calls are abstracted in service files:
 - `caseService.js` - Case management endpoints
 - `userService.js` - User management endpoints
 
-### Mock Services
+### Backend Integration Status
 
-Currently, all services use mock implementations. To integrate with real backend:
+The frontend is now integrated with the live backend API:
 
-1. Update `API_BASE_URL` in `constants/api.js`
-2. Replace mock functions in service files with actual API calls
-3. Update response handling to match backend structure
+1. `API_BASE_URL` is configured via `VITE_API_BASE_URL` and `constants/api.js`.
+2. Service files (`authService.js`, `caseService.js`, `userService.js`, etc.) call real backend endpoints using Axios.
+3. Response handling matches the backend structure defined in `backend/API_DOCUMENTATION.md` (e.g., numeric IDs instead of UUIDs).
 
 ### API Endpoints Structure
 

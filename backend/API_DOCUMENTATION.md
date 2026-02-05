@@ -32,7 +32,7 @@ Login and get JWT token.
   "success": true,
   "data": {
     "user": {
-      "id": "uuid",
+      "id": 1,
       "email": "admin@scf.com",
       "name": "Admin User",
       "role": "admin"
@@ -59,7 +59,7 @@ Create new user.
   "email": "user@example.com",
   "password": "password123",
   "mobile": "9876543210",
-  "roleId": "role-uuid"
+  "roleId": 2
 }
 ```
 
@@ -81,8 +81,8 @@ Assign role to user.
 **Request:**
 ```json
 {
-  "userId": "user-uuid",
-  "roleId": "role-uuid"
+  "userId": 5,
+  "roleId": 2
 }
 ```
 
@@ -109,7 +109,7 @@ Create new customer (RM only).
 {
   "success": true,
   "data": {
-    "id": "uuid",
+    "id": 101,
     "name": "ABC Enterprises",
     "status": "draft",
     "createdAt": "2024-01-01T00:00:00.000Z"
@@ -157,7 +157,7 @@ Create credit sanction (Credit Team only).
 {
   "success": true,
   "data": {
-    "id": "uuid",
+    "id": 5001,
     "status": "pending",
     "message": "Credit sanction created and submitted for approval"
   }
@@ -186,7 +186,7 @@ Get pending approvals for current user (Management roles).
   "success": true,
   "data": [
     {
-      "id": "uuid",
+      "id": 9001,
       "status": "pending",
       "currentStep": 1,
       "creditSanction": {
@@ -216,7 +216,7 @@ Process approval (approve/reject).
 {
   "success": true,
   "data": {
-    "id": "uuid",
+    "id": 9001,
     "status": "approved",
     "currentStep": 2
   },
@@ -236,7 +236,7 @@ Upload document.
 
 **Request:** (multipart/form-data)
 - `file`: File to upload
-- `customerId`: Customer UUID
+- `customerId`: Customer ID (integer)
 - `documentType`: Type of document (pan, aadhaar, etc.)
 
 **Response:**
@@ -244,7 +244,7 @@ Upload document.
 {
   "success": true,
   "data": {
-    "id": "uuid",
+    "id": 7001,
     "fileName": "document.pdf",
     "filePath": "./uploads/file-1234567890.pdf",
     "documentType": "pan"

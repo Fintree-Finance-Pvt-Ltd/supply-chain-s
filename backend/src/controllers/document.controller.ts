@@ -26,7 +26,7 @@ export class DocumentController {
         return;
       }
 
-      const { customerId, documentType } = req.body;
+      const { customerId, documentType, applicantType, applicantIndex } = req.body;
 
       if (!customerId || !documentType) {
         res.status(400).json({
@@ -39,6 +39,8 @@ export class DocumentController {
       const document = await this.documentService.uploadDocument({
         customerId: Number(customerId),
         documentType,
+        applicantType: applicantType || 'applicant',
+        applicantIndex: applicantIndex !== undefined ? Number(applicantIndex) : 0,
         fileName: req.file.originalname,
         filePath: req.file.path,
         mimeType: req.file.mimetype,

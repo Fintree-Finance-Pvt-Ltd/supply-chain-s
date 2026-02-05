@@ -14,6 +14,8 @@ export class DocumentService {
   async uploadDocument(data: {
     customerId: number;
     documentType: string;
+    applicantType?: string;
+    applicantIndex?: number;
     fileName: string;
     filePath: string;
     mimeType?: string;
