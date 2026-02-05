@@ -10,15 +10,29 @@ export class UserController {
 
   createUser = async (req: Request, res: Response): Promise<void> => {
     try {
+      const { name, email, password, mobile, defaultRole } = req.body;
+
+      if (!name || !email || !password) {
+        res.status(400).json({
+          success: false,
+          message: 'Name, email, and password are required',
+        });
+        return;
+      }
+
       const user = await this.userService.createUser({
-        ...req.body,
-        // assignedBy can be set from req.userId if needed
+        name,
+        email,
+        password,
+        mobile,
+        defaultRole,
       });
 
-      const { password, ...userWithoutPassword } = user;
+      const { password: _, ...userWithoutPassword } = user;
 
       res.status(201).json({
         success: true,
+        message: 'User created successfully',
         data: userWithoutPassword,
       });
     } catch (error: any) {
@@ -34,7 +48,7 @@ export class UserController {
       const users = await this.userService.getUsers();
 
       // Remove passwords from response
-      const usersWithoutPasswords = users.map(({ password, ...user }) => user);
+      const usersWithoutPasswords = users.map(({ password: _, ...user }) => user);
 
       res.json({
         success: true,
@@ -51,7 +65,7 @@ export class UserController {
   getUserById = async (req: Request, res: Response): Promise<void> => {
     try {
       const { id } = req.params;
-      const user = await this.userService.getUserById(parseInt(id));
+      const user = await this.userService.getUserById(id);
 
       if (!user) {
         res.status(404).json({
@@ -61,7 +75,7 @@ export class UserController {
         return;
       }
 
-      const { password, ...userWithoutPassword } = user;
+      const { password: _, ...userWithoutPassword } = user;
 
       res.json({
         success: true,
@@ -78,12 +92,29 @@ export class UserController {
   updateUser = async (req: Request, res: Response): Promise<void> => {
     try {
       const { id } = req.params;
-      const user = await this.userService.updateUser(parseInt(id), req.body);
+      const { name, email, mobile, isActive, defaultRole } = req.body;
 
-      const { password, ...userWithoutPassword } = user;
+      if (!id) {
+        res.status(400).json({
+          success: false,
+          message: 'User ID is required',
+        });
+        return;
+      }
+
+      const user = await this.userService.updateUser(id, {
+        name,
+        email,
+        mobile,
+        isActive,
+        defaultRole,
+      });
+
+      const { password: _, ...userWithoutPassword } = user;
 
       res.json({
         success: true,
+        message: 'User updated successfully',
         data: userWithoutPassword,
       });
     } catch (error: any) {
@@ -97,7 +128,16 @@ export class UserController {
   deleteUser = async (req: Request, res: Response): Promise<void> => {
     try {
       const { id } = req.params;
-      await this.userService.deleteUser(parseInt(id));
+
+      if (!id) {
+        res.status(400).json({
+          success: false,
+          message: 'User ID is required',
+        });
+        return;
+      }
+
+      await this.userService.deleteUser(id);
 
       res.json({
         success: true,
@@ -124,19 +164,75 @@ export class UserController {
       }
 
       const userRole = await this.userService.assignRole(
-        Number(userId),
-        Number(roleId),
-        req.userId
+        userId,
+        roleId,
+        req.userId ? parseInt(req.userId) : undefined
       );
 
       res.json({
         success: true,
+        message: 'Role assigned successfully',
         data: userRole,
       });
     } catch (error: any) {
       res.status(400).json({
         success: false,
         message: error.message || 'Failed to assign role',
+      });
+    }
+  };
+
+  removeRole = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { userId, roleId } = req.body;
+
+      if (!userId || !roleId) {
+        res.status(400).json({
+          success: false,
+          message: 'userId and roleId are required',
+        });
+        return;
+      }
+
+      await this.userService.removeRole(userId, roleId);
+
+      res.json({
+        success: true,
+        message: 'Role removed successfully',
+      });
+    } catch (error: any) {
+      res.status(400).json({
+        success: false,
+        message: error.message || 'Failed to remove role',
+      });
+    }
+  };
+
+  toggleUserStatus = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { id } = req.params;
+
+      if (!id) {
+        res.status(400).json({
+          success: false,
+          message: 'User ID is required',
+        });
+        return;
+      }
+
+      const user = await this.userService.toggleUserStatus(id);
+
+      const { password: _, ...userWithoutPassword } = user;
+
+      res.json({
+        success: true,
+        message: `User ${user.isActive ? 'activated' : 'deactivated'} successfully`,
+        data: userWithoutPassword,
+      });
+    } catch (error: any) {
+      res.status(400).json({
+        success: false,
+        message: error.message || 'Failed to toggle user status',
       });
     }
   };

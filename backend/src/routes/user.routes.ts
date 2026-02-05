@@ -15,7 +15,9 @@ router.get('/', adminMiddleware, userController.getUsers);
 router.get('/:id', adminMiddleware, userController.getUserById);
 router.put('/:id', adminMiddleware, userController.updateUser);
 router.delete('/:id', adminMiddleware, userController.deleteUser);
+router.patch('/:id/toggle-status', adminMiddleware, userController.toggleUserStatus);
 router.post('/assign-role', adminMiddleware, userController.assignRole);
+router.post('/remove-role', adminMiddleware, userController.removeRole);
 
 export default router;
 

@@ -10,7 +10,25 @@ export const API_ENDPOINTS = {
   // Users (Admin)
   USERS: '/users',
   USER_BY_ID: (id) => `/users/${id}`,
+  USER_TOGGLE_STATUS: (id) => `/users/${id}/toggle-status`,
+  REMOVE_ROLE: '/users/remove-role',
+  UPDATE_USER: (id) => `/users/${id}`,
+  DELETE_USER: (id) => `/users/${id}`,
   ASSIGN_ROLE: '/users/assign-role',
+  
+  // Roles (Admin)
+  ROLES: '/roles',
+  ROLE_BY_ID: (id) => `/roles/${id}`,
+  ROLE_TOGGLE_STATUS: (id) => `/roles/${id}/toggle-status`,
+  ROLE_ASSIGN_PERMISSION: '/roles/assign-permission',
+  ROLE_REMOVE_PERMISSION: '/roles/remove-permission',
+  
+  // Approval Flows (Admin)
+  APPROVAL_FLOWS: '/approvals/flows',
+  APPROVAL_FLOW_BY_ID: (id) => `/approvals/flows/${id}`,
+  APPROVAL_FLOW_TOGGLE: (id) => `/approvals/flows/${id}/toggle-status`,
+  APPROVAL_STEPS: '/approvals/steps',
+  APPROVAL_STEP_BY_ID: (id) => `/approvals/steps/${id}`,
   
   // Customers
   CUSTOMERS: '/customers',

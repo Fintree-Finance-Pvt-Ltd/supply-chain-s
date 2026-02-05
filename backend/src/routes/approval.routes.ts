@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { ApprovalController } from '../controllers/approval.controller';
 import { authMiddleware } from '../middlewares/auth.middleware';
-import { roleMiddleware } from '../middlewares/role.middleware';
+import { adminMiddleware, roleMiddleware } from '../middlewares/role.middleware';
 import { ROLES } from '../config/constants';
 
 const router = Router();
@@ -9,36 +9,51 @@ const approvalController = new ApprovalController();
 
 router.use(authMiddleware);
 
-// Management roles can view pending approvals
+// Approval actions (non-admin)
 router.get(
   '/pending',
-  roleMiddleware([ROLES.CEO, ROLES.CFO, ROLES.MD]),
+  roleMiddleware([
+    ROLES.CEO,
+    ROLES.CFO,
+    ROLES.MD,
+    ROLES.CREDIT_TEAM_L1,
+    ROLES.CREDIT_TEAM_L2,
+    ROLES.OPERATIONS_TEAM_L1,
+    ROLES.OPERATIONS_TEAM_L2,
+    ROLES.OPERATIONS_HEAD,
+  ]),
   approvalController.getPendingApprovals
 );
 
-// Process approval (approve/reject)
 router.post(
   '/:id/action',
-  roleMiddleware([ROLES.CEO, ROLES.CFO, ROLES.MD]),
+  roleMiddleware([
+    ROLES.CEO,
+    ROLES.CFO,
+    ROLES.MD,
+    ROLES.CREDIT_TEAM_L1,
+    ROLES.CREDIT_TEAM_L2,
+    ROLES.OPERATIONS_TEAM_L1,
+    ROLES.OPERATIONS_TEAM_L2,
+    ROLES.OPERATIONS_HEAD,
+  ]),
   approvalController.processApproval
 );
 
-// Get approval history
 router.get('/:id/history', approvalController.getApprovalHistory);
 
-// Get all approval flows (Admin only)
-router.get(
-  '/flows',
-  roleMiddleware([ROLES.ADMIN]),
-  approvalController.getFlows
-);
+// Admin only - Approval Flow Management
+router.post('/flows', adminMiddleware, approvalController.createApprovalFlow);
+router.get('/flows', adminMiddleware, approvalController.getAllFlows);
+router.get('/flows/:id', adminMiddleware, approvalController.getFlowById);
+router.put('/flows/:id', adminMiddleware, approvalController.updateApprovalFlow);
+router.delete('/flows/:id', adminMiddleware, approvalController.deleteApprovalFlow);
+router.patch('/flows/:id/toggle-status', adminMiddleware, approvalController.toggleFlowStatus);
 
-// Update approval flow (Admin only)
-router.put(
-  '/flows/:flowType',
-  roleMiddleware([ROLES.ADMIN]),
-  approvalController.updateFlow
-);
+// Admin only - Approval Step Management
+router.post('/steps', adminMiddleware, approvalController.addApprovalStep);
+router.put('/steps/:stepId', adminMiddleware, approvalController.updateApprovalStep);
+router.delete('/steps/:stepId', adminMiddleware, approvalController.removeApprovalStep);
 
 export default router;
 

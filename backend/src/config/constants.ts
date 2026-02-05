@@ -2,8 +2,12 @@
 export const ROLES = {
   ADMIN: 'admin',
   RELATIONSHIP_MANAGER: 'relationship_manager',
-  CREDIT_TEAM: 'credit_team',
-  OPERATIONS_TEAM: 'operations_team',
+  CREDIT_TEAM_L1: 'credit_team_l1',
+  CREDIT_TEAM_L2: 'credit_team_l2',
+  OPERATIONS_TEAM_L1: 'operations_team_l1',
+  OPERATIONS_TEAM_L2: 'operations_team_l2',
+  OPERATIONS_HEAD: 'operations_head',
+  CREDIT_SANCTION_CUSTOMER_APPROVAL: 'credit_sanction_customer_approval',
   CFO: 'cfo',
   CEO: 'ceo',
   MD: 'md',
@@ -97,6 +101,8 @@ export const KYC_TYPES = {
 export const APPROVAL_FLOW_TYPES = {
   CREDIT_SANCTION: 'credit_sanction',
   OPERATIONS: 'operations',
+  INVOICE_DISCOUNTING: 'invoice_discounting',
+  SUPPLIER_ONBOARD: 'supplier_onboard',
 } as const;
 
 

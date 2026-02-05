@@ -2,6 +2,71 @@ import api from './api'
 import { API_ENDPOINTS } from '../constants/api'
 
 export const approvalService = {
+  // Flow Management
+  getFlows: async () => {
+    try {
+      const response = await api.get(API_ENDPOINTS.APPROVAL_FLOWS)
+      return { data: response.data.success ? response.data.data : [] }
+    } catch (error) {
+      console.error('Error fetching flows:', error)
+      throw error
+    }
+  },
+
+  createFlow: async (flowData) => {
+    try {
+      const response = await api.post(API_ENDPOINTS.APPROVAL_FLOWS, flowData)
+      return { data: response.data.success ? response.data.data : null }
+    } catch (error) {
+      throw new Error(error.response?.data?.message || 'Failed to create flow')
+    }
+  },
+
+  updateFlow: async (id, flowData) => {
+    try {
+      const response = await api.put(API_ENDPOINTS.APPROVAL_FLOW_BY_ID(id), flowData)
+      return { data: response.data.success ? response.data.data : null }
+    } catch (error) {
+      throw new Error(error.response?.data?.message || 'Failed to update flow')
+    }
+  },
+
+  deleteFlow: async (id) => {
+    try {
+      const response = await api.delete(API_ENDPOINTS.APPROVAL_FLOW_BY_ID(id))
+      return { data: response.data.success ? response.data.data : null }
+    } catch (error) {
+      throw new Error(error.response?.data?.message || 'Failed to delete flow')
+    }
+  },
+
+  toggleFlowStatus: async (id) => {
+    try {
+      const response = await api.patch(API_ENDPOINTS.APPROVAL_FLOW_TOGGLE(id))
+      return { data: response.data.success ? response.data.data : null }
+    } catch (error) {
+      throw new Error(error.response?.data?.message || 'Failed to toggle flow status')
+    }
+  },
+
+  addStep: async (stepData) => {
+    try {
+      const response = await api.post(API_ENDPOINTS.APPROVAL_STEPS, stepData)
+      return { data: response.data.success ? response.data.data : null }
+    } catch (error) {
+      throw new Error(error.response?.data?.message || 'Failed to add step')
+    }
+  },
+
+  removeStep: async (id) => {
+    try {
+      const response = await api.delete(API_ENDPOINTS.APPROVAL_STEP_BY_ID(id))
+      return { data: response.data.success ? response.data.data : null }
+    } catch (error) {
+      throw new Error(error.response?.data?.message || 'Failed to remove step')
+    }
+  },
+
   getPendingApprovals: async () => {
     try {
       const response = await api.get(API_ENDPOINTS.APPROVALS_PENDING)
@@ -37,30 +102,6 @@ export const approvalService = {
       }
     } catch (error) {
       console.error('Error fetching approval history:', error)
-      throw error
-    }
-  },
-
-  getFlows: async () => {
-    try {
-      const response = await api.get('/approvals/flows')
-      return {
-        data: response.data.success ? response.data.data : []
-      }
-    } catch (error) {
-      console.error('Error fetching approval flows:', error)
-      throw error
-    }
-  },
-
-  updateFlow: async (flowType, steps) => {
-    try {
-      const response = await api.put(`/approvals/flows/${flowType}`, { steps })
-      return {
-        data: response.data.success ? response.data.data : null
-      }
-    } catch (error) {
-      console.error('Error updating approval flow:', error)
       throw error
     }
   },

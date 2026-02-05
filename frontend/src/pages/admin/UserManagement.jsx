@@ -1,24 +1,36 @@
 import { useState, useEffect } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
-import { fetchUsers, fetchRoles, createUser, assignRole } from '../../store/slices/userSlice'
+import { fetchUsers, createUser, assignRole, removeRole, updateUser, deleteUser, toggleUserStatus } from '../../store/slices/userSlice'
+import { fetchRoles as fetchRolesFromRoleSlice } from '../../store/slices/roleSlice'
 import DataTable from '../../components/DataTable'
 import LoadingSpinner from '../../components/LoadingSpinner'
-import { FiPlus } from 'react-icons/fi'
+import { FiPlus, FiEdit2, FiTrash2, FiCheck, FiX } from 'react-icons/fi'
+import toast from 'react-hot-toast'
 
 const UserManagement = () => {
   const dispatch = useDispatch()
-  const { users, roles, isLoading } = useSelector((state) => state.users)
+  const { users, isLoading } = useSelector((state) => state.users)
+  const { roles } = useSelector((state) => state.roles)
   const [showCreateModal, setShowCreateModal] = useState(false)
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [showRoleModal, setShowRoleModal] = useState(false)
+  const [selectedUser, setSelectedUser] = useState(null)
   const [formData, setFormData] = useState({
     name: '',
     email: '',
     password: '',
-    roleId: '',
+    mobile: '',
+    defaultRole: '',
+  })
+  const [editFormData, setEditFormData] = useState({
+    name: '',
+    email: '',
+    mobile: '',
   })
 
   useEffect(() => {
     dispatch(fetchUsers())
-    dispatch(fetchRoles())
+    dispatch(fetchRolesFromRoleSlice())
   }, [dispatch])
 
   const handleCreateUser = async (e) => {
@@ -26,20 +38,101 @@ const UserManagement = () => {
     try {
       await dispatch(createUser(formData)).unwrap()
       setShowCreateModal(false)
-      setFormData({ name: '', email: '', password: '', roleId: '' })
+      setFormData({ name: '', email: '', password: '', mobile: '', defaultRole: '' })
       dispatch(fetchUsers())
+      toast.success('User created successfully')
     } catch (error) {
-      alert('Failed to create user: ' + error)
+      toast.error('Failed to create user: ' + error)
     }
+  }
+
+  const handleEditUser = async (e) => {
+    e.preventDefault()
+    try {
+      await dispatch(updateUser({ id: selectedUser.id, data: editFormData })).unwrap()
+      setShowEditModal(false)
+      dispatch(fetchUsers())
+      toast.success('User updated successfully')
+    } catch (error) {
+      toast.error('Failed to update user: ' + error)
+    }
+  }
+
+  const handleAssignRole = async (e) => {
+    e.preventDefault()
+    const roleId = Number(e.target.roleId.value)
+    try {
+      await dispatch(assignRole({ userId: selectedUser.id, roleId })).unwrap()
+      setShowRoleModal(false)
+      dispatch(fetchUsers())
+      toast.success('Role assigned successfully')
+    } catch (error) {
+      toast.error('Failed to assign role: ' + error)
+    }
+  }
+
+  const handleRemoveRole = async (userId, roleId) => {
+    if (window.confirm('Are you sure you want to remove this role?')) {
+      try {
+        await dispatch(removeRole({ userId, roleId })).unwrap()
+        dispatch(fetchUsers())
+        toast.success('Role removed successfully')
+      } catch (error) {
+        toast.error('Failed to remove role: ' + error)
+      }
+    }
+  }
+
+  const handleToggleStatus = async (userId) => {
+    try {
+      await dispatch(toggleUserStatus(userId)).unwrap()
+      dispatch(fetchUsers())
+      toast.success('User status updated')
+    } catch (error) {
+      toast.error('Failed to toggle user status: ' + error)
+    }
+  }
+
+  const handleDeleteUser = async (userId) => {
+    if (window.confirm('Are you sure you want to delete this user?')) {
+      try {
+        await dispatch(deleteUser(userId)).unwrap()
+        dispatch(fetchUsers())
+        toast.success('User deleted successfully')
+      } catch (error) {
+        toast.error('Failed to delete user: ' + error)
+      }
+    }
+  }
+
+  const handleEditClick = (user) => {
+    setSelectedUser(user)
+    setEditFormData({
+      name: user.name,
+      email: user.email,
+      mobile: user.mobile || '',
+    })
+    setShowEditModal(true)
+  }
+
+  const handleRoleClick = (user) => {
+    setSelectedUser(user)
+    setShowRoleModal(true)
   }
 
   const columns = [
     { key: 'name', label: 'Name' },
     { key: 'email', label: 'Email' },
+    { key: 'mobile', label: 'Mobile' },
     {
-      key: 'role',
-      label: 'Role',
-      render: (value) => <span className="badge bg-blue-100 text-blue-800">{value}</span>
+      key: 'defaultRole',
+      label: 'Default Role',
+      render: (value) => <span className="badge badge-primary">{value || 'N/A'}</span>
+    },
+    {
+      key: 'isActive',
+      label: 'Status',
+      render: (value) => <span className={value ? 'status-active' : 'status-inactive'}>{value ? '✓ Active' : '✕ Inactive'}</span>
     },
   ]
 
@@ -47,8 +140,8 @@ const UserManagement = () => {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">User Management</h1>
-          <p className="text-gray-600 mt-2">Create and manage system users</p>
+          <h1 className="text-4xl font-bold text-gray-900">User Management</h1>
+          <p className="text-gray-600 mt-2">Create and manage system users with role assignments</p>
         </div>
         <button
           onClick={() => setShowCreateModal(true)}
@@ -63,82 +156,220 @@ const UserManagement = () => {
         <LoadingSpinner />
       ) : (
         <div className="card">
-          <DataTable data={users} columns={columns} />
+          <div className="table-container">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="table-header">
+                <tr>
+                  {columns.map((col) => (
+                    <th key={col.key} className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                      {col.label}
+                    </th>
+                  ))}
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {users.map((user) => (
+                  <tr key={user.id} className="table-row">
+                    {columns.map((col) => (
+                      <td key={col.key} className="px-6 py-4 whitespace-nowrap text-sm">
+                        {col.render ? col.render(user[col.key]) : user[col.key]}
+                      </td>
+                    ))}
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2 flex">
+                      <button
+                        onClick={() => handleEditClick(user)}
+                        className="action-button action-button-primary"
+                        title="Edit"
+                      >
+                        <FiEdit2 className="h-5 w-5" />
+                      </button>
+                      <button
+                        onClick={() => handleRoleClick(user)}
+                        className="action-button action-button-success"
+                        title="Manage Roles"
+                      >
+                        <FiCheck className="h-5 w-5" />
+                      </button>
+                      <button
+                        onClick={() => handleToggleStatus(user.id)}
+                        className={user.isActive ? 'action-button action-button-danger' : 'action-button action-button-success'}
+                        title={user.isActive ? 'Deactivate' : 'Activate'}
+                      >
+                        {user.isActive ? <FiX className="h-5 w-5" /> : <FiCheck className="h-5 w-5" />}
+                      </button>
+                      <button
+                        onClick={() => handleDeleteUser(user.id)}
+                        className="action-button action-button-danger"
+                        title="Delete"
+                      >
+                        <FiTrash2 className="h-5 w-5" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
+      {/* Create User Modal */}
       {showCreateModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full">
-            <h2 className="text-xl font-semibold mb-4">Create New User</h2>
-            <form onSubmit={handleCreateUser} className="space-y-4">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-md w-full max-h-screen overflow-y-auto">
+            <div className="p-6">
+              <h2 className="text-xl font-semibold mb-4">Create New User</h2>
+              <form onSubmit={handleCreateUser} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Name</label>
+                  <input
+                    type="text"
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    required
+                    className="input-field"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
+                  <input
+                    type="email"
+                    value={formData.email}
+                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                    required
+                    className="input-field"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Password</label>
+                  <input
+                    type="password"
+                    value={formData.password}
+                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                    required
+                    className="input-field"
+                  />
+                </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Name
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Mobile</label>
                 <input
-                  type="text"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  required
+                  type="tel"
+                  value={formData.mobile}
+                  onChange={(e) => setFormData({ ...formData, mobile: e.target.value })}
                   className="input-field"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Email
-                </label>
-                <input
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  required
-                  className="input-field"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Password
-                </label>
-                <input
-                  type="password"
-                  value={formData.password}
-                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  required
-                  className="input-field"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Role
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Default Role</label>
                 <select
-                  value={formData.roleId}
-                  onChange={(e) => setFormData({ ...formData, roleId: e.target.value })}
-                  required
+                  value={formData.defaultRole}
+                  onChange={(e) => setFormData({ ...formData, defaultRole: e.target.value })}
                   className="input-field"
                 >
-                  <option value="">Select role</option>
+                  <option value="">Select a role</option>
                   {roles.map((role) => (
-                    <option key={role.id} value={role.id}>
-                      {role.label}
-                    </option>
+                    <option key={role.id} value={role.name}>{role.label}</option>
                   ))}
                 </select>
               </div>
-              <div className="flex space-x-3">
-                <button type="submit" className="btn-primary flex-1">
-                  Create
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowCreateModal(false)}
-                  className="btn-secondary flex-1"
-                >
-                  Cancel
-                </button>
+              <div className="flex gap-2 pt-4">
+                <button type="submit" className="btn-primary flex-1">Create</button>
+                <button type="button" onClick={() => setShowCreateModal(false)} className="btn-secondary flex-1">Cancel</button>
               </div>
             </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit User Modal */}
+      {showEditModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-md w-full max-h-screen overflow-y-auto">
+            <div className="p-6">
+              <h2 className="text-xl font-semibold mb-4">Edit User</h2>
+              <form onSubmit={handleEditUser} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Name</label>
+                  <input
+                    type="text"
+                    value={editFormData.name}
+                    onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value })}
+                    required
+                    className="input-field"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
+                  <input
+                    type="email"
+                    value={editFormData.email}
+                    onChange={(e) => setEditFormData({ ...editFormData, email: e.target.value })}
+                    required
+                    className="input-field"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Mobile</label>
+                  <input
+                    type="tel"
+                    value={editFormData.mobile}
+                    onChange={(e) => setEditFormData({ ...editFormData, mobile: e.target.value })}
+                    className="input-field"
+                  />
+                </div>
+                <div className="flex gap-2 pt-4">
+                  <button type="submit" className="btn-primary flex-1">Save</button>
+                  <button type="button" onClick={() => setShowEditModal(false)} className="btn-secondary flex-1">Cancel</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Assign Role Modal */}
+      {showRoleModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-md w-full max-h-screen overflow-y-auto">
+            <div className="p-6">
+              <h2 className="text-xl font-semibold mb-4">Manage Roles for {selectedUser?.name}</h2>
+              <div className="space-y-4">
+                <form onSubmit={handleAssignRole} className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Assign Role</label>
+                    <select name="roleId" className="input-field" defaultValue="">
+                      <option value="">Select a role</option>
+                      {roles.map((role) => (
+                        <option key={role.id} value={role.id}>{role.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <button type="submit" className="btn-primary w-full">Assign Role</button>
+                </form>
+                
+                {selectedUser?.userRoles && selectedUser.userRoles.length > 0 && (
+                  <div className="border-t pt-4">
+                    <h3 className="font-medium mb-3">Current Roles</h3>
+                    <div className="space-y-2">
+                      {selectedUser.userRoles.map((userRole) => (
+                        <div key={userRole.id} className="flex justify-between items-center p-2 bg-gray-50 rounded">
+                          <span>{userRole.role?.label}</span>
+                          <button
+                            onClick={() => handleRemoveRole(selectedUser.id, userRole.roleId)}
+                            className="text-red-600 hover:text-red-900 text-sm"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+              <button onClick={() => setShowRoleModal(false)} className="btn-secondary w-full mt-4">Close</button>
+            </div>
           </div>
         </div>
       )}

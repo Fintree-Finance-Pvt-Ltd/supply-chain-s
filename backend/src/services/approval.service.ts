@@ -373,6 +373,158 @@ export class ApprovalService {
       }) as ApprovalFlow;
     });
   }
+
+  /**
+   * Create a new approval flow
+   */
+  async createApprovalFlow(data: {
+    name: string;
+    flowType: string;
+    description?: string;
+    isSequential?: boolean;
+  }): Promise<ApprovalFlow> {
+    const flow = this.approvalFlowRepository.create({
+      name: data.name,
+      flowType: data.flowType,
+      description: data.description,
+      isSequential: data.isSequential ?? true,
+      isActive: true,
+    });
+
+    return await this.approvalFlowRepository.save(flow);
+  }
+
+  /**
+   * Get all approval flows
+   */
+  async getAllFlows(): Promise<ApprovalFlow[]> {
+    return await this.approvalFlowRepository.find({
+      relations: ['steps', 'steps.approverRole'],
+      order: { createdAt: 'DESC' },
+    });
+  }
+
+  /**
+   * Get approval flow by ID
+   */
+  async getFlowById(id: number): Promise<ApprovalFlow | null> {
+    return await this.approvalFlowRepository.findOne({
+      where: { id },
+      relations: ['steps', 'steps.approverRole'],
+    });
+  }
+
+  /**
+   * Update approval flow
+   */
+  async updateApprovalFlow(
+    id: number,
+    data: Partial<ApprovalFlow>
+  ): Promise<ApprovalFlow> {
+    const flow = await this.approvalFlowRepository.findOne({ where: { id } });
+
+    if (!flow) {
+      throw new Error('Approval flow not found');
+    }
+
+    if (data.name) flow.name = data.name;
+    if (data.description !== undefined) flow.description = data.description;
+    if (data.isActive !== undefined) flow.isActive = data.isActive;
+    if (data.isSequential !== undefined) flow.isSequential = data.isSequential;
+
+    return await this.approvalFlowRepository.save(flow);
+  }
+
+  /**
+   * Delete approval flow
+   */
+  async deleteApprovalFlow(id: number): Promise<void> {
+    const flow = await this.approvalFlowRepository.findOne({ where: { id } });
+
+    if (!flow) {
+      throw new Error('Approval flow not found');
+    }
+
+    // Hard delete - remove all related steps and instances
+    await this.approvalInstanceRepository.delete({ approvalFlowId: id });
+    await this.approvalStepRepository.delete({ approvalFlowId: id });
+    await this.approvalFlowRepository.delete({ id });
+  }
+
+  /**
+   * Toggle approval flow status
+   */
+  async toggleFlowStatus(id: number): Promise<ApprovalFlow> {
+    const flow = await this.approvalFlowRepository.findOne({ where: { id } });
+
+    if (!flow) {
+      throw new Error('Approval flow not found');
+    }
+
+    flow.isActive = !flow.isActive;
+    return await this.approvalFlowRepository.save(flow);
+  }
+
+  /**
+   * Add approval step to flow
+   */
+  async addApprovalStep(
+    flowId: number,
+    data: {
+      approverRoleId: number;
+      stepOrder: number;
+      stepName: string;
+      isRequired?: boolean;
+    }
+  ): Promise<ApprovalStep> {
+    const flow = await this.approvalFlowRepository.findOne({ where: { id: flowId } });
+
+    if (!flow) {
+      throw new Error('Approval flow not found');
+    }
+
+    const step = this.approvalStepRepository.create({
+      approvalFlowId: flowId,
+      approverRoleId: data.approverRoleId,
+      stepOrder: data.stepOrder,
+      stepName: data.stepName,
+      isRequired: data.isRequired ?? true,
+    });
+
+    return await this.approvalStepRepository.save(step);
+  }
+
+  /**
+   * Remove approval step from flow
+   */
+  async removeApprovalStep(stepId: number): Promise<void> {
+    const step = await this.approvalStepRepository.findOne({ where: { id: stepId } });
+
+    if (step) {
+      await this.approvalStepRepository.remove(step);
+    }
+  }
+
+  /**
+   * Update approval step
+   */
+  async updateApprovalStep(
+    stepId: number,
+    data: Partial<ApprovalStep>
+  ): Promise<ApprovalStep> {
+    const step = await this.approvalStepRepository.findOne({ where: { id: stepId } });
+
+    if (!step) {
+      throw new Error('Approval step not found');
+    }
+
+    if (data.approverRoleId) step.approverRoleId = data.approverRoleId;
+    if (data.stepOrder) step.stepOrder = data.stepOrder;
+    if (data.stepName) step.stepName = data.stepName;
+    if (data.isRequired !== undefined) step.isRequired = data.isRequired;
+
+    return await this.approvalStepRepository.save(step);
+  }
 }
 
 

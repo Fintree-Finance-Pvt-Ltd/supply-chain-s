@@ -50,6 +50,54 @@ export const assignRole = createAsyncThunk(
   }
 )
 
+export const removeRole = createAsyncThunk(
+  'users/removeRole',
+  async ({ userId, roleId }, { rejectWithValue }) => {
+    try {
+      const response = await userService.removeRole(userId, roleId)
+      return response.data
+    } catch (error) {
+      return rejectWithValue(error.response?.data?.message || 'Failed to remove role')
+    }
+  }
+)
+
+export const updateUser = createAsyncThunk(
+  'users/updateUser',
+  async ({ id, data }, { rejectWithValue }) => {
+    try {
+      const response = await userService.updateUser(id, data)
+      return response.data
+    } catch (error) {
+      return rejectWithValue(error.response?.data?.message || 'Failed to update user')
+    }
+  }
+)
+
+export const deleteUser = createAsyncThunk(
+  'users/deleteUser',
+  async (id, { rejectWithValue }) => {
+    try {
+      const response = await userService.deleteUser(id)
+      return { id }
+    } catch (error) {
+      return rejectWithValue(error.response?.data?.message || 'Failed to delete user')
+    }
+  }
+)
+
+export const toggleUserStatus = createAsyncThunk(
+  'users/toggleUserStatus',
+  async (id, { rejectWithValue }) => {
+    try {
+      const response = await userService.toggleUserStatus(id)
+      return response.data
+    } catch (error) {
+      return rejectWithValue(error.response?.data?.message || 'Failed to toggle user status')
+    }
+  }
+)
+
 const initialState = {
   users: [],
   roles: [],
@@ -102,6 +150,25 @@ const userSlice = createSlice({
         if (index !== -1) {
           state.users[index] = action.payload
         }
+      })
+      // Remove Role
+      .addCase(removeRole.fulfilled, (state, action) => {
+        const index = state.users.findIndex(u => u.id === action.payload.id)
+        if (index !== -1) state.users[index] = action.payload
+      })
+      // Update User
+      .addCase(updateUser.fulfilled, (state, action) => {
+        const index = state.users.findIndex(u => u.id === action.payload.id)
+        if (index !== -1) state.users[index] = action.payload
+      })
+      // Delete User
+      .addCase(deleteUser.fulfilled, (state, action) => {
+        state.users = state.users.filter(u => u.id !== action.payload.id)
+      })
+      // Toggle Status
+      .addCase(toggleUserStatus.fulfilled, (state, action) => {
+        const index = state.users.findIndex(u => u.id === action.payload.id)
+        if (index !== -1) state.users[index] = action.payload
       })
   },
 })

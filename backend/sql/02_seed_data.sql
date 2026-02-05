@@ -12,8 +12,11 @@ USE supply_chain_finance;
 INSERT INTO roles (id, name, label, description, isActive) VALUES
 ('550e8400-e29b-41d4-a716-446655440001', 'admin', 'Admin', 'System Administrator with full access', TRUE),
 ('550e8400-e29b-41d4-a716-446655440002', 'relationship_manager', 'Relationship Manager', 'Manages customer relationships and onboarding', TRUE),
-('550e8400-e29b-41d4-a716-446655440003', 'credit_team', 'Credit Team', 'Reviews and sanctions credit limits', TRUE),
-('550e8400-e29b-41d4-a716-446655440004', 'operations_team', 'Operations Team', 'Verifies post-sanction documents and processes', TRUE),
+('550e8400-e29b-41d4-a716-446655440008', 'credit_team_l1', 'Credit Team L1', 'Credit Team Level 1 - Initial review', TRUE),
+('550e8400-e29b-41d4-a716-446655440009', 'credit_team_l2', 'Credit Team L2', 'Credit Team Level 2 - Secondary review', TRUE),
+('550e8400-e29b-41d4-a716-446655440010', 'operations_team_l1', 'Operations Team L1', 'Operations Team Level 1 - Document verification', TRUE),
+('550e8400-e29b-41d4-a716-446655440011', 'operations_team_l2', 'Operations Team L2', 'Operations Team Level 2 - Further verification', TRUE),
+('550e8400-e29b-41d4-a716-446655440012', 'operations_head', 'Operations Head', 'Operations Head - Final operations approval', TRUE),
 ('550e8400-e29b-41d4-a716-446655440005', 'cfo', 'CFO', 'Chief Financial Officer - Approval authority', TRUE),
 ('550e8400-e29b-41d4-a716-446655440006', 'ceo', 'CEO', 'Chief Executive Officer - Approval authority', TRUE),
 ('550e8400-e29b-41d4-a716-446655440007', 'md', 'Managing Director', 'Managing Director - Final approval authority', TRUE)
@@ -78,21 +81,50 @@ INSERT INTO role_permissions (id, roleId, permissionId) VALUES
 ('770e8400-e29b-41d4-a716-446655440106', '550e8400-e29b-41d4-a716-446655440002', '660e8400-e29b-41d4-a716-446655440017')
 ON DUPLICATE KEY UPDATE roleId=VALUES(roleId);
 
--- Credit Team Permissions
+-- Credit Team L1 Permissions
 INSERT INTO role_permissions (id, roleId, permissionId) VALUES
-('770e8400-e29b-41d4-a716-446655440201', '550e8400-e29b-41d4-a716-446655440003', '660e8400-e29b-41d4-a716-446655440006'),
-('770e8400-e29b-41d4-a716-446655440202', '550e8400-e29b-41d4-a716-446655440003', '660e8400-e29b-41d4-a716-446655440009'),
-('770e8400-e29b-41d4-a716-446655440203', '550e8400-e29b-41d4-a716-446655440003', '660e8400-e29b-41d4-a716-446655440010'),
-('770e8400-e29b-41d4-a716-446655440204', '550e8400-e29b-41d4-a716-446655440003', '660e8400-e29b-41d4-a716-446655440017'),
-('770e8400-e29b-41d4-a716-446655440205', '550e8400-e29b-41d4-a716-446655440003', '660e8400-e29b-41d4-a716-446655440018')
+('770e8400-e29b-41d4-a716-446655440208', '550e8400-e29b-41d4-a716-446655440008', '660e8400-e29b-41d4-a716-446655440006'),
+('770e8400-e29b-41d4-a716-446655440209', '550e8400-e29b-41d4-a716-446655440008', '660e8400-e29b-41d4-a716-446655440009'),
+('770e8400-e29b-41d4-a716-446655440210', '550e8400-e29b-41d4-a716-446655440008', '660e8400-e29b-41d4-a716-446655440010'),
+('770e8400-e29b-41d4-a716-446655440211', '550e8400-e29b-41d4-a716-446655440008', '660e8400-e29b-41d4-a716-446655440017'),
+('770e8400-e29b-41d4-a716-446655440212', '550e8400-e29b-41d4-a716-446655440008', '660e8400-e29b-41d4-a716-446655440018')
 ON DUPLICATE KEY UPDATE roleId=VALUES(roleId);
 
--- Operations Team Permissions
+-- Credit Team L2 Permissions
 INSERT INTO role_permissions (id, roleId, permissionId) VALUES
-('770e8400-e29b-41d4-a716-446655440301', '550e8400-e29b-41d4-a716-446655440004', '660e8400-e29b-41d4-a716-446655440006'),
-('770e8400-e29b-41d4-a716-446655440302', '550e8400-e29b-41d4-a716-446655440004', '660e8400-e29b-41d4-a716-446655440014'),
-('770e8400-e29b-41d4-a716-446655440303', '550e8400-e29b-41d4-a716-446655440004', '660e8400-e29b-41d4-a716-446655440015'),
-('770e8400-e29b-41d4-a716-446655440304', '550e8400-e29b-41d4-a716-446655440004', '660e8400-e29b-41d4-a716-446655440017')
+('770e8400-e29b-41d4-a716-446655440213', '550e8400-e29b-41d4-a716-446655440009', '660e8400-e29b-41d4-a716-446655440006'),
+('770e8400-e29b-41d4-a716-446655440214', '550e8400-e29b-41d4-a716-446655440009', '660e8400-e29b-41d4-a716-446655440009'),
+('770e8400-e29b-41d4-a716-446655440215', '550e8400-e29b-41d4-a716-446655440009', '660e8400-e29b-41d4-a716-446655440010'),
+('770e8400-e29b-41d4-a716-446655440216', '550e8400-e29b-41d4-a716-446655440009', '660e8400-e29b-41d4-a716-446655440011'),
+('770e8400-e29b-41d4-a716-446655440217', '550e8400-e29b-41d4-a716-446655440009', '660e8400-e29b-41d4-a716-446655440017'),
+('770e8400-e29b-41d4-a716-446655440218', '550e8400-e29b-41d4-a716-446655440009', '660e8400-e29b-41d4-a716-446655440018')
+ON DUPLICATE KEY UPDATE roleId=VALUES(roleId);
+
+-- Operations Team L1 Permissions
+INSERT INTO role_permissions (id, roleId, permissionId) VALUES
+('770e8400-e29b-41d4-a716-446655440219', '550e8400-e29b-41d4-a716-446655440010', '660e8400-e29b-41d4-a716-446655440006'),
+('770e8400-e29b-41d4-a716-446655440220', '550e8400-e29b-41d4-a716-446655440010', '660e8400-e29b-41d4-a716-446655440014'),
+('770e8400-e29b-41d4-a716-446655440221', '550e8400-e29b-41d4-a716-446655440010', '660e8400-e29b-41d4-a716-446655440015'),
+('770e8400-e29b-41d4-a716-446655440222', '550e8400-e29b-41d4-a716-446655440010', '660e8400-e29b-41d4-a716-446655440017')
+ON DUPLICATE KEY UPDATE roleId=VALUES(roleId);
+
+-- Operations Team L2 Permissions
+INSERT INTO role_permissions (id, roleId, permissionId) VALUES
+('770e8400-e29b-41d4-a716-446655440223', '550e8400-e29b-41d4-a716-446655440011', '660e8400-e29b-41d4-a716-446655440006'),
+('770e8400-e29b-41d4-a716-446655440224', '550e8400-e29b-41d4-a716-446655440011', '660e8400-e29b-41d4-a716-446655440014'),
+('770e8400-e29b-41d4-a716-446655440225', '550e8400-e29b-41d4-a716-446655440011', '660e8400-e29b-41d4-a716-446655440015'),
+('770e8400-e29b-41d4-a716-446655440226', '550e8400-e29b-41d4-a716-446655440011', '660e8400-e29b-41d4-a716-446655440013'),
+('770e8400-e29b-41d4-a716-446655440227', '550e8400-e29b-41d4-a716-446655440011', '660e8400-e29b-41d4-a716-446655440017')
+ON DUPLICATE KEY UPDATE roleId=VALUES(roleId);
+
+-- Operations Head Permissions
+INSERT INTO role_permissions (id, roleId, permissionId) VALUES
+('770e8400-e29b-41d4-a716-446655440228', '550e8400-e29b-41d4-a716-446655440012', '660e8400-e29b-41d4-a716-446655440006'),
+('770e8400-e29b-41d4-a716-446655440229', '550e8400-e29b-41d4-a716-446655440012', '660e8400-e29b-41d4-a716-446655440014'),
+('770e8400-e29b-41d4-a716-446655440230', '550e8400-e29b-41d4-a716-446655440012', '660e8400-e29b-41d4-a716-446655440015'),
+('770e8400-e29b-41d4-a716-446655440231', '550e8400-e29b-41d4-a716-446655440012', '660e8400-e29b-41d4-a716-446655440012'),
+('770e8400-e29b-41d4-a716-446655440232', '550e8400-e29b-41d4-a716-446655440012', '660e8400-e29b-41d4-a716-446655440013'),
+('770e8400-e29b-41d4-a716-446655440233', '550e8400-e29b-41d4-a716-446655440012', '660e8400-e29b-41d4-a716-446655440017')
 ON DUPLICATE KEY UPDATE roleId=VALUES(roleId);
 
 -- Management (CEO, CFO, MD) Permissions
@@ -118,11 +150,20 @@ INSERT INTO users (id, email, password, name, mobile, isActive, defaultRole) VAL
 ('880e8400-e29b-41d4-a716-446655440002', 'rm@scf.com', '$2b$10$rOzJqJqJqJqJqJqJqJqJqOqJqJqJqJqJqJqJqJqJqJqJqJqJqJq', 'John Doe - RM', '9876543210', TRUE, 'relationship_manager'),
 ('880e8400-e29b-41d4-a716-446655440003', 'rm2@scf.com', '$2b$10$rOzJqJqJqJqJqJqJqJqJqOqJqJqJqJqJqJqJqJqJqJqJqJqJqJq', 'Jane Smith - RM', '9876543211', TRUE, 'relationship_manager'),
 
--- Credit Team
-('880e8400-e29b-41d4-a716-446655440004', 'credit@scf.com', '$2b$10$rOzJqJqJqJqJqJqJqJqJqOqJqJqJqJqJqJqJqJqJqJqJqJqJqJq', 'Credit Officer', '9876543212', TRUE, 'credit_team'),
+-- Credit Team L1
+('880e8400-e29b-41d4-a716-446655440009', 'credit_l1@scf.com', '$2b$10$rOzJqJqJqJqJqJqJqJqJqOqJqJqJqJqJqJqJqJqJqJqJqJqJqJq', 'Credit Officer L1', '9876543217', TRUE, 'credit_team_l1'),
 
--- Operations Team
-('880e8400-e29b-41d4-a716-446655440005', 'ops@scf.com', '$2b$10$rOzJqJqJqJqJqJqJqJqJqOqJqJqJqJqJqJqJqJqJqJqJqJqJqJq', 'Operations Manager', '9876543213', TRUE, 'operations_team'),
+-- Credit Team L2
+('880e8400-e29b-41d4-a716-446655440010', 'credit_l2@scf.com', '$2b$10$rOzJqJqJqJqJqJqJqJqJqOqJqJqJqJqJqJqJqJqJqJqJqJqJqJq', 'Credit Officer L2', '9876543218', TRUE, 'credit_team_l2'),
+
+-- Operations Team L1
+('880e8400-e29b-41d4-a716-446655440011', 'ops_l1@scf.com', '$2b$10$rOzJqJqJqJqJqJqJqJqJqOqJqJqJqJqJqJqJqJqJqJqJqJqJqJq', 'Operations Officer L1', '9876543219', TRUE, 'operations_team_l1'),
+
+-- Operations Team L2
+('880e8400-e29b-41d4-a716-446655440012', 'ops_l2@scf.com', '$2b$10$rOzJqJqJqJqJqJqJqJqJqOqJqJqJqJqJqJqJqJqJqJqJqJqJqJq', 'Operations Officer L2', '9876543220', TRUE, 'operations_team_l2'),
+
+-- Operations Head
+('880e8400-e29b-41d4-a716-446655440013', 'ops_head@scf.com', '$2b$10$rOzJqJqJqJqJqJqJqJqJqOqJqJqJqJqJqJqJqJqJqJqJqJqJqJq', 'Operations Head', '9876543221', TRUE, 'operations_head'),
 
 -- Management
 ('880e8400-e29b-41d4-a716-446655440006', 'ceo@scf.com', '$2b$10$rOzJqJqJqJqJqJqJqJqJqOqJqJqJqJqJqJqJqJqJqJqJqJqJqJq', 'CEO', '9876543214', TRUE, 'ceo'),
@@ -142,11 +183,20 @@ INSERT INTO user_roles (id, userId, roleId, isActive, assignedBy) VALUES
 ('990e8400-e29b-41d4-a716-446655440002', '880e8400-e29b-41d4-a716-446655440002', '550e8400-e29b-41d4-a716-446655440002', TRUE, '880e8400-e29b-41d4-a716-446655440001'),
 ('990e8400-e29b-41d4-a716-446655440003', '880e8400-e29b-41d4-a716-446655440003', '550e8400-e29b-41d4-a716-446655440002', TRUE, '880e8400-e29b-41d4-a716-446655440001'),
 
--- Credit Team
-('990e8400-e29b-41d4-a716-446655440004', '880e8400-e29b-41d4-a716-446655440004', '550e8400-e29b-41d4-a716-446655440003', TRUE, '880e8400-e29b-41d4-a716-446655440001'),
+-- Credit Team L1
+('990e8400-e29b-41d4-a716-446655440009', '880e8400-e29b-41d4-a716-446655440009', '550e8400-e29b-41d4-a716-446655440008', TRUE, '880e8400-e29b-41d4-a716-446655440001'),
 
--- Operations Team
-('990e8400-e29b-41d4-a716-446655440005', '880e8400-e29b-41d4-a716-446655440005', '550e8400-e29b-41d4-a716-446655440004', TRUE, '880e8400-e29b-41d4-a716-446655440001'),
+-- Credit Team L2
+('990e8400-e29b-41d4-a716-446655440010', '880e8400-e29b-41d4-a716-446655440010', '550e8400-e29b-41d4-a716-446655440009', TRUE, '880e8400-e29b-41d4-a716-446655440001'),
+
+-- Operations Team L1
+('990e8400-e29b-41d4-a716-446655440011', '880e8400-e29b-41d4-a716-446655440011', '550e8400-e29b-41d4-a716-446655440010', TRUE, '880e8400-e29b-41d4-a716-446655440001'),
+
+-- Operations Team L2
+('990e8400-e29b-41d4-a716-446655440012', '880e8400-e29b-41d4-a716-446655440012', '550e8400-e29b-41d4-a716-446655440011', TRUE, '880e8400-e29b-41d4-a716-446655440001'),
+
+-- Operations Head
+('990e8400-e29b-41d4-a716-446655440013', '880e8400-e29b-41d4-a716-446655440013', '550e8400-e29b-41d4-a716-446655440012', TRUE, '880e8400-e29b-41d4-a716-446655440001'),
 
 -- Management
 ('990e8400-e29b-41d4-a716-446655440006', '880e8400-e29b-41d4-a716-446655440006', '550e8400-e29b-41d4-a716-446655440006', TRUE, '880e8400-e29b-41d4-a716-446655440001'),
@@ -160,26 +210,37 @@ ON DUPLICATE KEY UPDATE isActive=VALUES(isActive);
 
 -- Credit Sanction Approval Flow
 INSERT INTO approval_flows (id, name, flowType, description, isActive, isSequential) VALUES
-('aa0e8400-e29b-41d4-a716-446655440001', 'Credit Sanction Approval', 'credit_sanction', 'Multi-level approval for credit sanctions: Credit Team → CFO → CEO → MD', TRUE, TRUE),
-('aa0e8400-e29b-41d4-a716-446655440002', 'Operations Approval', 'operations', 'Multi-level approval for operations verification: Ops Checker → Ops Manager → Final Approver', TRUE, TRUE)
+('aa0e8400-e29b-41d4-a716-446655440001', 'Credit Sanction Customer Approval', 'credit_sanction', 'Credit Sanction Approval: Credit Team L1 → Credit Team L2 → CEO → Managing Director', TRUE, TRUE),
+('aa0e8400-e29b-41d4-a716-446655440002', 'Operations Approval for Customer', 'operations', 'Operations Approval: Operations Team L1 → Operations Head', TRUE, TRUE),
+('aa0e8400-e29b-41d4-a716-446655440003', 'Invoice Discounting Flow', 'invoice_discounting', 'Invoice Discounting: Customer → Operation L1 → L2 → Operation Head → CEO → Managing Director', TRUE, TRUE),
+('aa0e8400-e29b-41d4-a716-446655440004', 'Supplier Onboard Flow', 'supplier_onboard', 'Supplier Onboarding: Operation L1 → Operation Head', TRUE, TRUE)
 ON DUPLICATE KEY UPDATE name=VALUES(name);
 
 -- ============================================
 -- 7. APPROVAL STEPS
 -- ============================================
 
--- Credit Sanction Steps
+-- Credit Sanction Customer Approval Flow Steps
 INSERT INTO approval_steps (id, approvalFlowId, approverRoleId, stepOrder, stepName, isRequired) VALUES
--- Credit Sanction Flow
-('bb0e8400-e29b-41d4-a716-446655440001', 'aa0e8400-e29b-41d4-a716-446655440001', '550e8400-e29b-41d4-a716-446655440003', 1, 'Credit Team Review', TRUE),
-('bb0e8400-e29b-41d4-a716-446655440002', 'aa0e8400-e29b-41d4-a716-446655440001', '550e8400-e29b-41d4-a716-446655440005', 2, 'CFO Approval', TRUE),
+('bb0e8400-e29b-41d4-a716-446655440001', 'aa0e8400-e29b-41d4-a716-446655440001', '550e8400-e29b-41d4-a716-446655440008', 1, 'Credit Team L1 Review', TRUE),
+('bb0e8400-e29b-41d4-a716-446655440002', 'aa0e8400-e29b-41d4-a716-446655440001', '550e8400-e29b-41d4-a716-446655440009', 2, 'Credit Team L2 Review', TRUE),
 ('bb0e8400-e29b-41d4-a716-446655440003', 'aa0e8400-e29b-41d4-a716-446655440001', '550e8400-e29b-41d4-a716-446655440006', 3, 'CEO Approval', TRUE),
-('bb0e8400-e29b-41d4-a716-446655440004', 'aa0e8400-e29b-41d4-a716-446655440001', '550e8400-e29b-41d4-a716-446655440007', 4, 'MD Final Approval', TRUE),
+('bb0e8400-e29b-41d4-a716-446655440004', 'aa0e8400-e29b-41d4-a716-446655440001', '550e8400-e29b-41d4-a716-446655440007', 4, 'Managing Director Final Approval', TRUE),
 
--- Operations Flow
-('bb0e8400-e29b-41d4-a716-446655440005', 'aa0e8400-e29b-41d4-a716-446655440002', '550e8400-e29b-41d4-a716-446655440004', 1, 'Operations Checker', TRUE),
-('bb0e8400-e29b-41d4-a716-446655440006', 'aa0e8400-e29b-41d4-a716-446655440002', '550e8400-e29b-41d4-a716-446655440004', 2, 'Operations Manager', TRUE),
-('bb0e8400-e29b-41d4-a716-446655440007', 'aa0e8400-e29b-41d4-a716-446655440002', '550e8400-e29b-41d4-a716-446655440006', 3, 'Final Approver (CEO)', TRUE)
+-- Operations Approval for Customer Flow Steps
+('bb0e8400-e29b-41d4-a716-446655440005', 'aa0e8400-e29b-41d4-a716-446655440002', '550e8400-e29b-41d4-a716-446655440010', 1, 'Operations Team L1 Verification', TRUE),
+('bb0e8400-e29b-41d4-a716-446655440006', 'aa0e8400-e29b-41d4-a716-446655440002', '550e8400-e29b-41d4-a716-446655440012', 2, 'Operations Head Done', TRUE),
+
+-- Invoice Discounting Flow Steps
+('bb0e8400-e29b-41d4-a716-446655440007', 'aa0e8400-e29b-41d4-a716-446655440003', '550e8400-e29b-41d4-a716-446655440010', 1, 'Operation L1 Review', TRUE),
+('bb0e8400-e29b-41d4-a716-446655440008', 'aa0e8400-e29b-41d4-a716-446655440003', '550e8400-e29b-41d4-a716-446655440011', 2, 'Operation L2 Review', TRUE),
+('bb0e8400-e29b-41d4-a716-446655440009', 'aa0e8400-e29b-41d4-a716-446655440003', '550e8400-e29b-41d4-a716-446655440012', 3, 'Operation Head Approval', TRUE),
+('bb0e8400-e29b-41d4-a716-446655440010', 'aa0e8400-e29b-41d4-a716-446655440003', '550e8400-e29b-41d4-a716-446655440006', 4, 'CEO Approval', TRUE),
+('bb0e8400-e29b-41d4-a716-446655440011', 'aa0e8400-e29b-41d4-a716-446655440003', '550e8400-e29b-41d4-a716-446655440007', 5, 'Managing Director Approval', TRUE),
+
+-- Supplier Onboard Flow Steps
+('bb0e8400-e29b-41d4-a716-446655440012', 'aa0e8400-e29b-41d4-a716-446655440004', '550e8400-e29b-41d4-a716-446655440010', 1, 'Operation L1 Onboarding', TRUE),
+('bb0e8400-e29b-41d4-a716-446655440013', 'aa0e8400-e29b-41d4-a716-446655440004', '550e8400-e29b-41d4-a716-446655440012', 2, 'Operation Head Approval', TRUE)
 ON DUPLICATE KEY UPDATE stepName=VALUES(stepName);
 
 -- ============================================

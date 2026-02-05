@@ -15,18 +15,12 @@ export const userService = {
   },
   
   getRoles: async () => {
-    // Note: Backend doesn't have a roles endpoint yet
-    // Return static roles for now - can be enhanced when backend adds roles endpoint
-    return {
-      data: [
-        { id: '550e8400-e29b-41d4-a716-446655440001', name: 'admin', label: 'Admin' },
-        { id: '550e8400-e29b-41d4-a716-446655440002', name: 'relationship_manager', label: 'Relationship Manager' },
-        { id: '550e8400-e29b-41d4-a716-446655440003', name: 'credit_team', label: 'Credit Team' },
-        { id: '550e8400-e29b-41d4-a716-446655440004', name: 'operations_team', label: 'Operations Team' },
-        { id: '550e8400-e29b-41d4-a716-446655440005', name: 'cfo', label: 'CFO' },
-        { id: '550e8400-e29b-41d4-a716-446655440006', name: 'ceo', label: 'CEO' },
-        { id: '550e8400-e29b-41d4-a716-446655440007', name: 'md', label: 'Managing Director' },
-      ]
+    try {
+      const response = await api.get(API_ENDPOINTS.ROLES)
+      return { data: response.data.success ? response.data.data : [] }
+    } catch (error) {
+      console.error('Error fetching roles:', error)
+      throw error
     }
   },
   
@@ -50,6 +44,42 @@ export const userService = {
       }
     } catch (error) {
       const message = error.response?.data?.message || error.message || 'Failed to assign role'
+      throw new Error(message)
+    }
+  },
+  removeRole: async (userId, roleId) => {
+    try {
+      const response = await api.post(API_ENDPOINTS.REMOVE_ROLE, { userId, roleId })
+      return { data: response.data.success ? response.data.data : null }
+    } catch (error) {
+      const message = error.response?.data?.message || error.message || 'Failed to remove role'
+      throw new Error(message)
+    }
+  },
+  updateUser: async (userId, data) => {
+    try {
+      const response = await api.put(API_ENDPOINTS.UPDATE_USER(userId), data)
+      return { data: response.data.success ? response.data.data : null }
+    } catch (error) {
+      const message = error.response?.data?.message || error.message || 'Failed to update user'
+      throw new Error(message)
+    }
+  },
+  deleteUser: async (userId) => {
+    try {
+      const response = await api.delete(API_ENDPOINTS.DELETE_USER(userId))
+      return { data: response.data.success ? response.data.data : null }
+    } catch (error) {
+      const message = error.response?.data?.message || error.message || 'Failed to delete user'
+      throw new Error(message)
+    }
+  },
+  toggleUserStatus: async (userId) => {
+    try {
+      const response = await api.patch(API_ENDPOINTS.USER_TOGGLE_STATUS(userId))
+      return { data: response.data.success ? response.data.data : null }
+    } catch (error) {
+      const message = error.response?.data?.message || error.message || 'Failed to toggle user status'
       throw new Error(message)
     }
   },
