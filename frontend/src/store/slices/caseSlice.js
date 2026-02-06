@@ -1,12 +1,13 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit'
-import { caseService } from '../../services/caseService'
+import { customerService } from '../../services/customerService'
+import { workflowService } from '../../services/workflowService'
 
 // Async thunks
 export const fetchCases = createAsyncThunk(
   'cases/fetchCases',
   async (filters = {}, { rejectWithValue }) => {
     try {
-      const response = await caseService.getCases(filters)
+      const response = await customerService.getCustomers(filters)
       return response.data
     } catch (error) {
       return rejectWithValue(error.response?.data?.message || 'Failed to fetch cases')
@@ -18,7 +19,7 @@ export const fetchCaseById = createAsyncThunk(
   'cases/fetchCaseById',
   async (id, { rejectWithValue }) => {
     try {
-      const response = await caseService.getCaseById(id)
+      const response = await customerService.getCustomerById(id)
       return response.data
     } catch (error) {
       return rejectWithValue(error.response?.data?.message || 'Failed to fetch case')
@@ -30,8 +31,8 @@ export const createCase = createAsyncThunk(
   'cases/createCase',
   async (caseData, { rejectWithValue }) => {
     try {
-      const response = await caseService.createCase(caseData)
-      return response.data
+      const response = await workflowService.createCustomer(caseData)
+      return response.data.data
     } catch (error) {
       return rejectWithValue(error.response?.data?.message || 'Failed to create case')
     }
@@ -42,7 +43,7 @@ export const updateCase = createAsyncThunk(
   'cases/updateCase',
   async ({ id, data }, { rejectWithValue }) => {
     try {
-      const response = await caseService.updateCase(id, data)
+      const response = await customerService.updateCustomer(id, data)
       return response.data
     } catch (error) {
       return rejectWithValue(error.response?.data?.message || 'Failed to update case')
@@ -52,10 +53,10 @@ export const updateCase = createAsyncThunk(
 
 export const submitCase = createAsyncThunk(
   'cases/submitCase',
-  async (id, { rejectWithValue }) => {
+  async ({ id, remarks = '' }, { rejectWithValue }) => {
     try {
-      const response = await caseService.submitCase(id)
-      return response.data
+      const response = await workflowService.submitCustomer(id, remarks)
+      return response.data.data
     } catch (error) {
       return rejectWithValue(error.response?.data?.message || 'Failed to submit case')
     }

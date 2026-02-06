@@ -325,8 +325,8 @@ const NewCustomerOnboarding = () => {
         email: formData.email,
         companyType: formData.companyType,
         companyName: formData.companyName,
-        gstNumber: formData.gstNumber,
-        electricityBillNo: formData.electricityBillNumber,
+        gstNumber: formData.gstNumber || null,
+        electricityBillNo: formData.electricityBillNumber || null,
       }
 
       let id = caseId
@@ -445,8 +445,8 @@ const NewCustomerOnboarding = () => {
         email: formData.email,
         companyType: formData.companyType,
         companyName: formData.companyName,
-        gstNumber: formData.gstNumber,
-        electricityBillNo: formData.electricityBillNumber,
+        gstNumber: formData.gstNumber || null,
+        electricityBillNo: formData.electricityBillNumber || null,
       }
 
       if (!id) {
@@ -533,7 +533,7 @@ const NewCustomerOnboarding = () => {
         }
       }
 
-      await dispatch(submitCase(id)).unwrap()
+      await dispatch(submitCase({ id })).unwrap()
       alert('Case submitted successfully')
       navigate('/rm/dashboard')
     } catch (error) {

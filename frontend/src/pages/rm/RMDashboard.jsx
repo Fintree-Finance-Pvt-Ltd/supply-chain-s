@@ -23,14 +23,14 @@ const RMDashboard = () => {
     { id: 'all', label: 'All Cases' },
     { id: CASE_STATUS.DRAFT, label: 'Draft' },
     { id: CASE_STATUS.SUBMITTED, label: 'Submitted' },
-    { id: CASE_STATUS.CREDIT_APPROVED, label: 'Credit Approved' },
-    { id: CASE_STATUS.POST_SANCTION_PENDING, label: 'Post Sanction' },
-    { id: CASE_STATUS.OPERATIONS_APPROVED, label: 'Operations Approved' },
-    { id: CASE_STATUS.FULLY_ONBOARDED, label: 'Fully Onboarded' },
+    { id: CASE_STATUS.MD_APPROVED, label: 'Ready for Ops Submit' },
+    { id: CASE_STATUS.OPS_L1_REVIEW, label: 'Ops Review' },
+    { id: CASE_STATUS.COMPLETED, label: 'Completed' },
+    { id: CASE_STATUS.REJECTED, label: 'Rejected' },
   ]
 
-  const filteredCases = activeTab === 'all' 
-    ? cases 
+  const filteredCases = activeTab === 'all'
+    ? cases
     : cases.filter(c => c.status === activeTab)
 
   const columns = [
@@ -62,10 +62,10 @@ const RMDashboard = () => {
   ]
 
   const handleRowClick = (row) => {
-    if (row.status === CASE_STATUS.POST_SANCTION_PENDING) {
-      navigate(`/rm/customer/${row.id}/post-sanction`)
-    } else if (row.status === CASE_STATUS.DRAFT) {
+    if (row.status === CASE_STATUS.DRAFT) {
       navigate(`/rm/customer/new?id=${row.id}`)
+    } else {
+      navigate(`/rm/customer/${row.id}`)
     }
   }
 
@@ -92,11 +92,10 @@ const RMDashboard = () => {
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`py-4 px-1 border-b-2 font-medium text-sm ${
-                  activeTab === tab.id
-                    ? 'border-primary-500 text-primary-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
+                className={`py-4 px-1 border-b-2 font-medium text-sm ${activeTab === tab.id
+                  ? 'border-primary-500 text-primary-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
               >
                 {tab.label}
               </button>

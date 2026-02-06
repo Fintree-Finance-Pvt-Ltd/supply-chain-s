@@ -65,14 +65,14 @@ export class UserService {
     });
   }
 
-  async getUserById(id: string): Promise<User | null> {
+  async getUserById(id: number): Promise<User | null> {
     return await this.userRepository.findOne({
       where: { id },
       relations: ['userRoles', 'userRoles.role'],
     });
   }
 
-  async updateUser(id: string, data: Partial<User>): Promise<User> {
+  async updateUser(id: number, data: Partial<User>): Promise<User> {
     const user = await this.userRepository.findOne({ where: { id } });
 
     if (!user) {
@@ -89,7 +89,7 @@ export class UserService {
     return await this.userRepository.save(user);
   }
 
-  async deleteUser(id: string): Promise<void> {
+  async deleteUser(id: number): Promise<void> {
     const user = await this.userRepository.findOne({ where: { id } });
 
     if (!user) {

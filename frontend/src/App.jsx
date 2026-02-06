@@ -17,11 +17,13 @@ import AdminDashboard from './pages/admin/AdminDashboard'
 import UserManagement from './pages/admin/UserManagement'
 import RoleManagement from './pages/admin/RoleManagement'
 import ApprovalFlowConfig from './pages/admin/ApprovalFlowConfig'
+import CaseAuditDetail from './pages/admin/CaseAuditDetail'
 
 // RM Pages
 import RMDashboard from './pages/rm/RMDashboard'
 import NewCustomerOnboarding from './pages/rm/NewCustomerOnboarding'
-import PostSanction from './pages/rm/PostSanction'
+import RMCaseDetail from './pages/rm/RMCaseDetail'
+import SubmitOpsScreen from './pages/rm/SubmitOpsScreen'
 
 // Credit Pages
 import CreditDashboard from './pages/credit/CreditDashboard'
@@ -93,6 +95,14 @@ function App() {
               </ProtectedRoute>
             }
           />
+          <Route
+            path="admin/case/:id"
+            element={
+              <ProtectedRoute allowedRoles={[ROLES.ADMIN]}>
+                <CaseAuditDetail />
+              </ProtectedRoute>
+            }
+          />
 
           {/* RM Routes */}
           <Route
@@ -112,10 +122,18 @@ function App() {
             }
           />
           <Route
-            path="rm/customer/:id/post-sanction"
+            path="rm/customer/:id"
             element={
               <ProtectedRoute allowedRoles={[ROLES.RELATIONSHIP_MANAGER]}>
-                <PostSanction />
+                <RMCaseDetail />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="rm/customer/:id/submit-ops"
+            element={
+              <ProtectedRoute allowedRoles={[ROLES.RELATIONSHIP_MANAGER]}>
+                <SubmitOpsScreen />
               </ProtectedRoute>
             }
           />
@@ -124,7 +142,15 @@ function App() {
           <Route
             path="credit/dashboard"
             element={
-              <ProtectedRoute allowedRoles={[ROLES.CREDIT_TEAM]}>
+              <ProtectedRoute allowedRoles={[ROLES.CREDIT_TEAM, ROLES.CREDIT_TEAM_L1, ROLES.CREDIT_TEAM_L2]}>
+                <CreditDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="credit/pending"
+            element={
+              <ProtectedRoute allowedRoles={[ROLES.CREDIT_TEAM, ROLES.CREDIT_TEAM_L1, ROLES.CREDIT_TEAM_L2]}>
                 <CreditDashboard />
               </ProtectedRoute>
             }
@@ -132,7 +158,7 @@ function App() {
           <Route
             path="credit/case/:id"
             element={
-              <ProtectedRoute allowedRoles={[ROLES.CREDIT_TEAM]}>
+              <ProtectedRoute allowedRoles={[ROLES.CREDIT_TEAM, ROLES.CREDIT_TEAM_L1, ROLES.CREDIT_TEAM_L2]}>
                 <CreditCaseDetail />
               </ProtectedRoute>
             }
@@ -160,7 +186,29 @@ function App() {
           <Route
             path="operations/dashboard"
             element={
-              <ProtectedRoute allowedRoles={[ROLES.OPERATIONS_TEAM]}>
+              <ProtectedRoute
+                allowedRoles={[
+                  ROLES.OPERATIONS_TEAM,
+                  ROLES.OPERATIONS_TEAM_L1,
+                  ROLES.OPERATIONS_TEAM_L2,
+                  ROLES.OPERATIONS_HEAD,
+                ]}
+              >
+                <OperationsDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="operations/pending"
+            element={
+              <ProtectedRoute
+                allowedRoles={[
+                  ROLES.OPERATIONS_TEAM,
+                  ROLES.OPERATIONS_TEAM_L1,
+                  ROLES.OPERATIONS_TEAM_L2,
+                  ROLES.OPERATIONS_HEAD,
+                ]}
+              >
                 <OperationsDashboard />
               </ProtectedRoute>
             }
@@ -168,7 +216,14 @@ function App() {
           <Route
             path="operations/case/:id"
             element={
-              <ProtectedRoute allowedRoles={[ROLES.OPERATIONS_TEAM]}>
+              <ProtectedRoute
+                allowedRoles={[
+                  ROLES.OPERATIONS_TEAM,
+                  ROLES.OPERATIONS_TEAM_L1,
+                  ROLES.OPERATIONS_TEAM_L2,
+                  ROLES.OPERATIONS_HEAD,
+                ]}
+              >
                 <OperationsCaseScreen />
               </ProtectedRoute>
             }

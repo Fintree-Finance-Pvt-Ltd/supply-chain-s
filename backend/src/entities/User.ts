@@ -11,6 +11,8 @@ import {
 import { UserRole } from './UserRole';
 import { Document } from './Document';
 import { Customer } from './Customer';
+import { Supplier } from './Supplier';
+import { Invoice } from './Invoice';
 import { CreditSanction } from './CreditSanction';
 import { ApprovalAction } from './ApprovalAction';
 import { CaseStatusHistory } from './CaseStatusHistory';
@@ -53,6 +55,12 @@ export class User {
 
   @OneToMany(() => Customer, (customer) => customer.rm)
   customers: Customer[];
+
+  @OneToMany(() => Supplier, (supplier) => supplier.createdBy)
+  createdSuppliers: Supplier[];
+
+  @OneToMany(() => Invoice, (invoice) => invoice.createdBy)
+  createdInvoices: Invoice[];
 
   @OneToMany(() => CreditSanction, (sanction) => sanction.creditOfficer)
   creditSanctions: CreditSanction[];

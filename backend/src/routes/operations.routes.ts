@@ -11,14 +11,14 @@ router.use(authMiddleware);
 
 router.get(
   '/pending',
-  roleMiddleware([ROLES.OPERATIONS_TEAM]),
+  roleMiddleware([ROLES.OPERATIONS_TEAM_L1, ROLES.OPERATIONS_TEAM_L2, ROLES.OPERATIONS_HEAD]),
   operationsController.getPendingChecks
 );
 
 router.get('/:id', operationsController.getCheckById);
 router.put(
   '/:id',
-  roleMiddleware([ROLES.OPERATIONS_TEAM]),
+  roleMiddleware([ROLES.OPERATIONS_TEAM_L1, ROLES.OPERATIONS_TEAM_L2, ROLES.OPERATIONS_HEAD]),
   operationsController.updateCheck
 );
 

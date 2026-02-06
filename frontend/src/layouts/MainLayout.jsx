@@ -14,37 +14,26 @@ const MainLayout = () => {
   // Redirect to role-specific dashboard if on root
   useEffect(() => {
     if (location.pathname === '/dashboard' || location.pathname === '/') {
-      // Wait a bit for role to be set if not available yet
-      if (!userRole && user) {
-        // Try to get role from user object
-        const role = user.role || user.defaultRole
-        if (role) {
-          const roleRoutes = {
-            admin: '/admin',
-            relationship_manager: '/rm/dashboard',
-            credit_team: '/credit/dashboard',
-            operations_team: '/operations/dashboard',
-            ceo: '/management/dashboard',
-            cfo: '/management/dashboard',
-            md: '/management/dashboard',
-          }
-          const redirectPath = roleRoutes[role] || '/rm/dashboard'
-          navigate(redirectPath, { replace: true })
-          return
-        }
+      const currentRole = userRole || user?.role || user?.defaultRole
+
+      const roleRoutes = {
+        admin: '/admin',
+        relationship_manager: '/rm/dashboard',
+        credit_team: '/credit/dashboard',
+        credit_team_l1: '/credit/dashboard',
+        credit_team_l2: '/credit/dashboard',
+        operations_team: '/operations/dashboard',
+        operations_team_l1: '/operations/dashboard',
+        operations_team_l2: '/operations/dashboard',
+        operations_head: '/operations/dashboard',
+        ceo: '/management/dashboard',
+        cfo: '/management/dashboard',
+        md: '/management/dashboard',
       }
-      
-      if (userRole) {
-        const roleRoutes = {
-          admin: '/admin',
-          relationship_manager: '/rm/dashboard',
-          credit_team: '/credit/dashboard',
-          operations_team: '/operations/dashboard',
-          ceo: '/management/dashboard',
-          cfo: '/management/dashboard',
-          md: '/management/dashboard',
-        }
-        const redirectPath = roleRoutes[userRole] || '/rm/dashboard'
+
+      if (currentRole) {
+        const redirectPath = roleRoutes[currentRole.toLowerCase()] || '/rm/dashboard'
+        console.log('MainLayout redirecting:', { currentRole, redirectPath })
         navigate(redirectPath, { replace: true })
       }
     }

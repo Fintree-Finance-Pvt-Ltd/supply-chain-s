@@ -65,7 +65,7 @@ export class UserController {
   getUserById = async (req: Request, res: Response): Promise<void> => {
     try {
       const { id } = req.params;
-      const user = await this.userService.getUserById(id);
+      const user = await this.userService.getUserById(parseInt(id));
 
       if (!user) {
         res.status(404).json({
@@ -102,7 +102,7 @@ export class UserController {
         return;
       }
 
-      const user = await this.userService.updateUser(id, {
+      const user = await this.userService.updateUser(parseInt(id), {
         name,
         email,
         mobile,
@@ -137,7 +137,7 @@ export class UserController {
         return;
       }
 
-      await this.userService.deleteUser(id);
+      await this.userService.deleteUser(parseInt(id));
 
       res.json({
         success: true,
@@ -166,7 +166,7 @@ export class UserController {
       const userRole = await this.userService.assignRole(
         userId,
         roleId,
-        req.userId ? parseInt(req.userId) : undefined
+        req.userId
       );
 
       res.json({
@@ -220,7 +220,19 @@ export class UserController {
         return;
       }
 
-      const user = await this.userService.toggleUserStatus(id);
+      // Get current user and toggle status
+      const currentUser = await this.userService.getUserById(parseInt(id));
+      if (!currentUser) {
+        res.status(404).json({
+          success: false,
+          message: 'User not found',
+        });
+        return;
+      }
+
+      const user = await this.userService.updateUser(parseInt(id), {
+        isActive: !currentUser.isActive,
+      });
 
       const { password: _, ...userWithoutPassword } = user;
 

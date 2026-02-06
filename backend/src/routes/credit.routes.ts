@@ -12,13 +12,13 @@ router.use(authMiddleware);
 // Credit team routes
 router.post(
   '/sanction',
-  roleMiddleware([ROLES.CREDIT_TEAM]),
+  roleMiddleware([ROLES.CREDIT_TEAM_L1, ROLES.CREDIT_TEAM_L2]),
   creditController.createSanction
 );
 
 router.get(
   '/pending',
-  roleMiddleware([ROLES.CREDIT_TEAM]),
+  roleMiddleware([ROLES.CREDIT_TEAM_L1, ROLES.CREDIT_TEAM_L2]),
   creditController.getPendingSanctions
 );
 

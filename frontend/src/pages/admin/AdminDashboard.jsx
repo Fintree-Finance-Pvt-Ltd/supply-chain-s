@@ -1,12 +1,51 @@
-import { Link } from 'react-router-dom'
-import { FiUsers, FiShield, FiGitBranch, FiBarChart } from 'react-icons/fi'
+import { useNavigate, Link } from 'react-router-dom'
+import { useState, useEffect } from 'react'
+import { FiUsers, FiShield, FiGitBranch, FiBarChart, FiEye } from 'react-icons/fi'
+import { customerService } from '../../services/customerService'
+import DataTable from '../../components/DataTable'
+import StatusBadge from '../../components/StatusBadge'
+import LoadingSpinner from '../../components/LoadingSpinner'
 
 const AdminDashboard = () => {
+  const navigate = useNavigate()
+  const [customers, setCustomers] = useState([])
+  const [isLoading, setIsLoading] = useState(true)
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        setIsLoading(true)
+        const response = await customerService.getCustomers()
+        setCustomers(response.data)
+      } catch (error) {
+        console.error('Error fetching admin data:', error)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+    fetchStats()
+  }, [])
+
   const stats = [
-    { label: 'Total Users', value: '45', icon: FiUsers, color: 'bg-blue-500' },
-    { label: 'Roles', value: '7', icon: FiShield, color: 'bg-green-500' },
-    { label: 'Approval Flows', value: '3', icon: FiGitBranch, color: 'bg-purple-500' },
-    { label: 'Active Cases', value: '128', icon: FiBarChart, color: 'bg-orange-500' },
+    { label: 'Total Customers', value: customers.length.toString(), icon: FiUsers, color: 'bg-blue-500' },
+    { label: 'Active Roles', value: '7', icon: FiShield, color: 'bg-green-500' },
+    { label: 'Approval Flows', value: '2', icon: FiGitBranch, color: 'bg-purple-500' },
+    { label: 'Pending Apps', value: customers.filter(c => c.status !== 'completed' && c.status !== 'rejected').length.toString(), icon: FiBarChart, color: 'bg-orange-500' },
+  ]
+
+  const customerColumns = [
+    { key: 'customerName', label: 'Customer Name' },
+    { key: 'lanId', label: 'LAN ID', render: (val) => val || '---' },
+    { key: 'status', label: 'Status', render: (val) => <StatusBadge status={val} label={val?.toUpperCase()} /> },
+    {
+      key: 'actions',
+      label: 'Actions',
+      render: (_, row) => (
+        <button onClick={() => navigate(`/admin/case/${row.id}`)} className="text-indigo-600 hover:text-indigo-900 transition-colors">
+          <FiEye className="h-5 w-5" />
+        </button>
+      )
+    }
   ]
 
   const quickActions = [
@@ -39,7 +78,18 @@ const AdminDashboard = () => {
       </div>
 
       <div className="card">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">Quick Actions</h2>
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">Customer Case Monitoring</h2>
+        {isLoading ? <LoadingSpinner /> : (
+          <DataTable
+            columns={customerColumns}
+            data={customers}
+            onRowClick={(row) => navigate(`/admin/case/${row.id}`)}
+          />
+        )}
+      </div>
+
+      <div className="card">
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">System Management</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {quickActions.map((action, index) => (
             <Link

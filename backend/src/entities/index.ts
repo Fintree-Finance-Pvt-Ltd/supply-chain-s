@@ -16,6 +16,10 @@ export { ApprovalFlow } from './ApprovalFlow';
 export { ApprovalStep } from './ApprovalStep';
 export { ApprovalInstance } from './ApprovalInstance';
 export { ApprovalAction } from './ApprovalAction';
+export { Supplier } from './Supplier';
+export { Invoice } from './Invoice';
+export { CaseWorkflow } from './CaseWorkflow';
+export { SanctionLimitHistory } from './SanctionLimitHistory';
 
 
 

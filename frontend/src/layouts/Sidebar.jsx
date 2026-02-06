@@ -30,30 +30,36 @@ const Sidebar = () => {
           { path: '/admin/roles', label: 'Role Management', icon: FiShield },
           { path: '/admin/approval-flows', label: 'Approval Flows', icon: FiGitBranch },
         ]
-      
+
       case ROLES.RELATIONSHIP_MANAGER:
         return [
           { path: '/rm/dashboard', label: 'Dashboard', icon: FiHome },
           { path: '/rm/customer/new', label: 'New Customer', icon: FiUserPlus },
         ]
-      
-      case ROLES.CREDIT_TEAM:
+
+      case ROLES.CREDIT_TEAM_L1:
+      case ROLES.CREDIT_TEAM_L2:
         return [
-          { path: '/credit/dashboard', label: 'Dashboard', icon: FiHome },
+          { path: '/credit/dashboard', label: 'Credit Dashboard', icon: FiHome },
+          { path: '/credit/pending', label: 'Pending Sanctions', icon: FiCheckCircle },
         ]
-      
-      case ROLES.OPERATIONS_TEAM:
+
+      case ROLES.OPERATIONS_TEAM_L1:
+      case ROLES.OPERATIONS_TEAM_L2:
+      case ROLES.OPERATIONS_HEAD:
         return [
-          { path: '/operations/dashboard', label: 'Dashboard', icon: FiHome },
+          { path: '/operations/dashboard', label: 'Ops Dashboard', icon: FiHome },
+          { path: '/operations/pending', label: 'Pending Checks', icon: FiCheckCircle },
         ]
-      
+
       case ROLES.CEO:
       case ROLES.CFO:
       case ROLES.MD:
         return [
-          { path: '/management/dashboard', label: 'Approvals', icon: FiCheckCircle },
+          { path: '/management/dashboard', label: 'Management Dashboard', icon: FiHome },
+          { path: '/management/approvals', label: 'Pending Approvals', icon: FiCheckCircle },
         ]
-      
+
       default:
         return []
     }
@@ -70,10 +76,9 @@ const Sidebar = () => {
               <NavLink
                 to={item.path}
                 className={({ isActive }) =>
-                  `flex items-center px-4 py-3 rounded-lg transition-colors ${
-                    isActive
-                      ? 'bg-primary-50 text-primary-700 font-medium'
-                      : 'text-gray-700 hover:bg-gray-100'
+                  `flex items-center px-4 py-3 rounded-lg transition-colors ${isActive
+                    ? 'bg-primary-50 text-primary-700 font-medium'
+                    : 'text-gray-700 hover:bg-gray-100'
                   }`
                 }
               >
@@ -84,7 +89,7 @@ const Sidebar = () => {
           ))}
         </ul>
       </nav>
-      
+
       <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-200">
         <div className="mb-2 px-4 text-sm text-gray-600">
           <p className="font-medium">{user?.name}</p>

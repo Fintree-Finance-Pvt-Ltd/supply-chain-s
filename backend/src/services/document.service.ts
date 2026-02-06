@@ -57,7 +57,8 @@ export class DocumentService {
   async verifyDocument(
     id: number,
     verifiedBy: number,
-    remarks?: string
+    remarks?: string,
+    status: string = 'approved'
   ): Promise<Document> {
     const document = await this.documentRepository.findOne({ where: { id } });
 
@@ -65,7 +66,8 @@ export class DocumentService {
       throw new Error('Document not found');
     }
 
-    document.verified = true;
+    document.verified = status === 'approved';
+    document.status = status;
     document.verifiedBy = verifiedBy;
     document.verifiedAt = new Date();
     if (remarks !== undefined) {

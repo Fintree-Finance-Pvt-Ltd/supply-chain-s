@@ -15,7 +15,13 @@ import { PostSanction } from './PostSanction';
 import { OperationsCheck } from './OperationsCheck';
 import { CaseStatusHistory } from './CaseStatusHistory';
 import { KycDetail } from './KycDetail';
+<<<<<<< Updated upstream
 import { CoApplicant } from './CoApplicant';
+=======
+import { Supplier } from './Supplier';
+import { Invoice } from './Invoice';
+import { CaseWorkflow } from './CaseWorkflow';
+>>>>>>> Stashed changes
 import { CASE_STATUS, COMPANY_TYPES } from '../config/constants';
 
 @Entity('customers')
@@ -47,6 +53,24 @@ export class Customer {
   @Column({ type: 'enum', enum: Object.values(CASE_STATUS), default: CASE_STATUS.DRAFT })
   status: string;
 
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  customerName: string;
+
+  @Column({ type: 'varchar', length: 50, unique: true, nullable: true })
+  customerCode: string;
+
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  industryType: string;
+
+  @Column({ type: 'decimal', precision: 15, scale: 2, nullable: true })
+  annualTurnover: number;
+
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  lanId: string;
+
+  @Column({ type: 'text', nullable: true })
+  rejectionReason: string;
+
   @Column({ type: 'boolean', default: false })
   kycVerified: boolean;
 
@@ -55,6 +79,24 @@ export class Customer {
 
   @Column({ type: 'text', nullable: true })
   remarks: string;
+
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  bankAccountNo: string;
+
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  bankIfscCode: string;
+
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  bankName: string;
+
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  bankBranch: string;
+
+  @Column({ type: 'enum', enum: ['pending', 'completed'], default: 'pending' })
+  eNachStatus: string;
+
+  @Column({ type: 'enum', enum: ['pending', 'completed'], default: 'pending' })
+  eSignStatus: string;
 
   @CreateDateColumn()
   createdAt: Date;
@@ -87,6 +129,15 @@ export class Customer {
 
   @OneToMany(() => CaseStatusHistory, (history) => history.customer)
   statusHistory: CaseStatusHistory[];
+
+  @OneToMany(() => Supplier, (supplier) => supplier.customer)
+  suppliers: Supplier[];
+
+  @OneToMany(() => Invoice, (invoice) => invoice.customer)
+  invoices: Invoice[];
+
+  @OneToMany(() => CaseWorkflow, (workflow) => workflow.customer)
+  workflows: CaseWorkflow[];
 }
 
 

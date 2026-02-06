@@ -17,12 +17,23 @@ export const ROLES = {
 export const CASE_STATUS = {
   DRAFT: 'draft',
   SUBMITTED: 'submitted',
-  CREDIT_APPROVED: 'credit_approved',
-  POST_SANCTION_PENDING: 'post_sanction_pending',
-  POST_SANCTION_COMPLETED: 'post_sanction_completed',
-  OPERATIONS_APPROVED: 'operations_approved',
-  FULLY_ONBOARDED: 'fully_onboarded',
+  CREDIT_L1_APPROVED: 'credit_l1_approved',
+  CREDIT_L2_APPROVED: 'credit_l2_approved',
+  CEO_APPROVED: 'ceo_approved',
+  MD_APPROVED: 'md_approved',
+  OPS_L1_REVIEW: 'ops_l1_review',
+  OPS_L1_APPROVED: 'ops_l1_approved',
+  OPS_L2_VERIFIED: 'ops_l2_verified',
+  OPS_HEAD_APPROVED: 'ops_head_approved',
+  COMPLETED: 'completed',
+  DISBURSED: 'disbursed',
   REJECTED: 'rejected',
+
+  // Backward compatibility
+  CREDIT_APPROVED: 'credit_l2_approved',
+  POST_SANCTION_PENDING: 'md_approved',
+  POST_SANCTION_COMPLETED: 'ops_l1_approved',
+  FULLY_ONBOARDED: 'completed',
 } as const;
 
 export type CaseStatus = typeof CASE_STATUS[keyof typeof CASE_STATUS];

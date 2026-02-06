@@ -50,6 +50,9 @@ export class Document {
   @Column({ type: 'boolean', default: false })
   verified: boolean;
 
+  @Column({ type: 'varchar', length: 50, default: 'pending' })
+  status: string; // 'pending', 'approved', 'rejected'
+
   @Column({ type: 'int', nullable: true })
   verifiedBy: number | null;
 

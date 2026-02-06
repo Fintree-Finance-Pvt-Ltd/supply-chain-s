@@ -11,6 +11,7 @@ import { formatDate } from '../../utils/format'
 const CreditDashboard = () => {
   const navigate = useNavigate()
   const dispatch = useDispatch()
+  const { user } = useSelector((state) => state.auth)
   const { cases, isLoading } = useSelector((state) => state.cases)
   const [filters, setFilters] = useState({
     rmName: '',
@@ -20,8 +21,11 @@ const CreditDashboard = () => {
   })
 
   useEffect(() => {
-    dispatch(fetchCases({ status: 'submitted' }))
-  }, [dispatch])
+    const userRole = (user?.role || '').toLowerCase()
+    const statusFilter = userRole === 'credit_team_l2' ? 'credit_l1_approved' : 'submitted'
+    dispatch(fetchCases({ status: statusFilter }))
+    setFilters(prev => ({ ...prev, status: statusFilter }))
+  }, [dispatch, user])
 
   const filteredCases = cases.filter(caseItem => {
     if (filters.rmName && !caseItem.rm?.name?.toLowerCase().includes(filters.rmName.toLowerCase())) {
@@ -34,18 +38,18 @@ const CreditDashboard = () => {
   })
 
   const columns = [
-    { 
-      key: 'name', 
+    {
+      key: 'name',
       label: 'Customer Name',
       render: (_, row) => row.name || row.customerName
     },
-    { 
-      key: 'rmName', 
+    {
+      key: 'rmName',
       label: 'RM Name',
       render: (_, row) => row.rm?.name || row.rmName || 'N/A'
     },
-    { 
-      key: 'pan', 
+    {
+      key: 'pan',
       label: 'PAN',
       render: (_, row) => row.pan || row.panNumber
     },

@@ -1,47 +1,57 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useSelector } from 'react-redux'
-import { approvalService } from '../../services/approvalService'
+import { workflowService } from '../../services/workflowService'
+import { customerService } from '../../services/customerService'
 import ApprovalTimeline from '../../components/ApprovalTimeline'
 import LoadingSpinner from '../../components/LoadingSpinner'
-import { formatDate, formatCurrency } from '../../utils/format'
+import { formatDate } from '../../utils/format'
 import { FiCheck, FiX } from 'react-icons/fi'
 
 const ApprovalScreen = () => {
-  const { id } = useParams()
+  const { id } = useParams() // This is now customerId
   const navigate = useNavigate()
   const { user } = useSelector((state) => state.auth)
-  
-  const [approvalInstance, setApprovalInstance] = useState(null)
-  const [approvalHistory, setApprovalHistory] = useState([])
+
+  const [customer, setCustomer] = useState(null)
+  const [workflow, setWorkflow] = useState(null)
+  const [sanctionData, setSanctionData] = useState({
+    sanctionAmount: '',
+    tenure: '',
+    interestRate: '',
+  })
   const [comments, setComments] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    const loadApprovalData = async () => {
+    const loadData = async () => {
       try {
         setIsLoading(true)
-        // Get approval instance details from pending approvals
-        const pendingResponse = await approvalService.getPendingApprovals()
-        const instance = pendingResponse.data.find(inst => inst.id === id)
-        
-        if (instance) {
-          setApprovalInstance(instance)
-          
-          // Load approval history
-          const historyResponse = await approvalService.getApprovalHistory(id)
-          setApprovalHistory(historyResponse.data)
+        const custResponse = await customerService.getCustomerById(id)
+        setCustomer(custResponse.data)
+        if (custResponse.data?.creditSanctions?.[0]) {
+          const s = custResponse.data.creditSanctions[0]
+          setSanctionData({
+            sanctionAmount: s.sanctionAmount || '',
+            tenure: s.tenure || '',
+            interestRate: s.interestRate || '',
+          })
         }
+
+        // Find the customer onboarding workflow in the history or relations
+        // For simplicity, we assume the data comes from getCustomerById
+        // which should include the workflow status history.
+        // If not, we can adjust.
       } catch (error) {
         console.error('Error loading approval data:', error)
       } finally {
         setIsLoading(false)
       }
     }
-    
+
     if (id) {
-      loadApprovalData()
+      loadData()
     }
   }, [id])
 
@@ -53,11 +63,25 @@ const ApprovalScreen = () => {
 
     setIsSubmitting(true)
     try {
-      await approvalService.processApproval(id, 'approved', comments)
+      const userRole = (user?.role || '').toLowerCase()
+      const payload = {
+        approved: true,
+        remarks: comments,
+        ...sanctionData
+      }
+
+      if (userRole === 'ceo') {
+        await workflowService.approveCEO(id, payload.approved, payload.remarks, payload)
+      } else if (userRole === 'md') {
+        await workflowService.approveMD(id, payload.approved, payload.remarks, payload)
+      } else {
+        throw new Error('Unauthorized role for this action')
+      }
+
       alert('Approval processed successfully')
       navigate('/management/dashboard')
     } catch (error) {
-      alert('Failed to approve: ' + (error.message || error))
+      alert('Failed to approve: ' + (error.response?.data?.message || error.message || error))
     } finally {
       setIsSubmitting(false)
     }
@@ -71,11 +95,19 @@ const ApprovalScreen = () => {
 
     setIsSubmitting(true)
     try {
-      await approvalService.processApproval(id, 'rejected', comments)
+      const userRole = (user?.role || '').toLowerCase()
+      if (userRole === 'ceo') {
+        await workflowService.approveCEO(id, false, comments)
+      } else if (userRole === 'md') {
+        await workflowService.approveMD(id, false, comments)
+      } else {
+        throw new Error('Unauthorized role for this action')
+      }
+
       alert('Approval rejected')
       navigate('/management/dashboard')
     } catch (error) {
-      alert('Failed to reject: ' + (error.message || error))
+      alert('Failed to reject: ' + (error.response?.data?.message || error.message || error))
     } finally {
       setIsSubmitting(false)
     }
@@ -85,20 +117,17 @@ const ApprovalScreen = () => {
     return <LoadingSpinner />
   }
 
-  if (!approvalInstance) {
-    return <div>Approval instance not found</div>
+  if (!customer) {
+    return <div>Customer record not found</div>
   }
 
-  const creditSanction = approvalInstance.creditSanction
-  const customer = creditSanction?.customer || approvalInstance.operationsCheck?.customer
-
-  // Format approval history for timeline component
-  const formattedApprovals = approvalHistory.map(action => ({
-    approverName: action.approver?.name || 'Unknown',
-    approverRole: action.approver?.defaultRole || 'Unknown',
-    status: action.action,
+  // Format history for timeline
+  const formattedApprovals = (customer.statusHistory || []).map(action => ({
+    approverName: action.changedByUser?.name || 'Workflow System',
+    approverRole: action.changedByUser?.defaultRole?.replace(/_/g, ' ').toUpperCase() || 'System',
+    status: action.status,
     approvedAt: action.createdAt,
-    comments: action.comments,
+    comments: action.remarks,
   }))
 
   return (
@@ -120,55 +149,78 @@ const ApprovalScreen = () => {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <p className="text-sm text-gray-600">Customer Name</p>
-                <p className="font-medium">{customer?.name || 'N/A'}</p>
+                <p className="font-medium">{customer?.customerName || 'N/A'}</p>
               </div>
               <div>
-                <p className="text-sm text-gray-600">Mobile Number</p>
-                <p className="font-medium">{customer?.mobile || 'N/A'}</p>
+                <p className="text-sm text-gray-600">Customer Code</p>
+                <p className="font-medium">{customer?.customerCode || 'N/A'}</p>
               </div>
               <div>
-                <p className="text-sm text-gray-600">PAN Number</p>
-                <p className="font-medium">{customer?.pan || 'N/A'}</p>
+                <p className="text-sm text-gray-600">Contact Number</p>
+                <p className="font-medium">{customer?.contactNumber || 'N/A'}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-600">Email Address</p>
+                <p className="font-medium">{customer?.email || 'N/A'}</p>
               </div>
               <div>
                 <p className="text-sm text-gray-600">RM Name</p>
                 <p className="font-medium">{customer?.rm?.name || 'N/A'}</p>
               </div>
+              <div>
+                <p className="text-sm text-gray-600">Industry</p>
+                <p className="font-medium">{customer?.industryType || 'N/A'}</p>
+              </div>
             </div>
           </div>
 
-          {creditSanction && (
-            <>
-              <div className="card">
-                <h2 className="text-xl font-semibold text-gray-900 mb-4">Sanction Details</h2>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-sm text-gray-600">Sanction Amount</p>
-                    <p className="font-medium text-lg">
-                      {creditSanction.sanctionAmount ? formatCurrency(creditSanction.sanctionAmount) : 'N/A'}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-600">Tenure</p>
-                    <p className="font-medium">{creditSanction.tenure || 'N/A'} months</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-600">Interest Rate</p>
-                    <p className="font-medium">{creditSanction.interestRate || 'N/A'}%</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-600">Conditions</p>
-                    <p className="font-medium">{creditSanction.conditions || 'N/A'}</p>
-                  </div>
-                </div>
+          <div className="card">
+            <h2 className="text-xl font-semibold text-gray-900 mb-4">Onboarding Details</h2>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="text-sm text-gray-600">Annual Turnover</p>
+                <p className="font-medium">{customer?.annualTurnover || 'N/A'}</p>
               </div>
+              <div>
+                <p className="text-sm text-gray-600">Address</p>
+                <p className="font-medium">{customer?.address || 'N/A'}</p>
+              </div>
+            </div>
+          </div>
 
-              <div className="card">
-                <h2 className="text-xl font-semibold text-gray-900 mb-4">Credit Remarks</h2>
-                <p className="text-gray-700">{creditSanction.creditRemarks || 'No remarks'}</p>
+          <div className="card">
+            <h2 className="text-xl font-semibold text-gray-900 mb-4">Sanction Details (Review & Revise)</h2>
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Sanction Amount (₹)</label>
+                <input
+                  type="number"
+                  value={sanctionData.sanctionAmount}
+                  onChange={(e) => setSanctionData({ ...sanctionData, sanctionAmount: e.target.value })}
+                  className="input-field text-sm"
+                />
               </div>
-            </>
-          )}
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Tenure (Months)</label>
+                <input
+                  type="number"
+                  value={sanctionData.tenure}
+                  onChange={(e) => setSanctionData({ ...sanctionData, tenure: e.target.value })}
+                  className="input-field text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Interest Rate (%)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={sanctionData.interestRate}
+                  onChange={(e) => setSanctionData({ ...sanctionData, interestRate: e.target.value })}
+                  className="input-field text-sm"
+                />
+              </div>
+            </div>
+          </div>
 
           <div className="card">
             <h2 className="text-xl font-semibold text-gray-900 mb-4">Approval Comments</h2>

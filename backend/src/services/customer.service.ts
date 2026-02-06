@@ -21,11 +21,17 @@ export class CustomerService {
     gstNumber?: string;
     electricityBillNo?: string;
     rmId: number;
+    customerCode?: string;
   }): Promise<Customer> {
+    // Clean up empty strings
+    const cleanedData = { ...data };
+    if (cleanedData.gstNumber === '') cleanedData.gstNumber = undefined;
+    if (cleanedData.customerCode === '') cleanedData.customerCode = undefined;
+
     // Check if GST already exists (if provided)
-    if (data.gstNumber) {
+    if (cleanedData.gstNumber) {
       const existing = await this.customerRepository.findOne({
-        where: { gstNumber: data.gstNumber },
+        where: { gstNumber: cleanedData.gstNumber },
       });
 
       if (existing) {
@@ -34,7 +40,7 @@ export class CustomerService {
     }
 
     const customer = this.customerRepository.create({
-      ...data,
+      ...cleanedData,
       status: CASE_STATUS.DRAFT,
     });
 
@@ -53,7 +59,12 @@ export class CustomerService {
       throw new Error('Customer not found');
     }
 
-    Object.assign(customer, data);
+    // Clean up empty strings
+    const cleanedData = { ...data };
+    if (cleanedData.gstNumber === '') cleanedData.gstNumber = undefined;
+    if (cleanedData.customerCode === '') cleanedData.customerCode = undefined;
+
+    Object.assign(customer, cleanedData);
     return await this.customerRepository.save(customer);
   }
 

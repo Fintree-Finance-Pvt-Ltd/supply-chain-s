@@ -1,13 +1,13 @@
 import { Request, Response, NextFunction } from 'express';
 import { verifyToken, JWTPayload } from '../utils/jwt';
 import { AppDataSource } from '../config/database';
-import { User } from '../entities/User';
+import { User, UserRole } from '../entities';
 
 // Extend Express Request to include user
 declare global {
   namespace Express {
     interface Request {
-      user?: User;
+      user?: User & { roles?: any[] };
       userId?: number;
       userRole?: string;
     }
@@ -43,8 +43,18 @@ export const authMiddleware = async (
       return;
     }
 
-    // Attach user to request
-    req.user = user;
+    // Get user roles
+    const userRoleRepository = AppDataSource.getRepository(UserRole);
+    const userRoles = await userRoleRepository.find({
+      where: { userId: user.id, isActive: true },
+      relations: ['role'],
+    });
+
+    // Attach user to request with roles
+    req.user = {
+      ...user,
+      roles: userRoles.map(ur => ur.role),
+    };
     req.userId = user.id;
     req.userRole = decoded.role;
 

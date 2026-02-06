@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { operationsService } from '../../services/operationsService'
+import { workflowService } from '../../services/workflowService'
 import DataTable from '../../components/DataTable'
 import StatusBadge from '../../components/StatusBadge'
 import LoadingSpinner from '../../components/LoadingSpinner'
@@ -8,49 +8,49 @@ import { formatDate } from '../../utils/format'
 
 const OperationsDashboard = () => {
   const navigate = useNavigate()
-  const [checks, setChecks] = useState([])
+  const [cases, setCases] = useState([])
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    const loadChecks = async () => {
+    const loadCases = async () => {
       try {
         setIsLoading(true)
-        const response = await operationsService.getPendingChecks()
-        setChecks(response.data || [])
+        const response = await workflowService.getOperationsDashboard()
+        setCases(response.data?.data || [])
       } catch (error) {
-        console.error('Error loading operations checks:', error)
+        console.error('Error loading operations cases:', error)
       } finally {
         setIsLoading(false)
       }
     }
-    loadChecks()
+    loadCases()
   }, [])
 
   const columns = [
-    { 
-      key: 'customerName', 
+    {
+      key: 'customerName',
       label: 'Customer Name',
-      render: (_, row) => row.customer?.name || 'N/A'
-    },
-    { 
-      key: 'rmName', 
-      label: 'RM Name',
-      render: (_, row) => row.customer?.rm?.name || 'N/A'
+      render: (_, row) => row.customer?.customerName || 'N/A'
     },
     {
-      key: 'status',
-      label: 'Status',
-      render: (value) => <StatusBadge status={value} label={value} />,
+      key: 'customerCode',
+      label: 'Customer Code',
+      render: (_, row) => row.customer?.customerCode || 'N/A'
     },
     {
-      key: 'createdAt',
+      key: 'currentStatus',
+      label: 'Stage',
+      render: (value) => <StatusBadge status={value} label={value.replace(/_/g, ' ').toUpperCase()} />,
+    },
+    {
+      key: 'updatedAt',
       label: 'Received Date',
       render: (value) => formatDate(value),
     },
   ]
 
   const handleRowClick = (row) => {
-    navigate(`/operations/case/${row.id}`)
+    navigate(`/operations/case/${row.customerId}`)
   }
 
   return (
@@ -63,7 +63,7 @@ const OperationsDashboard = () => {
       <div className="card">
         <div className="mb-4">
           <p className="text-sm text-gray-600">
-            Pending Operations Verification: <span className="font-semibold">{checks.length}</span>
+            Pending Operations Review: <span className="font-semibold">{cases.length}</span>
           </p>
         </div>
 
@@ -71,7 +71,7 @@ const OperationsDashboard = () => {
           <LoadingSpinner />
         ) : (
           <DataTable
-            data={checks}
+            data={cases}
             columns={columns}
             onRowClick={handleRowClick}
           />
