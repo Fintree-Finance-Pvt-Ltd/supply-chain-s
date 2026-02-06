@@ -19,6 +19,8 @@ import { CoApplicant } from './CoApplicant';
 import { Supplier } from './Supplier';
 import { Invoice } from './Invoice';
 import { CaseWorkflow } from './CaseWorkflow';
+import { ContactPerson } from './ContactPerson';
+import { CustomerAddress } from './CustomerAddress';
 import { CASE_STATUS, COMPANY_TYPES } from '../config/constants';
 
 @Entity('customers')
@@ -135,6 +137,12 @@ export class Customer {
 
   @OneToMany(() => CaseWorkflow, (workflow) => workflow.customer)
   workflows: CaseWorkflow[];
+
+  @OneToMany(() => ContactPerson, (contact) => contact.customer, { cascade: true })
+  contactPersons: ContactPerson[];
+
+  @OneToMany(() => CustomerAddress, (address) => address.customer, { cascade: true })
+  addresses: CustomerAddress[];
 }
 
 

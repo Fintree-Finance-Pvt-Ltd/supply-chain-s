@@ -5,16 +5,13 @@ import {
     CreateDateColumn,
     UpdateDateColumn,
     ManyToOne,
-    OneToMany,
     JoinColumn,
 } from 'typeorm';
 import { Customer } from './Customer';
-import { KycDetail } from './KycDetail';
-import { Document } from './Document';
 import { GENDERS } from '../config/constants';
 
-@Entity('co_applicants')
-export class CoApplicant {
+@Entity('contact_persons')
+export class ContactPerson {
     @PrimaryGeneratedColumn('increment')
     id: number;
 
@@ -30,6 +27,9 @@ export class CoApplicant {
     @Column({ type: 'varchar', length: 255, nullable: true })
     email: string | null;
 
+    @Column({ type: 'varchar', length: 100, nullable: true })
+    designation: string | null;
+
     @Column({ type: 'enum', enum: Object.values(GENDERS), nullable: true })
     gender: string;
 
@@ -40,13 +40,7 @@ export class CoApplicant {
     updatedAt: Date;
 
     // Relations
-    @ManyToOne(() => Customer, (customer) => customer.coApplicants, { onDelete: 'CASCADE' })
+    @ManyToOne(() => Customer, (customer) => customer.contactPersons, { onDelete: 'CASCADE' })
     @JoinColumn({ name: 'customerId' })
     customer: Customer;
-
-    @OneToMany(() => KycDetail, (kycDetail) => kycDetail.coApplicant)
-    kycDetails: KycDetail[];
-
-    @OneToMany(() => Document, (document) => document.coApplicant)
-    documents: Document[];
 }

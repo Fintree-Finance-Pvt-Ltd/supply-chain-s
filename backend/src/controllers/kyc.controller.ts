@@ -125,4 +125,69 @@ export class KycController {
             });
         }
     };
+
+    processCoApplicant = async (req: Request, res: Response): Promise<void> => {
+        try {
+            const coApp = await this.kycService.processCoApplicant(req.body);
+            res.json({
+                success: true,
+                data: coApp,
+            });
+        } catch (error: any) {
+            res.status(400).json({
+                success: false,
+                message: error.message || 'Failed to process co-applicant',
+            });
+        }
+    };
+
+    processContactPerson = async (req: Request, res: Response): Promise<void> => {
+        try {
+            const contact = await this.kycService.processContactPerson(req.body);
+            res.json({
+                success: true,
+                data: contact,
+            });
+        } catch (error: any) {
+            res.status(400).json({
+                success: false,
+                message: error.message || 'Failed to process contact person',
+            });
+        }
+    };
+
+    processAddress = async (req: Request, res: Response): Promise<void> => {
+        try {
+            const address = await this.kycService.processAddress(req.body);
+            res.json({
+                success: true,
+                data: address,
+            });
+        } catch (error: any) {
+            res.status(400).json({
+                success: false,
+                message: error.message || 'Failed to process address',
+            });
+        }
+    };
+
+    deleteContactPerson = async (req: Request, res: Response): Promise<void> => {
+        try {
+            const { id } = req.params;
+            await this.kycService.deleteContactPerson(Number(id));
+            res.json({ success: true, message: 'Contact person deleted' });
+        } catch (error: any) {
+            res.status(400).json({ success: false, message: error.message });
+        }
+    };
+
+    deleteAddress = async (req: Request, res: Response): Promise<void> => {
+        try {
+            const { id } = req.params;
+            await this.kycService.deleteAddress(Number(id));
+            res.json({ success: true, message: 'Address deleted' });
+        } catch (error: any) {
+            res.status(400).json({ success: false, message: error.message });
+        }
+    };
 }

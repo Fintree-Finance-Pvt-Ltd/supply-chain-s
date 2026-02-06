@@ -14,6 +14,7 @@ export class CoApplicantService {
         name: string;
         mobile: string;
         email?: string;
+        gender?: string;
     }): Promise<CoApplicant> {
         const coApp = this.coApplicantRepository.create(data);
         return await this.coApplicantRepository.save(coApp);
@@ -47,7 +48,7 @@ export class CoApplicantService {
         await this.coApplicantRepository.remove(coApp);
     }
 
-    async findOrCreate(customerId: number, name: string, mobile: string, email?: string): Promise<CoApplicant> {
+    async findOrCreate(customerId: number, name: string, mobile: string, email?: string, gender?: string): Promise<CoApplicant> {
         let coApp = await this.coApplicantRepository.findOne({
             where: { customerId, mobile }
         });
@@ -55,9 +56,10 @@ export class CoApplicantService {
         if (coApp) {
             coApp.name = name;
             coApp.email = email ?? null;
+            coApp.gender = gender ?? coApp.gender;
             return await this.coApplicantRepository.save(coApp);
         }
 
-        return await this.createCoApplicant({ customerId, name, mobile, email });
+        return await this.createCoApplicant({ customerId, name, mobile, email, gender });
     }
 }

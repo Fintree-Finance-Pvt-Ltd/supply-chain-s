@@ -38,4 +38,12 @@ router.post(
 // All authenticated users can view
 router.get('/customer/:customerId', kycController.getCustomerKyc);
 
+// Additional details processing
+router.post('/co-applicant/process', kycController.processCoApplicant);
+router.post('/contact-person/process', kycController.processContactPerson);
+router.post('/address/process', kycController.processAddress);
+
+router.delete('/contact-person/:id', kycController.deleteContactPerson);
+router.delete('/address/:id', kycController.deleteAddress);
+
 export default router;

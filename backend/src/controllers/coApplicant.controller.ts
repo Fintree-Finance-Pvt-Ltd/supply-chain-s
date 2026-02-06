@@ -73,12 +73,13 @@ export class CoApplicantController {
 
     findOrCreate = async (req: Request, res: Response): Promise<void> => {
         try {
-            const { customerId, name, mobile, email } = req.body;
+            const { customerId, name, mobile, email, gender } = req.body;
             const coApp = await this.coApplicantService.findOrCreate(
                 Number(customerId),
                 name,
                 mobile,
-                email
+                email,
+                gender
             );
             res.json({
                 success: true,

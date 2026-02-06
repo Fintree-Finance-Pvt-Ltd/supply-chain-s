@@ -38,7 +38,29 @@ export const kycService = {
 
     // Find or create co-applicant
     processCoApplicant: async (data) => {
-        const response = await api.post('/co-applicants/find-or-create', data)
+        const response = await api.post('/kyc/co-applicant/process', data)
+        return response.data
+    },
+
+    // --- Contact Person Management ---
+    processContactPerson: async (data) => {
+        const response = await api.post('/kyc/contact-person/process', data)
+        return response.data
+    },
+
+    deleteContactPerson: async (id) => {
+        const response = await api.delete(`/kyc/contact-person/${id}`)
+        return response.data
+    },
+
+    // --- Address Management ---
+    processAddress: async (data) => {
+        const response = await api.post('/kyc/address/process', data)
+        return response.data
+    },
+
+    deleteAddress: async (id) => {
+        const response = await api.delete(`/kyc/address/${id}`)
         return response.data
     },
 

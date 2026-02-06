@@ -199,6 +199,28 @@ const CoApplicantForm = ({
                     </div>
                 </div>
 
+                {/* Gender */}
+                <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Gender <span className="text-red-500">*</span>
+                    </label>
+                    <div className="flex space-x-6 mt-2">
+                        {['Male', 'Female', 'Other'].map((gender) => (
+                            <label key={gender} className="inline-flex items-center cursor-pointer">
+                                <input
+                                    type="radio"
+                                    name={`gender-${index}`}
+                                    value={gender}
+                                    checked={data.gender === gender}
+                                    onChange={(e) => onChange(index, { ...data, gender: e.target.value })}
+                                    className="form-radio h-4 w-4 text-primary-600 border-gray-300 focus:ring-primary-500"
+                                />
+                                <span className="ml-2 text-sm text-gray-700">{gender}</span>
+                            </label>
+                        ))}
+                    </div>
+                </div>
+
                 {/* PAN Upload */}
                 <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">

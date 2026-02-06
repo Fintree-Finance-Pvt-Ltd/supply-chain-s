@@ -20,6 +20,8 @@ export { Supplier } from './Supplier';
 export { Invoice } from './Invoice';
 export { CaseWorkflow } from './CaseWorkflow';
 export { SanctionLimitHistory } from './SanctionLimitHistory';
+export { ContactPerson } from './ContactPerson';
+export { CustomerAddress } from './CustomerAddress';
 
 
 

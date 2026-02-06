@@ -6,6 +6,8 @@ import { documentService } from '../../services/documentService'
 import kycService from '../../services/kycService'
 import DocumentChecklistUploader from '../../components/DocumentChecklistUploader'
 import CoApplicantForm from '../../components/CoApplicantForm'
+import ContactPersonForm from '../../components/ContactPersonForm'
+import AddressForm from '../../components/AddressForm'
 import LoadingSpinner from '../../components/LoadingSpinner'
 import { validatePAN, validateMobile, validateEmail } from '../../utils/validation'
 import { COMPANY_TYPES, getDocumentChecklist } from '../../config/documentChecklists'
@@ -41,6 +43,12 @@ const NewCustomerOnboarding = () => {
 
   // Co-applicants
   const [coApplicants, setCoApplicants] = useState([])
+
+  // Contact Persons
+  const [contactPersons, setContactPersons] = useState([])
+
+  // Addresses
+  const [addresses, setAddresses] = useState([])
 
   // Co-applicant KYC data
   const [coApplicantKyc, setCoApplicantKyc] = useState({})
@@ -85,6 +93,7 @@ const NewCustomerOnboarding = () => {
           name: ca.name,
           mobile: ca.mobile,
           email: ca.email || '',
+          gender: ca.gender,
         }))
         setCoApplicants(loadedCoApps)
 
@@ -102,6 +111,30 @@ const NewCustomerOnboarding = () => {
           }
         })
         setCoApplicantKyc(loadedCoAppKyc)
+      }
+
+      // Load Contact Persons
+      if (currentCase.contactPersons && currentCase.contactPersons.length > 0) {
+        setContactPersons(currentCase.contactPersons.map(cp => ({
+          id: cp.id,
+          name: cp.name,
+          mobile: cp.mobile,
+          email: cp.email || '',
+          designation: cp.designation || '',
+          gender: cp.gender,
+        })))
+      }
+
+      // Load Addresses
+      if (currentCase.addresses && currentCase.addresses.length > 0) {
+        setAddresses(currentCase.addresses.map(addr => ({
+          id: addr.id,
+          type: addr.type,
+          fullAddress: addr.fullAddress,
+          pincode: addr.pincode,
+          state: addr.state,
+          city: addr.city,
+        })))
       }
     }
   }, [currentCase, caseId])
@@ -267,6 +300,60 @@ const NewCustomerOnboarding = () => {
     }))
   }
 
+  // Contact Person Management
+  const addContactPerson = () => {
+    setContactPersons([...contactPersons, { name: '', mobile: '', email: '', designation: '', gender: '' }])
+  }
+
+  const removeContactPerson = async (index) => {
+    const personToRemove = contactPersons[index]
+    if (personToRemove.id) {
+      if (window.confirm('Are you sure you want to delete this contact person?')) {
+        try {
+          await kycService.deleteContactPerson(personToRemove.id)
+        } catch (error) {
+          console.error('Failed to delete contact person:', error)
+        }
+      } else {
+        return
+      }
+    }
+    setContactPersons(contactPersons.filter((_, i) => i !== index))
+  }
+
+  const updateContactPerson = (index, data) => {
+    const updated = [...contactPersons]
+    updated[index] = data
+    setContactPersons(updated)
+  }
+
+  // Address Management
+  const addAddress = () => {
+    setAddresses([...addresses, { type: '', fullAddress: '', pincode: '', state: '', city: '' }])
+  }
+
+  const removeAddress = async (index) => {
+    const addressToRemove = addresses[index]
+    if (addressToRemove.id) {
+      if (window.confirm('Are you sure you want to delete this address?')) {
+        try {
+          await kycService.deleteAddress(addressToRemove.id)
+        } catch (error) {
+          console.error('Failed to delete address:', error)
+        }
+      } else {
+        return
+      }
+    }
+    setAddresses(addresses.filter((_, i) => i !== index))
+  }
+
+  const updateAddress = (index, data) => {
+    const updated = [...addresses]
+    updated[index] = data
+    setAddresses(updated)
+  }
+
   const validateBasicKycTab = () => {
     const newErrors = {}
 
@@ -289,6 +376,38 @@ const NewCustomerOnboarding = () => {
     if (!applicantKyc.panNumber) {
       newErrors.pan = 'PAN is required - please upload PAN card'
     }
+
+    // Mandatory female co-applicant rule
+    if (formData.companyType === COMPANY_TYPES.PROPRIETORSHIP || formData.companyType === COMPANY_TYPES.PVT_LTD) {
+      const hasFemaleCoApp = coApplicants.some(ca => ca.gender === 'Female')
+      if (!hasFemaleCoApp) {
+        newErrors.coApplicants = 'At least one female co-applicant is mandatory for this company type'
+      }
+    }
+
+    // Co-applicant field validation
+    coApplicants.forEach((ca, index) => {
+      if (!ca.name) newErrors[`coApp_${index}_name`] = 'Name is required'
+      if (!validateMobile(ca.mobile)) newErrors[`coApp_${index}_mobile`] = 'Valid mobile is required'
+      if (!ca.gender) newErrors[`coApp_${index}_gender`] = 'Gender is required'
+    })
+
+    // Contact Person field validation
+    contactPersons.forEach((cp, index) => {
+      if (!cp.name) newErrors[`cp_${index}_name`] = 'Name is required'
+      if (!validateMobile(cp.mobile)) newErrors[`cp_${index}_mobile`] = 'Valid mobile is required'
+      if (cp.email && !validateEmail(cp.email)) newErrors[`cp_${index}_email`] = 'Valid email is required'
+      if (!cp.gender) newErrors[`cp_${index}_gender`] = 'Gender is required'
+    })
+
+    // Address field validation
+    addresses.forEach((addr, index) => {
+      if (!addr.type) newErrors[`addr_${index}_type`] = 'Address type is required'
+      if (!addr.fullAddress) newErrors[`addr_${index}_address`] = 'Full address is required'
+      if (!addr.pincode || addr.pincode.length !== 6) newErrors[`addr_${index}_pincode`] = 'Valid 6-digit pincode is required'
+      if (!addr.state) newErrors[`addr_${index}_state`] = 'State is required'
+      if (!addr.city) newErrors[`addr_${index}_city`] = 'City is required'
+    })
 
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
@@ -383,10 +502,12 @@ const NewCustomerOnboarding = () => {
 
         // Save/Update co-applicant profile first
         const coAppResult = await kycService.processCoApplicant({
+          id: coApp.id,
           customerId: id,
           name: coApp.name,
           mobile: coApp.mobile,
-          email: coApp.email
+          email: coApp.email,
+          gender: coApp.gender
         })
 
         const coAppId = coAppResult.data.id
@@ -412,6 +533,34 @@ const NewCustomerOnboarding = () => {
             )
           }
         }
+      }
+
+      // Save Contact Persons
+      for (let i = 0; i < contactPersons.length; i++) {
+        const cp = contactPersons[i]
+        await kycService.processContactPerson({
+          id: cp.id,
+          customerId: id,
+          name: cp.name,
+          mobile: cp.mobile,
+          email: cp.email,
+          designation: cp.designation,
+          gender: cp.gender
+        })
+      }
+
+      // Save Addresses
+      for (let i = 0; i < addresses.length; i++) {
+        const addr = addresses[i]
+        await kycService.processAddress({
+          id: addr.id,
+          customerId: id,
+          type: addr.type,
+          fullAddress: addr.fullAddress,
+          pincode: addr.pincode,
+          state: addr.state,
+          city: addr.city
+        })
       }
 
       alert('Draft saved successfully')
@@ -502,10 +651,12 @@ const NewCustomerOnboarding = () => {
 
         // Save/Update co-applicant profile first
         const coAppResult = await kycService.processCoApplicant({
+          id: coApp.id,
           customerId: id,
           name: coApp.name,
           mobile: coApp.mobile,
-          email: coApp.email
+          email: coApp.email,
+          gender: coApp.gender
         })
 
         const coAppId = coAppResult.data.id
@@ -531,6 +682,34 @@ const NewCustomerOnboarding = () => {
             )
           }
         }
+      }
+
+      // Save Contact Persons
+      for (let i = 0; i < contactPersons.length; i++) {
+        const cp = contactPersons[i]
+        await kycService.processContactPerson({
+          id: cp.id,
+          customerId: id,
+          name: cp.name,
+          mobile: cp.mobile,
+          email: cp.email,
+          designation: cp.designation,
+          gender: cp.gender
+        })
+      }
+
+      // Save Addresses
+      for (let i = 0; i < addresses.length; i++) {
+        const addr = addresses[i]
+        await kycService.processAddress({
+          id: addr.id,
+          customerId: id,
+          type: addr.type,
+          fullAddress: addr.fullAddress,
+          pincode: addr.pincode,
+          state: addr.state,
+          city: addr.city
+        })
       }
 
       await dispatch(submitCase({ id })).unwrap()
@@ -829,6 +1008,84 @@ const NewCustomerOnboarding = () => {
                       onRemove={removeCoApplicant}
                       onPanUpload={handleCoApplicantPanUpload}
                       kycData={coApplicantKyc[index] || {}}
+                    />
+                  ))}
+                </div>
+              )}
+              {errors.coApplicants && (
+                <p className="text-red-500 text-sm mt-2 font-medium">{errors.coApplicants}</p>
+              )}
+            </div>
+
+            {/* Contact Persons Section */}
+            <div className="border-t border-gray-200 pt-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-gray-900">Contact Person Details</h3>
+                <button
+                  type="button"
+                  onClick={addContactPerson}
+                  className="btn-secondary flex items-center space-x-2"
+                >
+                  <FiPlus className="h-4 w-4" />
+                  <span>Add Contact Person</span>
+                </button>
+              </div>
+
+              {contactPersons.length === 0 ? (
+                <p className="text-gray-500 text-sm">No contact persons added yet</p>
+              ) : (
+                <div className="space-y-4">
+                  {contactPersons.map((cp, index) => (
+                    <ContactPersonForm
+                      key={index}
+                      index={index}
+                      data={cp}
+                      onChange={updateContactPerson}
+                      onRemove={removeContactPerson}
+                      errors={{
+                        name: errors[`cp_${index}_name`],
+                        mobile: errors[`cp_${index}_mobile`],
+                        email: errors[`cp_${index}_email`],
+                        gender: errors[`cp_${index}_gender`]
+                      }}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Address Details Section */}
+            <div className="border-t border-gray-200 pt-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-gray-900">Address Details</h3>
+                <button
+                  type="button"
+                  onClick={addAddress}
+                  className="btn-secondary flex items-center space-x-2"
+                >
+                  <FiPlus className="h-4 w-4" />
+                  <span>Add Address Details</span>
+                </button>
+              </div>
+
+              {addresses.length === 0 ? (
+                <p className="text-gray-500 text-sm">No addresses added yet</p>
+              ) : (
+                <div className="space-y-4">
+                  {addresses.map((addr, index) => (
+                    <AddressForm
+                      key={index}
+                      index={index}
+                      data={addr}
+                      onChange={updateAddress}
+                      onRemove={removeAddress}
+                      errors={{
+                        type: errors[`addr_${index}_type`],
+                        fullAddress: errors[`addr_${index}_address`],
+                        pincode: errors[`addr_${index}_pincode`],
+                        state: errors[`addr_${index}_state`],
+                        city: errors[`addr_${index}_city`]
+                      }}
                     />
                   ))}
                 </div>

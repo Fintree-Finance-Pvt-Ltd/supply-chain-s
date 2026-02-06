@@ -80,6 +80,8 @@ export class CustomerService {
         'operationsChecks',
         'coApplicants',
         'coApplicants.kycDetails',
+        'contactPersons',
+        'addresses',
         'statusHistory',
         'statusHistory.changedByUser',
       ],

@@ -117,4 +117,20 @@ export const APPROVAL_FLOW_TYPES = {
   IT_APPROVAL: 'it_approval',
 } as const;
 
+// Genders
+export const GENDERS = {
+  MALE: 'Male',
+  FEMALE: 'Female',
+  OTHER: 'Other',
+} as const;
+
+// Address Types
+export const ADDRESS_TYPES = {
+  RESIDENCE: 'Residence',
+  SHOP: 'Shop',
+  GODOWN: 'Godown',
+  RENTED: 'Rented',
+  OWNED: 'Owned',
+} as const;
+
 
