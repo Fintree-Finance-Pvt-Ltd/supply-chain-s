@@ -8,6 +8,7 @@ import {
     JoinColumn,
 } from 'typeorm';
 import { Customer } from './Customer';
+import { CoApplicant } from './CoApplicant';
 import { KYC_TYPES } from '../config/constants';
 
 @Entity('kyc_details')
@@ -23,6 +24,9 @@ export class KycDetail {
 
     @Column({ type: 'int', default: 0 })
     applicantIndex: number; // 0 for main applicant, 1,2,3... for co-applicants
+
+    @Column({ type: 'int', nullable: true })
+    coApplicantId: number;
 
     @Column({ type: 'enum', enum: Object.values(KYC_TYPES) })
     kycType: string; // PAN, GST, AADHAAR
@@ -52,4 +56,8 @@ export class KycDetail {
     @ManyToOne(() => Customer, (customer) => customer.kycDetails, { onDelete: 'CASCADE' })
     @JoinColumn({ name: 'customerId' })
     customer: Customer;
+
+    @ManyToOne(() => CoApplicant, (coApp) => coApp.kycDetails, { onDelete: 'CASCADE', nullable: true })
+    @JoinColumn({ name: 'coApplicantId' })
+    coApplicant: CoApplicant;
 }

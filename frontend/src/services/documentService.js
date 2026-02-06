@@ -2,20 +2,33 @@ import api from './api'
 import { API_ENDPOINTS } from '../constants/api'
 
 export const documentService = {
-  uploadDocument: async (customerId, file, documentType, applicantType = 'applicant', applicantIndex = 0) => {
+  uploadDocument: async (customerId, file, documentType, applicantType = 'applicant', applicantIndex = 0, coApplicantId = null, meta = {}) => {
     try {
       const formData = new FormData()
-      formData.append('file', file)
       formData.append('customerId', customerId)
       formData.append('documentType', documentType)
       formData.append('applicantType', applicantType)
       formData.append('applicantIndex', applicantIndex)
+      if (coApplicantId) {
+        formData.append('coApplicantId', coApplicantId)
+      }
+      formData.append('issueDate', meta.issueDate || '')
+      formData.append('expiryDate', meta.expiryDate || '')
+      formData.append('remarks', meta.remarks || '')
+
+      formData.append('file', file)
 
       const response = await api.post(API_ENDPOINTS.DOCUMENTS_UPLOAD, formData, {
         headers: {
-          'Content-Type': 'multipart/form-data',
+          'Content-Type': undefined,
         },
       })
+
+      if (response.data.success && response.data.data) {
+        const docId = response.data.data.id;
+        // Call metadata update even if fields are empty to ensure consistency
+        await documentService.updateDocumentMetadata(docId, meta);
+      }
 
       return {
         data: response.data.success ? response.data.data : null
@@ -61,6 +74,18 @@ export const documentService = {
     } catch (error) {
       const message = error.response?.data?.message || error.message || 'Failed to delete document'
       throw new Error(message)
+    }
+  },
+
+  updateDocumentMetadata: async (documentId, meta) => {
+    try {
+      const response = await api.patch(`${API_ENDPOINTS.CUSTOMERS.replace('/customers', '')}/documents/${documentId}/metadata`, meta)
+      return {
+        data: response.data.success ? response.data.data : null
+      }
+    } catch (error) {
+      console.error('Error updating document metadata:', error)
+      throw error
     }
   },
 }

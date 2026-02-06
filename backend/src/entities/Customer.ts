@@ -15,6 +15,7 @@ import { PostSanction } from './PostSanction';
 import { OperationsCheck } from './OperationsCheck';
 import { CaseStatusHistory } from './CaseStatusHistory';
 import { KycDetail } from './KycDetail';
+import { CoApplicant } from './CoApplicant';
 import { CASE_STATUS, COMPANY_TYPES } from '../config/constants';
 
 @Entity('customers')
@@ -71,6 +72,9 @@ export class Customer {
 
   @OneToMany(() => KycDetail, (kycDetail) => kycDetail.customer)
   kycDetails: KycDetail[];
+
+  @OneToMany(() => CoApplicant, (coApp) => coApp.customer)
+  coApplicants: CoApplicant[];
 
   @OneToMany(() => CreditSanction, (sanction) => sanction.customer)
   creditSanctions: CreditSanction[];

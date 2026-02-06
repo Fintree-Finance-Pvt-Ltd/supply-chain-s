@@ -67,6 +67,8 @@ export class CustomerService {
         'creditSanctions',
         'postSanctions',
         'operationsChecks',
+        'coApplicants',
+        'coApplicants.kycDetails',
         'statusHistory',
         'statusHistory.changedByUser',
       ],

@@ -8,6 +8,7 @@ import creditRoutes from './credit.routes';
 import approvalRoutes from './approval.routes';
 import documentRoutes from './document.routes';
 import operationsRoutes from './operations.routes';
+import coApplicantRoutes from './coApplicant.routes';
 
 const router = Router();
 
@@ -20,6 +21,7 @@ router.use('/credit', creditRoutes);
 router.use('/approvals', approvalRoutes);
 router.use('/documents', documentRoutes);
 router.use('/operations', operationsRoutes);
+router.use('/co-applicants', coApplicantRoutes);
 
 export default router;
 

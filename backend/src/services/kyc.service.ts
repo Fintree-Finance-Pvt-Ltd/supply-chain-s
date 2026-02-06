@@ -11,6 +11,7 @@ export class KycService {
 
     async createKycEntry(data: {
         customerId: number;
+        coApplicantId?: number;
         applicantType: string;
         applicantIndex: number;
         kycType: string;
@@ -60,16 +61,21 @@ export class KycService {
         customerId: number,
         applicantType: string,
         applicantIndex: number,
-        kycType: string
+        kycType: string,
+        coApplicantId?: number
     ): Promise<KycDetail | null> {
-        return await this.kycRepository.findOne({
-            where: {
-                customerId,
-                applicantType,
-                applicantIndex,
-                kycType,
-            },
-        });
+        const where: any = {
+            customerId,
+            applicantType,
+            applicantIndex,
+            kycType,
+        };
+
+        if (coApplicantId) {
+            where.coApplicantId = coApplicantId;
+        }
+
+        return await this.kycRepository.findOne({ where });
     }
 
     async deleteKycEntry(id: number): Promise<void> {

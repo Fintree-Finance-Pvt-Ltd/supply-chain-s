@@ -16,11 +16,15 @@ export class DocumentService {
     documentType: string;
     applicantType?: string;
     applicantIndex?: number;
+    coApplicantId?: number;
     fileName: string;
     filePath: string;
     mimeType?: string;
     fileSize?: number;
     uploadedBy: number;
+    issueDate?: Date;
+    expiryDate?: Date;
+    remarks?: string;
   }): Promise<Document> {
     // Verify customer exists
     const customer = await this.customerRepository.findOne({
@@ -67,6 +71,27 @@ export class DocumentService {
     if (remarks !== undefined) {
       document.remarks = remarks;
     }
+
+    return await this.documentRepository.save(document);
+  }
+
+  async updateMetadata(
+    id: number,
+    data: {
+      issueDate?: Date;
+      expiryDate?: Date;
+      remarks?: string;
+    }
+  ): Promise<Document> {
+    const document = await this.documentRepository.findOne({ where: { id } });
+
+    if (!document) {
+      throw new Error('Document not found');
+    }
+
+    if (data.issueDate !== undefined) document.issueDate = data.issueDate;
+    if (data.expiryDate !== undefined) document.expiryDate = data.expiryDate;
+    if (data.remarks !== undefined) document.remarks = data.remarks;
 
     return await this.documentRepository.save(document);
   }

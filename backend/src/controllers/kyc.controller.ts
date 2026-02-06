@@ -18,7 +18,7 @@ export class KycController {
                 return;
             }
 
-            const { customerId, applicantType, applicantIndex, kycType, kycNumber } = req.body;
+            const { customerId, coApplicantId, applicantType, applicantIndex, kycType, kycNumber } = req.body;
 
             if (!customerId || !kycType || !kycNumber) {
                 res.status(400).json({
@@ -30,6 +30,7 @@ export class KycController {
 
             const kycEntry = await this.kycService.createKycEntry({
                 customerId: Number(customerId),
+                coApplicantId: coApplicantId ? Number(coApplicantId) : undefined,
                 applicantType: applicantType || 'applicant',
                 applicantIndex: applicantIndex !== undefined ? Number(applicantIndex) : 0,
                 kycType,

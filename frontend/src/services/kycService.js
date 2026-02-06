@@ -34,6 +34,32 @@ export const kycService = {
         return response.data
     },
 
+    // --- Co-Applicant Profile Management ---
+
+    // Find or create co-applicant
+    processCoApplicant: async (data) => {
+        const response = await api.post('/co-applicants/find-or-create', data)
+        return response.data
+    },
+
+    // Get co-applicants by customer
+    getCoApplicants: async (customerId) => {
+        const response = await api.get(`/co-applicants/customer/${customerId}`)
+        return response.data
+    },
+
+    // Update co-applicant profile
+    updateCoApplicant: async (id, data) => {
+        const response = await api.put(`/co-applicants/${id}`, data)
+        return response.data
+    },
+
+    // Delete co-applicant profile
+    deleteCoApplicant: async (id) => {
+        const response = await api.delete(`/co-applicants/${id}`)
+        return response.data
+    },
+
     // Placeholder: Run PAN OCR
     runPanOcr: async (file) => {
         // This is a placeholder for future OCR integration
@@ -44,7 +70,7 @@ export const kycService = {
                     success: true,
                     data: {
                         panNumber: 'ABCDE1234F',
-                        name: 'Sample Name from OCR',
+                        name: 'Rohit Joshi',
                     },
                     message: 'OCR completed (simulated)',
                 })

@@ -77,6 +77,32 @@ const NewCustomerOnboarding = () => {
           setApplicantKyc(prev => ({ ...prev, panNumber: panKyc.kycNumber }))
         }
       }
+
+      // Load co-applicants
+      if (currentCase.coApplicants && currentCase.coApplicants.length > 0) {
+        const loadedCoApps = currentCase.coApplicants.map(ca => ({
+          id: ca.id,
+          name: ca.name,
+          mobile: ca.mobile,
+          email: ca.email || '',
+        }))
+        setCoApplicants(loadedCoApps)
+
+        // Load co-applicant KYC
+        const loadedCoAppKyc = {}
+        currentCase.coApplicants.forEach((ca, index) => {
+          if (ca.kycDetails && ca.kycDetails.length > 0) {
+            const panKyc = ca.kycDetails.find(k => k.kycType === 'PAN')
+            if (panKyc) {
+              loadedCoAppKyc[index] = {
+                panNumber: panKyc.kycNumber,
+                panFile: null,
+              }
+            }
+          }
+        })
+        setCoApplicantKyc(loadedCoAppKyc)
+      }
     }
   }, [currentCase, caseId])
 
@@ -319,6 +345,16 @@ const NewCustomerOnboarding = () => {
           kycType: 'PAN',
           kycNumber: applicantKyc.panNumber,
         })
+
+        if (applicantKyc.panFile) {
+          await documentService.uploadDocument(
+            id,
+            applicantKyc.panFile,
+            'pan',
+            'applicant',
+            0
+          )
+        }
       }
 
       if (id && formData.gstNumber) {
@@ -328,6 +364,54 @@ const NewCustomerOnboarding = () => {
           kycType: 'GST',
           kycNumber: formData.gstNumber,
         })
+
+        if (applicantKyc.gstFile) {
+          await documentService.uploadDocument(
+            id,
+            applicantKyc.gstFile,
+            'gst_certificate',
+            'applicant',
+            0
+          )
+        }
+      }
+
+      // Save co-applicants' profiles and KYC
+      for (let i = 0; i < coApplicants.length; i++) {
+        const coApp = coApplicants[i]
+        const coAppKyc = coApplicantKyc[i]
+
+        // Save/Update co-applicant profile first
+        const coAppResult = await kycService.processCoApplicant({
+          customerId: id,
+          name: coApp.name,
+          mobile: coApp.mobile,
+          email: coApp.email
+        })
+
+        const coAppId = coAppResult.data.id
+
+        if (coAppKyc && coAppKyc.panNumber) {
+          await kycService.createKyc(id, {
+            coApplicantId: coAppId,
+            applicantType: 'co-applicant',
+            applicantIndex: i + 1,
+            kycType: 'PAN',
+            kycNumber: coAppKyc.panNumber,
+          })
+
+          // Upload PAN file as a Document linked to CoApplicant
+          if (coAppKyc.panFile) {
+            await documentService.uploadDocument(
+              id,
+              coAppKyc.panFile,
+              'pan',
+              'co-applicant',
+              i + 1,
+              coAppId
+            )
+          }
+        }
       }
 
       alert('Draft saved successfully')
@@ -380,6 +464,16 @@ const NewCustomerOnboarding = () => {
           kycType: 'PAN',
           kycNumber: applicantKyc.panNumber,
         })
+
+        if (applicantKyc.panFile) {
+          await documentService.uploadDocument(
+            id,
+            applicantKyc.panFile,
+            'pan',
+            'applicant',
+            0
+          )
+        }
       }
 
       if (formData.gstNumber) {
@@ -389,18 +483,53 @@ const NewCustomerOnboarding = () => {
           kycType: 'GST',
           kycNumber: formData.gstNumber,
         })
+
+        if (applicantKyc.gstFile) {
+          await documentService.uploadDocument(
+            id,
+            applicantKyc.gstFile,
+            'gst_certificate',
+            'applicant',
+            0
+          )
+        }
       }
 
-      // Save co-applicants' KYC
+      // Save co-applicants' profiles and KYC
       for (let i = 0; i < coApplicants.length; i++) {
+        const coApp = coApplicants[i]
         const coAppKyc = coApplicantKyc[i]
+
+        // Save/Update co-applicant profile first
+        const coAppResult = await kycService.processCoApplicant({
+          customerId: id,
+          name: coApp.name,
+          mobile: coApp.mobile,
+          email: coApp.email
+        })
+
+        const coAppId = coAppResult.data.id
+
         if (coAppKyc && coAppKyc.panNumber) {
           await kycService.createKyc(id, {
+            coApplicantId: coAppId,
             applicantType: 'co-applicant',
             applicantIndex: i + 1,
             kycType: 'PAN',
             kycNumber: coAppKyc.panNumber,
           })
+
+          // Upload PAN file as a Document linked to CoApplicant
+          if (coAppKyc.panFile) {
+            await documentService.uploadDocument(
+              id,
+              coAppKyc.panFile,
+              'pan',
+              'co-applicant',
+              i + 1,
+              coAppId
+            )
+          }
         }
       }
 
@@ -435,8 +564,8 @@ const NewCustomerOnboarding = () => {
           <button
             onClick={() => setActiveTab('basic-kyc')}
             className={`py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'basic-kyc'
-                ? 'border-primary-600 text-primary-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              ? 'border-primary-600 text-primary-600'
+              : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
               }`}
           >
             Basic & KYC
@@ -444,8 +573,8 @@ const NewCustomerOnboarding = () => {
           <button
             onClick={() => setActiveTab('documents')}
             className={`py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'documents'
-                ? 'border-primary-600 text-primary-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              ? 'border-primary-600 text-primary-600'
+              : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
               }`}
           >
             Documents

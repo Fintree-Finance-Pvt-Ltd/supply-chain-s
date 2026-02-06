@@ -3,6 +3,7 @@
 
 export const COMPANY_TYPES = {
     PROPRIETORSHIP: 'Proprietorship',
+    HUF: 'HUF',
     PARTNERSHIP: 'Partnership',
     PVT_LTD: 'Pvt Ltd / Ltd',
     LLP: 'LLP',
@@ -75,6 +76,8 @@ export const getDocumentChecklist = (companyType) => {
             return PARTNERSHIP_LLP_CHECKLIST
         case COMPANY_TYPES.PVT_LTD:
             return PVT_LTD_CHECKLIST
+        case COMPANY_TYPES.HUF:
+            return PROPRIETORSHIP_CHECKLIST
         default:
             return []
     }

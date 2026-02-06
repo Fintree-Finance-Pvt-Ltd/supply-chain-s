@@ -26,7 +26,16 @@ export class DocumentController {
         return;
       }
 
-      const { customerId, documentType, applicantType, applicantIndex } = req.body;
+      console.log('--- Upload Document Debug ---');
+      console.log('Raw Body:', req.body);
+      console.log('File:', req.file ? req.file.originalname : 'None');
+
+      const { customerId, documentType, applicantType, applicantIndex, coApplicantId, issueDate, expiryDate, remarks } = req.body;
+
+      // Robust parsing
+      const parsedIssueDate = (issueDate && typeof issueDate === 'string' && issueDate.trim() !== '') ? new Date(issueDate) : undefined;
+      const parsedExpiryDate = (expiryDate && typeof expiryDate === 'string' && expiryDate.trim() !== '') ? new Date(expiryDate) : undefined;
+      const parsedRemarks = (remarks && typeof remarks === 'string' && remarks.trim() !== '') ? remarks : undefined;
 
       if (!customerId || !documentType) {
         res.status(400).json({
@@ -41,11 +50,15 @@ export class DocumentController {
         documentType,
         applicantType: applicantType || 'applicant',
         applicantIndex: applicantIndex !== undefined ? Number(applicantIndex) : 0,
+        coApplicantId: coApplicantId ? Number(coApplicantId) : undefined,
         fileName: req.file.originalname,
         filePath: req.file.path,
         mimeType: req.file.mimetype,
         fileSize: req.file.size,
         uploadedBy: req.userId!,
+        issueDate: parsedIssueDate,
+        expiryDate: parsedExpiryDate,
+        remarks: parsedRemarks,
       });
 
       res.status(201).json({
@@ -57,6 +70,34 @@ export class DocumentController {
       res.status(400).json({
         success: false,
         message: error.message || 'Failed to upload document',
+      });
+    }
+  };
+
+  updateMetadata = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { id } = req.params;
+      const { issueDate, expiryDate, remarks } = req.body;
+
+      const parsedIssueDate = (issueDate && typeof issueDate === 'string' && issueDate.trim() !== '') ? new Date(issueDate) : undefined;
+      const parsedExpiryDate = (expiryDate && typeof expiryDate === 'string' && expiryDate.trim() !== '') ? new Date(expiryDate) : undefined;
+      const parsedRemarks = (remarks && typeof remarks === 'string' && remarks.trim() !== '') ? remarks : undefined;
+
+      const document = await this.documentService.updateMetadata(Number(id), {
+        issueDate: parsedIssueDate,
+        expiryDate: parsedExpiryDate,
+        remarks: parsedRemarks
+      });
+
+      res.json({
+        success: true,
+        data: document,
+        message: 'Metadata updated successfully',
+      });
+    } catch (error: any) {
+      res.status(400).json({
+        success: false,
+        message: error.message || 'Failed to update metadata',
       });
     }
   };
@@ -127,5 +168,3 @@ export class DocumentController {
     }
   };
 }
-
-

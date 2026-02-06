@@ -103,6 +103,7 @@ export const APPROVAL_FLOW_TYPES = {
   OPERATIONS: 'operations',
   INVOICE_DISCOUNTING: 'invoice_discounting',
   SUPPLIER_ONBOARD: 'supplier_onboard',
+  IT_APPROVAL: 'it_approval',
 } as const;
 
 

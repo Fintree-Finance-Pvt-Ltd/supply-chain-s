@@ -9,6 +9,7 @@ import {
 } from 'typeorm';
 import { Customer } from './Customer';
 import { User } from './User';
+import { CoApplicant } from './CoApplicant';
 import { DOCUMENT_TYPES } from '../config/constants';
 
 @Entity('documents')
@@ -27,6 +28,9 @@ export class Document {
 
   @Column({ type: 'int', default: 0 })
   applicantIndex: number; // 0 for main applicant, 1,2,3... for co-applicants
+
+  @Column({ type: 'int', nullable: true })
+  coApplicantId: number;
 
   @Column({ type: 'varchar', length: 255 })
   fileName: string;
@@ -52,6 +56,12 @@ export class Document {
   @Column({ type: 'timestamp', nullable: true })
   verifiedAt: Date;
 
+  @Column({ type: 'timestamp', nullable: true })
+  issueDate: Date;
+
+  @Column({ type: 'timestamp', nullable: true })
+  expiryDate: Date;
+
   @Column({ type: 'text', nullable: true })
   remarks: string;
 
@@ -69,6 +79,10 @@ export class Document {
   @ManyToOne(() => User, (user) => user.uploadedDocuments)
   @JoinColumn({ name: 'uploadedBy' })
   uploadedByUser: User;
+
+  @ManyToOne(() => CoApplicant, (coApp) => coApp.documents, { onDelete: 'CASCADE', nullable: true })
+  @JoinColumn({ name: 'coApplicantId' })
+  coApplicant: CoApplicant;
 }
 
 
