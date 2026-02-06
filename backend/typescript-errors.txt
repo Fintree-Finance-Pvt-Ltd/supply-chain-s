@@ -1,0 +1,18 @@
+src/controllers/user.controller.ts(169,31): error TS2345: Argument of type 'number' is not assignable to parameter of type 'string'.
+src/controllers/user.controller.ts(223,43): error TS2339: Property 'toggleUserStatus' does not exist on type 'UserService'.
+src/routes/credit.routes.ts(15,25): error TS2551: Property 'CREDIT_TEAM' does not exist on type '{ readonly ADMIN: "admin"; readonly RELATIONSHIP_MANAGER: "relationship_manager"; readonly CREDIT_TEAM_L1: "credit_team_l1"; readonly CREDIT_TEAM_L2: "credit_team_l2"; readonly OPERATIONS_TEAM_L1: "operations_team_l1"; ... 5 more ...; readonly MD: "md"; }'. Did you mean 'CREDIT_TEAM_L1'?
+src/routes/credit.routes.ts(21,25): error TS2551: Property 'CREDIT_TEAM' does not exist on type '{ readonly ADMIN: "admin"; readonly RELATIONSHIP_MANAGER: "relationship_manager"; readonly CREDIT_TEAM_L1: "credit_team_l1"; readonly CREDIT_TEAM_L2: "credit_team_l2"; readonly OPERATIONS_TEAM_L1: "operations_team_l1"; ... 5 more ...; readonly MD: "md"; }'. Did you mean 'CREDIT_TEAM_L1'?
+src/routes/operations.routes.ts(14,25): error TS2551: Property 'OPERATIONS_TEAM' does not exist on type '{ readonly ADMIN: "admin"; readonly RELATIONSHIP_MANAGER: "relationship_manager"; readonly CREDIT_TEAM_L1: "credit_team_l1"; readonly CREDIT_TEAM_L2: "credit_team_l2"; readonly OPERATIONS_TEAM_L1: "operations_team_l1"; ... 5 more ...; readonly MD: "md"; }'. Did you mean 'OPERATIONS_TEAM_L1'?
+src/routes/operations.routes.ts(21,25): error TS2551: Property 'OPERATIONS_TEAM' does not exist on type '{ readonly ADMIN: "admin"; readonly RELATIONSHIP_MANAGER: "relationship_manager"; readonly CREDIT_TEAM_L1: "credit_team_l1"; readonly CREDIT_TEAM_L2: "credit_team_l2"; readonly OPERATIONS_TEAM_L1: "operations_team_l1"; ... 5 more ...; readonly MD: "md"; }'. Did you mean 'OPERATIONS_TEAM_L1'?
+src/services/customer-onboarding.service.ts(21,28): error TS2339: Property 'id' does not exist on type 'Customer[]'.
+src/services/invoice-discounting.service.ts(38,26): error TS2339: Property 'id' does not exist on type 'Invoice[]'.
+src/services/supplier-onboarding.service.ts(35,28): error TS2339: Property 'id' does not exist on type 'Supplier[]'.
+src/services/user.service.ts(70,7): error TS2322: Type '{ id: string; }' is not assignable to type 'FindOptionsWhere<User> | FindOptionsWhere<User>[] | undefined'.
+  Types of property 'id' are incompatible.
+    Type 'string' is not assignable to type 'number | FindOperator<number> | undefined'.
+src/services/user.service.ts(76,54): error TS2322: Type '{ id: string; }' is not assignable to type 'FindOptionsWhere<User> | FindOptionsWhere<User>[] | undefined'.
+  Types of property 'id' are incompatible.
+    Type 'string' is not assignable to type 'number | FindOperator<number> | undefined'.
+src/services/user.service.ts(93,54): error TS2322: Type '{ id: string; }' is not assignable to type 'FindOptionsWhere<User> | FindOptionsWhere<User>[] | undefined'.
+  Types of property 'id' are incompatible.
+    Type 'string' is not assignable to type 'number | FindOperator<number> | undefined'.

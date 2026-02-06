@@ -1,0 +1,3 @@
+src/services/customer-onboarding.service.ts(21,33): error TS2339: Property 'id' does not exist on type 'Customer[]'.
+src/services/invoice-discounting.service.ts(38,31): error TS2339: Property 'id' does not exist on type 'Invoice[]'.
+src/services/supplier-onboarding.service.ts(35,33): error TS2339: Property 'id' does not exist on type 'Supplier[]'.

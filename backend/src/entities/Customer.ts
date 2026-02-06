@@ -15,13 +15,10 @@ import { PostSanction } from './PostSanction';
 import { OperationsCheck } from './OperationsCheck';
 import { CaseStatusHistory } from './CaseStatusHistory';
 import { KycDetail } from './KycDetail';
-<<<<<<< Updated upstream
 import { CoApplicant } from './CoApplicant';
-=======
 import { Supplier } from './Supplier';
 import { Invoice } from './Invoice';
 import { CaseWorkflow } from './CaseWorkflow';
->>>>>>> Stashed changes
 import { CASE_STATUS, COMPANY_TYPES } from '../config/constants';
 
 @Entity('customers')

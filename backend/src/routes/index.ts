@@ -8,11 +8,8 @@ import creditRoutes from './credit.routes';
 import approvalRoutes from './approval.routes';
 import documentRoutes from './document.routes';
 import operationsRoutes from './operations.routes';
-<<<<<<< Updated upstream
 import coApplicantRoutes from './coApplicant.routes';
-=======
 import workflowRoutes from './workflow.routes';
->>>>>>> Stashed changes
 
 const router = Router();
 
@@ -25,11 +22,8 @@ router.use('/credit', creditRoutes);
 router.use('/approvals', approvalRoutes);
 router.use('/documents', documentRoutes);
 router.use('/operations', operationsRoutes);
-<<<<<<< Updated upstream
 router.use('/co-applicants', coApplicantRoutes);
-=======
 router.use('/workflows', workflowRoutes);
->>>>>>> Stashed changes
 
 export default router;
 
