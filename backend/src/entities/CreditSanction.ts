@@ -35,6 +35,12 @@ export class CreditSanction {
   @Column({ type: 'text', nullable: true })
   creditRemarks: string;
 
+  @Column({ type: 'decimal', precision: 5, scale: 2, default: 0 })
+  penalCharges: number; // percentage
+
+  @Column({ type: 'decimal', precision: 5, scale: 2, default: 0 })
+  processingFees: number; // percentage
+
   @Column({ type: 'int' })
   creditOfficerId: number;
 

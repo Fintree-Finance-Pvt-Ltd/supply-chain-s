@@ -57,16 +57,27 @@ const ApprovalTimeline = ({ approvals = [] }) => {
                       {formatDate(approval.approvedAt || approval.createdAt)}
                     </p>
                   </div>
-                  <span className={`badge ${
-                    approval.status === 'approved' ? 'bg-green-100 text-green-800' :
-                    approval.status === 'rejected' ? 'bg-red-100 text-red-800' :
-                    'bg-yellow-100 text-yellow-800'
-                  }`}>
+                  <span className={`badge ${approval.status === 'approved' ? 'bg-green-100 text-green-800' :
+                      approval.status === 'rejected' ? 'bg-red-100 text-red-800' :
+                        'bg-yellow-100 text-yellow-800'
+                    }`}>
                     {approval.status}
                   </span>
                 </div>
                 {approval.comments && (
-                  <p className="text-sm text-gray-600 mt-2">{approval.comments}</p>
+                  <p className="text-sm text-gray-600 mt-2 italic">"{approval.comments}"</p>
+                )}
+                {approval.sanctionAmount && (
+                  <div className="mt-3 p-2 bg-white border border-gray-100 rounded text-xs space-y-1 shadow-sm">
+                    <p className="font-bold text-primary-700 uppercase tracking-wider text-[10px]">Sanction Details</p>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                      <p><span className="text-gray-500">Amount:</span> ₹{approval.sanctionAmount}</p>
+                      <p><span className="text-gray-500">Tenure:</span> {approval.tenure} Months</p>
+                      <p><span className="text-gray-500">Rate:</span> {approval.interestRate}%</p>
+                      <p><span className="text-gray-500">Penal:</span> {approval.penalCharges}%</p>
+                      <p><span className="text-gray-500">Fees:</span> {approval.processingFees}%</p>
+                    </div>
+                  </div>
                 )}
               </div>
             </div>

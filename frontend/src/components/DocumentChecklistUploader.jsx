@@ -1,88 +1,86 @@
-import { useState } from 'react'
-import { FiUpload, FiX, FiFile, FiCheckCircle, FiEye, FiCalendar, FiMessageSquare } from 'react-icons/fi'
+import { useState, useEffect } from 'react'
+import { FiUpload, FiX, FiFile, FiCheckCircle, FiEye, FiMessageSquare } from 'react-icons/fi'
 import { documentService } from '../services/documentService'
-import { API_BASE_URL } from '../constants/api'
 
 const DocumentChecklistUploader = ({
     checklist = [],
     uploadedDocuments = [],
     customerId,
     onDocumentUploaded,
-    onDocumentRemoved
+    onDocumentRemoved,
+    readOnly = false
 }) => {
-    const [uploadingKey, setUploadingKey] = useState(null)
-    const [docMeta, setDocMeta] = useState({}) // Stores meta for each checklist item key
+    const [uploading, setUploading] = useState({})
+    const [meta, setMeta] = useState({})
 
-    // Check if a document of a specific type has been uploaded
-    const isDocumentUploaded = (documentType) => {
-        return uploadedDocuments.some(doc => doc.documentType === documentType)
-    }
+    // Initialize/Sync meta with uploaded documents
+    useEffect(() => {
+        const newMeta = {}
+        let hasUpdates = false
 
-    // Get uploaded documents for a specific type
-    const getUploadedDocs = (documentType) => {
-        return uploadedDocuments.filter(doc => doc.documentType === documentType)
-    }
+        uploadedDocuments.forEach(doc => {
+            const item = checklist.find(i => i.documentType === doc.documentType)
+            if (item) {
+                const currentRemark = meta[item.key]?.rmRemarks
+                const docRemark = doc.rmRemarks || doc.remarks || ''
 
-    const handleMetaChange = (key, field, value) => {
-        setDocMeta(prev => ({
-            ...prev,
-            [key]: {
-                ...prev[key],
-                [field]: value
+                // Only update if we don't have a value (initial load) or if it differs (sync)
+                // But be careful not to overwrite user input while typing. 
+                // So strictly speaking, we might want to just set this on mount or when doc list changes significantly.
+                // For now, let's trusting that uploadedDocuments is the source of truth for *existing* items.
+                if (currentRemark === undefined) {
+                    newMeta[item.key] = { rmRemarks: docRemark }
+                    hasUpdates = true
+                }
             }
-        }))
-    }
+        })
 
-    const handleDocumentUpload = async (checklistItem, file) => {
-        if (!customerId) {
-            alert('Please save customer details first')
-            return
+        if (hasUpdates) {
+            setMeta(prev => ({ ...prev, ...newMeta }))
         }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [uploadedDocuments, checklist])
 
-        const meta = docMeta[checklistItem.key] || {}
+    const handleFileSelect = async (item, e) => {
+        if (readOnly) return
+        const file = e.target.files[0]
+        if (!file) return
 
-        setUploadingKey(checklistItem.key)
+        setUploading(prev => ({ ...prev, [item.key]: true }))
         try {
-            const result = await documentService.uploadDocument(
+            if (!customerId) {
+                alert('Please save the "Basic & KYC" details first to generate a Case ID.')
+                return
+            }
+
+            const itemMeta = meta[item.key] || {}
+
+            // Pass meta to upload
+            const response = await documentService.uploadDocument(
                 customerId,
                 file,
-                checklistItem.documentType,
-                'applicant',
-                0,
-                null,
-                meta
+                item.documentType,
+                'applicant', // Default
+                0, // Default
+                null, // Default
+                itemMeta
             )
 
-            if (result.data) {
-                if (onDocumentUploaded) {
-                    onDocumentUploaded(result.data)
-                }
-                // Clear meta for this item after successful upload
-                handleMetaChange(checklistItem.key, 'issueDate', '')
-                handleMetaChange(checklistItem.key, 'expiryDate', '')
-                handleMetaChange(checklistItem.key, 'rmRemarks', '')
-                alert('Document uploaded successfully')
+            if (onDocumentUploaded) {
+                onDocumentUploaded(response.data)
             }
         } catch (error) {
-            alert('Failed to upload document: ' + error.message)
+            console.error('Upload failed:', error)
+            alert('Failed to upload document: ' + (error.response?.data?.message || error.message))
         } finally {
-            setUploadingKey(null)
+            setUploading(prev => ({ ...prev, [item.key]: false }))
+            if (e.target) e.target.value = ''
         }
-    }
-
-    const handleFileSelect = (checklistItem, e) => {
-        const file = e.target.files[0]
-        if (file) {
-            handleDocumentUpload(checklistItem, file)
-        }
-        // Reset input
-        e.target.value = ''
     }
 
     const handleRemoveDocument = async (doc) => {
-        if (!window.confirm('Are you sure you want to remove this document?')) {
-            return
-        }
+        if (readOnly) return
+        if (!window.confirm('Are you sure you want to remove this document?')) return
 
         try {
             await documentService.deleteDocument(doc.id)
@@ -90,83 +88,90 @@ const DocumentChecklistUploader = ({
                 onDocumentRemoved(doc.id)
             }
         } catch (error) {
-            alert('Failed to remove document: ' + error.message)
+            console.error('Remove failed:', error)
+            alert('Failed to remove document')
+        }
+    }
+
+    const handleMetaChange = (key, field, value) => {
+        setMeta(prev => ({
+            ...prev,
+            [key]: { ...prev[key], [field]: value }
+        }))
+    }
+
+    const handleSaveMeta = async (item, doc) => {
+        if (!doc) return
+        const itemMeta = meta[item.key] || {}
+        try {
+            await documentService.updateDocumentMetadata(doc.id, {
+                rmRemarks: itemMeta.rmRemarks
+            })
+            // Optionally notify parent to refresh list?
+            // Usually updateDocumentMetadata response returns updated doc, we could call onDocumentUploaded(updatedDoc) 
+            // but that might duplicate it in the list if logic isn't robust.
+            // For now, silent success or toast.
+        } catch (error) {
+            console.error('Failed to save remarks:', error)
         }
     }
 
     const handlePreview = (doc) => {
-        // Construct full path
-        const baseUrl = API_BASE_URL.replace('/api', '')
-        const fileUrl = doc.filePath.startsWith('http')
+        const fileUrl = doc.filePath?.startsWith('http')
             ? doc.filePath
-            : `${baseUrl}/${doc.filePath.replace(/\\/g, '/')}`
+            : `${import.meta.env.VITE_API_BASE_URL?.replace('/api', '') || 'http://localhost:3000'}/${doc.filePath?.replace(/\\/g, '/')}`
         window.open(fileUrl, '_blank')
     }
 
-    if (checklist.length === 0) {
-        return (
-            <div className="text-center py-8 text-gray-500">
-                <p>Please select a company type to see the document checklist</p>
-            </div>
-        )
+    const isDocumentUploaded = (type) => {
+        return uploadedDocuments.some(d => d.documentType === type)
     }
 
     return (
         <div className="space-y-3">
-            <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-gray-900">Document Checklist</h3>
-                <p className="text-sm text-gray-600">
-                    <span className="text-red-500">*</span> Mandatory documents
-                </p>
+            <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold text-gray-900">Required Documents</h3>
+                <span className="text-sm text-gray-500">
+                    {uploadedDocuments.length} / {checklist.length} Uploaded
+                </span>
             </div>
 
             <div className="space-y-3">
                 {checklist.map((item) => {
-                    const uploaded = isDocumentUploaded(item.documentType)
-                    const uploadedDocs = getUploadedDocs(item.documentType)
-                    const isUploading = uploadingKey === item.key
-                    const meta = docMeta[item.key] || { issueDate: '', expiryDate: '', rmRemarks: '' }
+                    const uploadedDocs = uploadedDocuments.filter(d => d.documentType === item.documentType)
+                    const isUploaded = uploadedDocs.length > 0
+                    const isUploading = uploading[item.key]
+                    const itemMeta = meta[item.key] || {}
 
                     return (
-                        <div
-                            key={item.key}
-                            className={`border rounded-lg p-4 ${uploaded ? 'bg-green-50 border-green-200' : 'bg-white border-gray-200'
-                                }`}
-                        >
+                        <div key={item.key} className={`p-4 rounded-xl border transition-all ${isUploaded ? 'bg-green-50 border-green-200' : 'bg-white border-gray-200 hover:border-blue-300'}`}>
                             <div className="flex flex-col space-y-4">
                                 <div className="flex items-start justify-between">
                                     <div className="flex-1">
-                                        <div className="flex items-center space-x-2 mb-2">
-                                            {uploaded && (
-                                                <FiCheckCircle className="h-5 w-5 text-green-600" />
-                                            )}
-                                            <h4 className="font-medium text-gray-900">
-                                                {item.label}
-                                                {item.mandatory && <span className="text-red-500 ml-1">*</span>}
-                                            </h4>
+                                        <div className="flex items-center space-x-2">
+                                            <h4 className="text-sm font-semibold text-gray-900">{item.label}</h4>
+                                            {item.mandatory && <span className="text-xs font-bold text-red-500 bg-red-50 px-2 py-0.5 rounded-full">REQUIRED</span>}
+                                            {isUploaded && <FiCheckCircle className="text-green-500 h-4 w-4" />}
                                         </div>
+                                        <p className="text-xs text-gray-500 mt-1">{item.description}</p>
 
-                                        {/* Show uploaded files */}
                                         {uploadedDocs.length > 0 && (
                                             <div className="space-y-2 mt-3">
                                                 {uploadedDocs.map((doc) => (
-                                                    <div
-                                                        key={doc.id}
-                                                        className="flex flex-col bg-white p-3 rounded border border-gray-200"
-                                                    >
-                                                        <div className="flex items-center justify-between">
-                                                            <div className="flex items-center space-x-2">
-                                                                <FiFile className="h-4 w-4 text-gray-500" />
-                                                                <span className="text-sm font-medium text-gray-700">{doc.fileName}</span>
-                                                            </div>
-                                                            <div className="flex items-center space-x-2">
-                                                                <button
-                                                                    onClick={() => handlePreview(doc)}
-                                                                    className="p-1 text-primary-600 hover:text-primary-700"
-                                                                    title="Preview"
-                                                                >
-                                                                    <FiEye className="h-4 w-4" />
-                                                                </button>
+                                                    <div key={doc.id} className="flex items-center justify-between p-2 bg-white rounded border border-green-100 shadow-sm">
+                                                        <div className="flex items-center space-x-2">
+                                                            <FiFile className="h-4 w-4 text-gray-500" />
+                                                            <span className="text-sm font-medium text-gray-700 truncate max-w-[200px]">{doc.fileName}</span>
+                                                        </div>
+                                                        <div className="flex items-center space-x-2">
+                                                            <button
+                                                                onClick={() => handlePreview(doc)}
+                                                                className="p-1 text-primary-600 hover:text-primary-700"
+                                                                title="Preview"
+                                                            >
+                                                                <FiEye className="h-4 w-4" />
+                                                            </button>
+                                                            {!readOnly && (
                                                                 <button
                                                                     onClick={() => handleRemoveDocument(doc)}
                                                                     className="p-1 text-red-600 hover:text-red-700"
@@ -174,132 +179,61 @@ const DocumentChecklistUploader = ({
                                                                 >
                                                                     <FiX className="h-4 w-4" />
                                                                 </button>
-                                                            </div>
+                                                            )}
                                                         </div>
-                                                        {/* Show RM Remarks and allow editing if not verified */}
-                                                        <div className="mt-2 text-xs border-t pt-2">
-                                                            <div className="flex items-center justify-between mb-1">
-                                                                <span className="font-bold text-gray-500 uppercase tracking-tight">RM Remarks:</span>
-                                                                {doc.status !== 'approved' && (
-                                                                    <button
-                                                                        onClick={async () => {
-                                                                            const newRemarks = prompt('Update RM Remarks:', doc.rmRemarks || '')
-                                                                            if (newRemarks !== null) {
-                                                                                try {
-                                                                                    await documentService.updateDocumentMetadata(doc.id, { rmRemarks: newRemarks })
-                                                                                    alert('Remarks updated')
-                                                                                    // Trigger refresh from parent
-                                                                                    if (onDocumentUploaded) onDocumentUploaded(doc)
-                                                                                } catch (e) {
-                                                                                    alert('Failed to update remarks')
-                                                                                }
-                                                                            }
-                                                                        }}
-                                                                        className="text-primary-600 hover:underline"
-                                                                    >
-                                                                        Edit
-                                                                    </button>
-                                                                )}
-                                                            </div>
-                                                            <p className="text-gray-600 italic">
-                                                                {doc.rmRemarks || 'No remarks provided'}
-                                                            </p>
-                                                        </div>
-
-                                                        {doc.remarks && (
-                                                            <div className="mt-2 text-xs text-blue-600 bg-blue-50 p-1 rounded border border-blue-100">
-                                                                <span className="font-bold uppercase tracking-tight">Credit/Ops Remark:</span> {doc.remarks}
-                                                            </div>
-                                                        )}
-
-                                                        {(doc.issueDate || doc.expiryDate) && (
-                                                            <div className="mt-2 grid grid-cols-2 gap-2 text-[10px] text-gray-400 border-t pt-2">
-                                                                {doc.issueDate && (
-                                                                    <div><span className="font-semibold uppercase">Issue:</span> {new Date(doc.issueDate).toLocaleDateString()}</div>
-                                                                )}
-                                                                {doc.expiryDate && (
-                                                                    <div><span className="font-semibold uppercase">Expiry:</span> {new Date(doc.expiryDate).toLocaleDateString()}</div>
-                                                                )}
-                                                            </div>
-                                                        )}
                                                     </div>
                                                 ))}
                                             </div>
                                         )}
                                     </div>
 
-                                    {/* Upload button */}
-                                    <div className="ml-4">
-                                        <label className="cursor-pointer">
-                                            <input
-                                                type="file"
-                                                accept=".pdf,.jpg,.jpeg,.png"
-                                                onChange={(e) => handleFileSelect(item, e)}
-                                                className="hidden"
-                                                disabled={isUploading}
-                                            />
-                                            <div
-                                                className={`flex items-center space-x-2 px-4 py-2 rounded-lg border ${isUploading
-                                                    ? 'bg-gray-100 border-gray-300 cursor-not-allowed'
-                                                    : 'bg-primary-600 text-white border-primary-600 hover:bg-primary-700'
-                                                    }`}
-                                            >
-                                                <FiUpload className="h-4 w-4" />
-                                                <span className="text-sm font-medium">
-                                                    {isUploading ? 'Uploading...' : uploaded ? 'Add More' : 'Upload'}
-                                                </span>
-                                            </div>
-                                        </label>
-                                    </div>
+                                    {!readOnly && (
+                                        <div className="ml-4">
+                                            <label className={`cursor-pointer flex items-center space-x-2 px-3 py-2 rounded-lg border border-dashed transition-colors ${isUploading ? 'bg-gray-100 border-gray-300 cursor-wait' : 'hover:bg-blue-50 hover:border-blue-300 border-gray-300'}`}>
+                                                <input
+                                                    type="file"
+                                                    accept=".pdf,.jpg,.jpeg,.png"
+                                                    onChange={(e) => handleFileSelect(item, e)}
+                                                    className="hidden"
+                                                    disabled={isUploading}
+                                                />
+                                                {isUploading ? (
+                                                    <span className="text-xs font-medium text-gray-500">Uploading...</span>
+                                                ) : (
+                                                    <>
+                                                        <FiUpload className="h-4 w-4 text-gray-500" />
+                                                        <span className="text-xs font-medium text-gray-700">{isUploaded ? 'Add Another' : 'Upload'}</span>
+                                                    </>
+                                                )}
+                                            </label>
+                                        </div>
+                                    )}
                                 </div>
 
-                                {/* Meta inputs */}
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-gray-50/50 p-4 rounded-xl border border-gray-100 shadow-sm">
-                                    <div className="space-y-1.5">
-                                        <div className="flex items-center space-x-1.5 text-gray-600">
-                                            <FiCalendar className="h-3.5 w-3.5" />
-                                            <label className="text-xs font-bold uppercase tracking-wider">Issue Date</label>
+                                {!readOnly && isUploaded && (
+                                    <div className="grid grid-cols-1 gap-4 bg-gray-50/50 p-3 rounded-lg border border-gray-100">
+                                        <div className="space-y-1">
+                                            <div className="flex items-center space-x-1.5 text-gray-600">
+                                                <FiMessageSquare className="h-3.5 w-3.5" />
+                                                <label className="text-[10px] font-bold uppercase tracking-wider">Remarks (Optional)</label>
+                                            </div>
+                                            <input
+                                                type="text"
+                                                placeholder="Add notes..."
+                                                value={itemMeta.rmRemarks || ''}
+                                                onChange={(e) => handleMetaChange(item.key, 'rmRemarks', e.target.value)}
+                                                onBlur={() => handleSaveMeta(item, uploadedDocs[0])}
+                                                className="w-full text-xs border-gray-200 rounded focus:ring-primary-500 focus:border-primary-500"
+                                            />
                                         </div>
-                                        <input
-                                            type="date"
-                                            value={meta.issueDate || ''}
-                                            onChange={(e) => handleMetaChange(item.key, 'issueDate', e.target.value)}
-                                            className="w-full text-sm border-gray-200 rounded-lg focus:ring-primary-500 focus:border-primary-500 bg-white transition-all hover:border-gray-300"
-                                        />
                                     </div>
-                                    <div className="space-y-1.5">
-                                        <div className="flex items-center space-x-1.5 text-gray-600">
-                                            <FiCalendar className="h-3.5 w-3.5" />
-                                            <label className="text-xs font-bold uppercase tracking-wider">Expiry Date</label>
-                                        </div>
-                                        <input
-                                            type="date"
-                                            value={meta.expiryDate || ''}
-                                            onChange={(e) => handleMetaChange(item.key, 'expiryDate', e.target.value)}
-                                            className="w-full text-sm border-gray-200 rounded-lg focus:ring-primary-500 focus:border-primary-500 bg-white transition-all hover:border-gray-300"
-                                        />
-                                    </div>
-                                    <div className="space-y-1.5">
-                                        <div className="flex items-center space-x-1.5 text-gray-600">
-                                            <FiMessageSquare className="h-3.5 w-3.5" />
-                                            <label className="text-xs font-bold uppercase tracking-wider">Remarks</label>
-                                        </div>
-                                        <input
-                                            type="text"
-                                            placeholder="Add notes about this document..."
-                                            value={meta.rmRemarks || ''}
-                                            onChange={(e) => handleMetaChange(item.key, 'rmRemarks', e.target.value)}
-                                            className="w-full text-sm border-gray-200 rounded-lg focus:ring-primary-500 focus:border-primary-500 bg-white transition-all hover:border-gray-300"
-                                        />
-                                    </div>
-                                </div>
+                                )}
                             </div>
                         </div>
                     )
                 })}
             </div>
 
-            {/* Validation Summary */}
             <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
                 <h4 className="font-medium text-blue-900 mb-2">Upload Summary</h4>
                 <div className="text-sm text-blue-800">

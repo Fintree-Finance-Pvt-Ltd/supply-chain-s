@@ -15,6 +15,35 @@ export const fetchCases = createAsyncThunk(
   }
 )
 
+export const fetchWorkflowDashboard = createAsyncThunk(
+  'cases/fetchWorkflowDashboard',
+  async ({ role, level }, { rejectWithValue }) => {
+    try {
+      let response;
+      if (role === 'credit') {
+        response = await workflowService.getCreditDashboard(level);
+      } else if (role === 'operations') {
+        response = await workflowService.getOperationsDashboard();
+      }
+      return response.data.data;
+    } catch (error) {
+      return rejectWithValue(error.response?.data?.message || 'Failed to fetch dashboard')
+    }
+  }
+)
+
+export const fetchExecutiveDashboard = createAsyncThunk(
+  'cases/fetchExecutiveDashboard',
+  async (_, { rejectWithValue }) => {
+    try {
+      const response = await workflowService.getExecutiveDashboard();
+      return response.data.data;
+    } catch (error) {
+      return rejectWithValue(error.response?.data?.message || 'Failed to fetch dashboard')
+    }
+  }
+)
+
 export const fetchCaseById = createAsyncThunk(
   'cases/fetchCaseById',
   async (id, { rejectWithValue }) => {
@@ -53,9 +82,9 @@ export const updateCase = createAsyncThunk(
 
 export const submitCase = createAsyncThunk(
   'cases/submitCase',
-  async ({ id, remarks = '' }, { rejectWithValue }) => {
+  async ({ id, remarks = '', pushedTo }, { rejectWithValue }) => {
     try {
-      const response = await workflowService.submitCustomer(id, remarks)
+      const response = await workflowService.submitCustomer(id, remarks, pushedTo)
       return response.data.data
     } catch (error) {
       return rejectWithValue(error.response?.data?.message || 'Failed to submit case')
@@ -137,6 +166,33 @@ const caseSlice = createSlice({
         if (state.currentCase?.id === action.payload.id) {
           state.currentCase = action.payload
         }
+      })
+      // Workflow Dashboard
+      .addCase(fetchWorkflowDashboard.pending, (state) => {
+        state.isLoading = true
+      })
+      .addCase(fetchWorkflowDashboard.fulfilled, (state, action) => {
+        state.isLoading = false
+        // Combine pending and handled for the list, they can be separated in the component
+        state.dashboardData = action.payload;
+        state.cases = [...(action.payload.pending || []), ...(action.payload.handled || [])];
+      })
+      .addCase(fetchWorkflowDashboard.rejected, (state, action) => {
+        state.isLoading = false
+        state.error = action.payload
+      })
+      // Executive Dashboard
+      .addCase(fetchExecutiveDashboard.pending, (state) => {
+        state.isLoading = true
+      })
+      .addCase(fetchExecutiveDashboard.fulfilled, (state, action) => {
+        state.isLoading = false
+        state.dashboardData = action.payload;
+        state.cases = [...(action.payload.pending || []), ...(action.payload.handled || [])];
+      })
+      .addCase(fetchExecutiveDashboard.rejected, (state, action) => {
+        state.isLoading = false
+        state.error = action.payload
       })
   },
 })

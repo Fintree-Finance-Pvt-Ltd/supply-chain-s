@@ -90,6 +90,11 @@ export const DOCUMENT_TYPES = {
   DEBTOR_AGEING: 'debtor_ageing',
   OBLIGATION_SHEET: 'obligation_sheet',
 
+  // Additional Photos & Bank docs
+  LIVE_PHOTO: 'live_photo',
+  SHOP_PHOTO: 'shop_photo',
+  CHEQUE: 'cheque',
+
   OTHER: 'other',
 } as const;
 

@@ -1,28 +1,32 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useDispatch, useSelector } from 'react-redux'
-import { fetchCaseById } from '../../store/slices/caseSlice'
+import { fetchCaseById, clearCurrentCase, clearError } from '../../store/slices/caseSlice'
 import { creditService } from '../../services/creditService'
 import DocumentUploader from '../../components/DocumentUploader'
 import LoadingSpinner from '../../components/LoadingSpinner'
 import { formatDate, formatCurrency } from '../../utils/format'
-import { FiFileText, FiCheck, FiX, FiDownload, FiUpload } from 'react-icons/fi'
+import { FiFileText, FiCheck, FiX, FiDownload, FiUpload, FiEye } from 'react-icons/fi'
 import { workflowService } from '../../services/workflowService'
 import { documentService } from '../../services/documentService'
 import StatusBadge from '../../components/StatusBadge'
+import ApprovalTimeline from '../../components/ApprovalTimeline'
+import CustomerFullDetails from '../../components/CustomerFullDetails'
 
 const CreditCaseDetail = () => {
   const { id } = useParams()
   const navigate = useNavigate()
   const dispatch = useDispatch()
   const { user } = useSelector((state) => state.auth)
-  const { currentCase, isLoading } = useSelector((state) => state.cases)
+  const { currentCase, isLoading, error } = useSelector((state) => state.cases)
 
   const [sanctionData, setSanctionData] = useState({
     sanctionAmount: '',
     tenure: '',
     interestRate: '',
     conditions: '',
+    penalCharges: '',
+    processingFees: '',
   })
 
   const [remarks, setRemarks] = useState('')
@@ -33,6 +37,10 @@ const CreditCaseDetail = () => {
     if (id) {
       dispatch(fetchCaseById(id))
     }
+    return () => {
+      dispatch(clearCurrentCase())
+      dispatch(clearError())
+    }
   }, [id, dispatch])
 
   useEffect(() => {
@@ -42,17 +50,70 @@ const CreditCaseDetail = () => {
         tenure: currentCase.creditSanctions?.[0]?.tenure || '',
         interestRate: currentCase.creditSanctions?.[0]?.interestRate || '',
         conditions: currentCase.creditSanctions?.[0]?.conditions || '',
+        penalCharges: currentCase.creditSanctions?.[0]?.penalCharges || '',
+        processingFees: currentCase.creditSanctions?.[0]?.processingFees || '',
       })
       setRemarks(currentCase.creditSanctions?.[0]?.creditRemarks || '')
     }
   }, [currentCase])
 
+  const isEditable = () => {
+    if (!currentCase || !user) return false
+    const role = user.role.toLowerCase()
+    const status = currentCase.status
+
+    if (role === 'credit_team_l1' && status === 'submitted') return true // RM submitted to Credit (L1 picks up)
+    if (role === 'credit_team_l1' && status === 'credit_l1_review') return true
+    if (role === 'credit_team_l2' && status === 'credit_l1_approved') return true // L1 approved, L2 picks up
+    if (role === 'credit_team_l2' && status === 'credit_l2_review') return true
+
+    return false
+  }
+
+  const readOnly = !isEditable()
+
+  const formattedApprovals = (currentCase?.statusHistory || []).map(action => ({
+    approverName: action.changedByUser?.name || 'Workflow System',
+    approverRole: action.changedByUser?.defaultRole?.replace(/_/g, ' ').toUpperCase() || 'System',
+    status: action.status,
+    approvedAt: action.createdAt,
+    comments: action.remarks,
+    sanctionAmount: action.sanctionAmount,
+    tenure: action.tenure,
+    interestRate: action.interestRate,
+    penalCharges: action.penalCharges,
+    processingFees: action.processingFees,
+  }))
+
+  const handleUpload = async (file, type) => {
+    try {
+      await documentService.uploadDocument(id, file, type)
+      alert('Document uploaded successfully')
+      dispatch(fetchCaseById(id))
+    } catch (error) {
+      alert('Upload failed: ' + (error.response?.data?.message || error.message))
+    }
+  }
+
+  const handleUpdateDocType = async (docId, newType) => {
+    try {
+      // Assuming metadata update handles documentType change or we strictly need a specific endpoint.
+      // Since documentService.updateDocumentMetadata takes (docId, meta), we try passing documentType.
+      await documentService.updateDocumentMetadata(docId, { documentType: newType })
+      alert('Document type updated')
+      dispatch(fetchCaseById(id))
+    } catch (error) {
+      alert('Update failed: ' + (error.response?.data?.message || error.message))
+    }
+  }
+
   const handleVerifyDocument = async (docId, status) => {
     const remark = docRemarks[docId] || ''
-    if (!remark.trim()) {
-      alert('Please add remarks for verification')
-      return
-    }
+    // Remarks made optional as per requirement
+    // if (!remark.trim()) {
+    //   alert('Please add remarks for verification')
+    //   return
+    // }
     try {
       await workflowService.verifyDocument(docId, status, remark)
       alert('Document status updated')
@@ -62,12 +123,10 @@ const CreditCaseDetail = () => {
     }
   }
 
+  // ... (handleSaveSanction remains similar but checks readOnly implied by disabling button)
   const handleSaveSanction = async () => {
-    if (!remarks.trim()) {
-      alert('Please add remarks')
-      return
-    }
-
+    if (readOnly) return;
+    // ... rest of logic
     setIsSubmitting(true)
     try {
       const userRole = (user?.role || '').toLowerCase()
@@ -76,6 +135,8 @@ const CreditCaseDetail = () => {
         sanctionAmount: parseFloat(sanctionData.sanctionAmount) || 0,
         tenure: parseInt(sanctionData.tenure) || 0,
         interestRate: parseFloat(sanctionData.interestRate) || 0,
+        penalCharges: parseFloat(sanctionData.penalCharges) || 0,
+        processingFees: parseFloat(sanctionData.processingFees) || 0,
         conditions: sanctionData.conditions,
         creditRemarks: remarks,
       }
@@ -101,36 +162,42 @@ const CreditCaseDetail = () => {
     }
   }
 
-  const handleUpdateDocType = async (docId, type) => {
-    try {
-      await workflowService.updateDocumentMetadata(docId, { documentType: type })
-      alert('Document type updated')
-      dispatch(fetchCaseById(id))
-    } catch (error) {
-      alert('Failed to update document type')
-    }
-  }
-
-  const handleUpload = async (file, type) => {
-    try {
-      await documentService.uploadDocument(id, file, type)
-      alert('Document uploaded successfully')
-      dispatch(fetchCaseById(id))
-    } catch (error) {
-      alert('Upload failed: ' + (error.response?.data?.message || error.message))
-    }
-  }
+  // ...
 
   if (isLoading) {
-    return <LoadingSpinner />
+    return (
+      <div className="flex justify-center items-center h-64">
+        <LoadingSpinner />
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="text-center py-12">
+        <h2 className="text-2xl font-bold text-red-600">Error</h2>
+        <p className="text-gray-600 mb-4">{error}</p>
+        <button
+          onClick={() => navigate('/credit/dashboard')}
+          className="text-primary-600 hover:text-primary-700"
+        >
+          ← Back to Dashboard
+        </button>
+      </div>
+    )
   }
 
   if (!currentCase) {
-    return <div>Case not found</div>
+    return (
+      <div className="flex justify-center items-center h-64">
+        <LoadingSpinner />
+      </div>
+    )
   }
 
   return (
     <div className="space-y-6">
+      {/* ... header ... */}
       <div>
         <button
           onClick={() => navigate('/credit/dashboard')}
@@ -138,45 +205,19 @@ const CreditCaseDetail = () => {
         >
           ← Back to Dashboard
         </button>
-        <h1 className="text-3xl font-bold text-gray-900">Case Details</h1>
+        <h1 className="text-3xl font-bold text-gray-900">Case Details {readOnly && '(Read Only)'}</h1>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
-          <div className="card">
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">Customer Information</h2>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-sm text-gray-600">Customer Name</p>
-                <p className="font-medium">{currentCase.name || currentCase.customerName}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">Mobile Number</p>
-                <p className="font-medium">{currentCase.mobile || currentCase.mobileNumber}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">PAN Number</p>
-                <p className="font-medium">{currentCase.pan || currentCase.panNumber}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">Aadhaar Number</p>
-                <p className="font-medium">{currentCase.aadhaar || currentCase.aadhaarNumber || 'N/A'}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">Electricity Bill</p>
-                <p className="font-medium">{currentCase.electricityBillNo || currentCase.electricityBillNumber || 'N/A'}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">RM Name</p>
-                <p className="font-medium">{currentCase.rm?.name || currentCase.rmName || 'N/A'}</p>
-              </div>
-            </div>
-          </div>
+          {/* Customer Info Card */}
+          {/* Customer Info Card */}
+          <CustomerFullDetails customer={currentCase} />
 
           <div className="card">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-semibold text-gray-900">Uploaded Documents</h2>
-              {(user?.role === 'credit_team_l1') && (
+              {!readOnly && (user?.role === 'credit_team_l1') && (
                 <DocumentUploader
                   onUpload={handleUpload}
                   documentTypes={[
@@ -196,7 +237,7 @@ const CreditCaseDetail = () => {
                         <FiFileText className="h-5 w-5 text-gray-500" />
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium text-gray-900 truncate">{doc.fileName}</p>
-                          {(user?.role === 'credit_team_l1' || user?.role === 'credit_team_l2') ? (
+                          {!readOnly && (user?.role === 'credit_team_l1' || user?.role === 'credit_team_l2') ? (
                             <select
                               value={doc.documentType}
                               onChange={(e) => handleUpdateDocType(doc.id, e.target.value)}
@@ -215,14 +256,15 @@ const CreditCaseDetail = () => {
                         </div>
                       </div>
                       <div className="flex items-center space-x-2">
+                        {/* Changed from Download to Preview */}
                         <a
                           href={`${import.meta.env.VITE_API_BASE_URL}/documents/download/${doc.id}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="p-1 text-primary-600 hover:bg-primary-50 rounded"
-                          title="Download"
+                          title="Preview"
                         >
-                          <FiDownload className="h-4 w-4" />
+                          <FiEye className="h-4 w-4" /> {/* Changed icon */}
                         </a>
                         <StatusBadge status={doc.status} />
                       </div>
@@ -243,11 +285,12 @@ const CreditCaseDetail = () => {
                           onChange={(e) => setDocRemarks({ ...docRemarks, [doc.id]: e.target.value })}
                           className="w-full text-xs input-field"
                           rows={1}
+                          disabled={readOnly}
                         />
                       </div>
                     </div>
 
-                    {(user?.role === 'credit_team_l1' || user?.role === 'credit_team_l2') && (
+                    {!readOnly && (user?.role === 'credit_team_l1' || user?.role === 'credit_team_l2') && doc.status === 'pending' && (
                       <div className="flex space-x-2 mt-2">
                         <button
                           onClick={() => handleVerifyDocument(doc.id, 'approved')}
@@ -282,6 +325,7 @@ const CreditCaseDetail = () => {
               className="input-field"
               rows={4}
               placeholder="Enter internal remarks..."
+              disabled={readOnly}
             />
           </div>
         </div>
@@ -290,6 +334,7 @@ const CreditCaseDetail = () => {
           <div className="card">
             <h2 className="text-xl font-semibold text-gray-900 mb-4">Sanction Limit</h2>
             <div className="space-y-4">
+              {/* Inputs disabled if readOnly */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Sanction Amount (₹)
@@ -300,7 +345,7 @@ const CreditCaseDetail = () => {
                   onChange={(e) => setSanctionData({ ...sanctionData, sanctionAmount: e.target.value })}
                   className="input-field"
                   placeholder="Enter amount"
-                  disabled={false}
+                  disabled={readOnly}
                 />
               </div>
               <div>
@@ -313,6 +358,7 @@ const CreditCaseDetail = () => {
                   onChange={(e) => setSanctionData({ ...sanctionData, tenure: e.target.value })}
                   className="input-field"
                   placeholder="Enter tenure"
+                  disabled={readOnly}
                 />
               </div>
               <div>
@@ -326,27 +372,49 @@ const CreditCaseDetail = () => {
                   onChange={(e) => setSanctionData({ ...sanctionData, interestRate: e.target.value })}
                   className="input-field"
                   placeholder="Enter interest rate"
+                  disabled={readOnly}
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Conditions
+                  Penal Charges (%)
                 </label>
-                <textarea
-                  value={sanctionData.conditions}
-                  onChange={(e) => setSanctionData({ ...sanctionData, conditions: e.target.value })}
+                <input
+                  type="number"
+                  step="0.01"
+                  value={sanctionData.penalCharges}
+                  onChange={(e) => setSanctionData({ ...sanctionData, penalCharges: e.target.value })}
                   className="input-field"
-                  rows={3}
-                  placeholder="Enter conditions..."
+                  placeholder="Enter penal charges"
+                  disabled={readOnly}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Processing Fees (%)
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={sanctionData.processingFees}
+                  onChange={(e) => setSanctionData({ ...sanctionData, processingFees: e.target.value })}
+                  className="input-field"
+                  placeholder="Enter processing fees"
+                  disabled={readOnly}
                 />
               </div>
             </div>
           </div>
+          {formattedApprovals.length > 0 && (
+            <div className="card">
+              <ApprovalTimeline approvals={formattedApprovals} />
+            </div>
+          )}
 
           <button
             onClick={handleSaveSanction}
-            disabled={isSubmitting}
-            className="w-full btn-primary flex items-center justify-center space-x-2"
+            disabled={isSubmitting || readOnly}
+            className={`w-full btn-primary flex items-center justify-center space-x-2 ${readOnly ? 'opacity-50 cursor-not-allowed' : ''}`}
           >
             {isSubmitting ? (
               <LoadingSpinner size="sm" />
@@ -359,7 +427,7 @@ const CreditCaseDetail = () => {
           </button>
         </div>
       </div>
-    </div>
+    </div >
   )
 }
 

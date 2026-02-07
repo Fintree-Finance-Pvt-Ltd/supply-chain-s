@@ -61,17 +61,25 @@ const OperationsDashboard = () => {
       </div>
 
       <div className="card">
-        <div className="mb-4">
-          <p className="text-sm text-gray-600">
-            Pending Operations Review: <span className="font-semibold">{cases.length}</span>
-          </p>
-        </div>
-
+        <h2 className="text-xl font-bold text-gray-800 mb-4">Pending Review</h2>
         {isLoading ? (
           <LoadingSpinner />
         ) : (
           <DataTable
-            data={cases}
+            data={cases.pending || []}
+            columns={columns}
+            onRowClick={handleRowClick}
+          />
+        )}
+      </div>
+
+      <div className="card border-t-4 border-gray-300">
+        <h2 className="text-xl font-bold text-gray-500 mb-4">Previously Handled (Read-Only)</h2>
+        {isLoading ? (
+          <LoadingSpinner />
+        ) : (
+          <DataTable
+            data={cases.handled || []}
             columns={columns}
             onRowClick={handleRowClick}
           />

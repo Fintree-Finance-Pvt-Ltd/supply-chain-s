@@ -42,6 +42,24 @@ export class CaseStatusHistory {
   @Column({ type: 'text', nullable: true })
   remarks: string;
 
+  @Column({ type: 'decimal', precision: 15, scale: 2, nullable: true })
+  sanctionAmount: number;
+
+  @Column({ type: 'int', nullable: true })
+  tenure: number;
+
+  @Column({ type: 'decimal', precision: 5, scale: 2, nullable: true })
+  interestRate: number;
+
+  @Column({ type: 'decimal', precision: 5, scale: 2, nullable: true })
+  penalCharges: number;
+
+  @Column({ type: 'decimal', precision: 5, scale: 2, nullable: true })
+  processingFees: number;
+
+  @Column({ type: 'text', nullable: true })
+  conditions: string;
+
   @CreateDateColumn()
   createdAt: Date;
 

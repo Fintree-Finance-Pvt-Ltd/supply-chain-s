@@ -86,13 +86,14 @@ router.post('/customers/create', checkRole(['relationship_manager']), async (req
 router.post('/customers/:customerId/submit', checkRole(['relationship_manager']), async (req: Request, res: Response) => {
   try {
     const { customerId } = req.params;
-    const { remarks } = req.body;
+    const { remarks, pushedTo } = req.body;
     const user = (req as any).user;
 
     const workflow = await customerOnboardingService.submitCustomer(
       parseInt(customerId),
       user.id,
       remarks || '',
+      pushedTo,
     );
 
     res.json({
@@ -142,10 +143,10 @@ router.patch('/customers/:customerId/bank-details', checkRole(['relationship_man
 router.post('/customers/:customerId/credit-l1', checkRole(['credit_team_l1']), async (req: Request, res: Response) => {
   try {
     const { customerId } = req.params;
-    const { approved, remarks, sanctionAmount, tenure, interestRate, conditions } = req.body;
+    const { approved, remarks, sanctionAmount, tenure, interestRate, conditions, penalCharges, processingFees } = req.body;
     const user = (req as any).user;
 
-    const sanctionData = sanctionAmount ? { sanctionAmount, tenure, interestRate, conditions } : undefined;
+    const sanctionData = sanctionAmount ? { sanctionAmount, tenure, interestRate, conditions, penalCharges, processingFees } : undefined;
 
     const workflow = await customerOnboardingService.creditL1Approve(
       parseInt(customerId),
@@ -175,10 +176,10 @@ router.post('/customers/:customerId/credit-l1', checkRole(['credit_team_l1']), a
 router.post('/customers/:customerId/credit-l2', checkRole(['credit_team_l2']), async (req: Request, res: Response) => {
   try {
     const { customerId } = req.params;
-    const { approved, remarks, sanctionAmount, tenure, interestRate, conditions } = req.body;
+    const { approved, remarks, sanctionAmount, tenure, interestRate, conditions, penalCharges, processingFees } = req.body;
     const user = (req as any).user;
 
-    const sanctionData = sanctionAmount ? { sanctionAmount, tenure, interestRate, conditions } : undefined;
+    const sanctionData = sanctionAmount ? { sanctionAmount, tenure, interestRate, conditions, penalCharges, processingFees } : undefined;
 
     const workflow = await customerOnboardingService.creditL2Approve(
       parseInt(customerId),
@@ -208,10 +209,10 @@ router.post('/customers/:customerId/credit-l2', checkRole(['credit_team_l2']), a
 router.post('/customers/:customerId/ceo-approve', checkRole(['ceo']), async (req: Request, res: Response) => {
   try {
     const { customerId } = req.params;
-    const { approved, remarks, sanctionAmount, tenure, interestRate, conditions } = req.body;
+    const { approved, remarks, sanctionAmount, tenure, interestRate, conditions, penalCharges, processingFees } = req.body;
     const user = (req as any).user;
 
-    const sanctionData = sanctionAmount ? { sanctionAmount, tenure, interestRate, conditions } : undefined;
+    const sanctionData = sanctionAmount ? { sanctionAmount, tenure, interestRate, conditions, penalCharges, processingFees } : undefined;
 
     const workflow = await customerOnboardingService.ceoApprove(
       parseInt(customerId),
@@ -241,10 +242,10 @@ router.post('/customers/:customerId/ceo-approve', checkRole(['ceo']), async (req
 router.post('/customers/:customerId/md-approve', checkRole(['md']), async (req: Request, res: Response) => {
   try {
     const { customerId } = req.params;
-    const { approved, remarks, sanctionAmount, tenure, interestRate, conditions } = req.body;
+    const { approved, remarks, sanctionAmount, tenure, interestRate, conditions, penalCharges, processingFees } = req.body;
     const user = (req as any).user;
 
-    const sanctionData = sanctionAmount ? { sanctionAmount, tenure, interestRate, conditions } : undefined;
+    const sanctionData = sanctionAmount ? { sanctionAmount, tenure, interestRate, conditions, penalCharges, processingFees } : undefined;
 
     const workflow = await customerOnboardingService.mdApprove(
       parseInt(customerId),
@@ -415,7 +416,7 @@ router.post('/customers/:customerId/ops-head', checkRole(['operations_head']), a
  */
 router.get('/customers/dashboard/rm', checkRole(['relationship_manager']), async (req: Request, res: Response) => {
   try {
-    const dashboard = await customerOnboardingService.getRMDashboard(req.userId!);
+    const dashboard = await customerOnboardingService.getRMDashboard((req as any).user?.id);
 
     res.json({
       success: true,
@@ -437,7 +438,7 @@ router.get('/customers/dashboard/credit/:level', checkRole(['credit_team_l1', 'c
   try {
     const { level } = req.params;
     const roleParam = level === '1' ? 'CREDIT_TEAM_L1' : 'CREDIT_TEAM_L2';
-    const dashboard = await customerOnboardingService.getCreditTeamPending(roleParam);
+    const dashboard = await customerOnboardingService.getCreditTeamPending(roleParam, (req as any).user?.id);
 
     res.json({
       success: true,
@@ -458,7 +459,7 @@ router.get('/customers/dashboard/credit/:level', checkRole(['credit_team_l1', 'c
 router.get('/customers/dashboard/executive', checkRole(['ceo', 'md']), async (req: Request, res: Response) => {
   try {
     const userRole = req.userRole || 'ceo';
-    const dashboard = await customerOnboardingService.getExecutivePending(userRole);
+    const dashboard = await customerOnboardingService.getExecutivePending(userRole, (req as any).user?.id);
 
     res.json({
       success: true,
@@ -479,7 +480,7 @@ router.get('/customers/dashboard/executive', checkRole(['ceo', 'md']), async (re
 router.get('/customers/dashboard/operations', checkRole(['operations_team_l1', 'operations_team_l2', 'operations_head']), async (req: Request, res: Response) => {
   try {
     const userRole = req.userRole || 'operations_team_l1';
-    const dashboard = await customerOnboardingService.getOperationsPending(userRole);
+    const dashboard = await customerOnboardingService.getOperationsPending(userRole, (req as any).user?.id);
 
     res.json({
       success: true,

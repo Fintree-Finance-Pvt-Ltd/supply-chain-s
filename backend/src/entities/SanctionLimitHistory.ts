@@ -26,6 +26,15 @@ export class SanctionLimitHistory {
     @Column({ type: 'decimal', precision: 5, scale: 2 })
     interestRate: number;
 
+    @Column({ type: 'decimal', precision: 5, scale: 2, nullable: true })
+    penalCharges: number;
+
+    @Column({ type: 'decimal', precision: 5, scale: 2, nullable: true })
+    processingFees: number;
+
+    @Column({ type: 'text', nullable: true })
+    conditions: string;
+
     @Column({ type: 'text', nullable: true })
     remarks: string;
 

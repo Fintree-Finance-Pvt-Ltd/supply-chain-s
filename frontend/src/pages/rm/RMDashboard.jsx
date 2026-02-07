@@ -35,9 +35,14 @@ const RMDashboard = () => {
 
   const columns = [
     {
+      key: 'customerCode',
+      label: 'LAN',
+      render: (_, row) => <span className="font-mono text-xs">{row.customerCode || 'Pending'}</span>,
+    },
+    {
       key: 'name',
       label: 'Customer Name',
-      render: (_, row) => row.name || row.customerName,
+      render: (_, row) => row.name || row.customerName || row.companyName || 'N/A',
     },
     {
       key: 'mobile',

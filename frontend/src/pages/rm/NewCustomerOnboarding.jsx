@@ -11,7 +11,8 @@ import AddressForm from '../../components/AddressForm'
 import LoadingSpinner from '../../components/LoadingSpinner'
 import { validatePAN, validateMobile, validateEmail } from '../../utils/validation'
 import { COMPANY_TYPES, getDocumentChecklist } from '../../config/documentChecklists'
-import { FiUpload, FiPlus } from 'react-icons/fi';
+import { FiUpload, FiPlus, FiCamera } from 'react-icons/fi';
+import LivePhotoCapture from '../../components/LivePhotoCapture';
 
 const NewCustomerOnboarding = () => {
   const navigate = useNavigate()
@@ -58,6 +59,16 @@ const NewCustomerOnboarding = () => {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isOcrProcessing, setIsOcrProcessing] = useState(false)
   const [isVerifying, setIsVerifying] = useState(false)
+  const [showSubmitModal, setShowSubmitModal] = useState(false)
+  const [submissionTargets, setSubmissionTargets] = useState({
+    credit: { selected: true, email: 'credit_l1@scf.com', subject: 'New Case for Review', body: 'Please review this new customer onboarding case.' },
+    kite: { selected: false, email: 'kite_partners@kite.com', subject: 'New Case Lead', body: 'We have a new lead for you.' },
+    muthoot: { selected: false, email: 'support@muthoot.com', subject: 'Customer Onboarding - Muthoot', body: 'New case submission for Muthoot process.' },
+    chola: { selected: false, email: 'info@chola.com', subject: 'Lead Referral', body: 'Referring a new potential customer.' },
+  })
+
+  const [showCamera, setShowCamera] = useState(false);
+  const [cameraTarget, setCameraTarget] = useState(null); // 'applicant-pan', 'live-photo', etc.
 
   useEffect(() => {
     if (caseId) {
@@ -168,6 +179,35 @@ const NewCustomerOnboarding = () => {
       setIsOcrProcessing(false)
     }
   }
+
+  const handleCameraCapture = (file) => {
+    if (cameraTarget === 'applicant-pan') {
+      // Simulate event object for handleApplicantPanUpload
+      handleApplicantPanUpload({ target: { files: [file] } });
+    } else if (cameraTarget === 'live-photo') {
+      // Handle specific live photo document upload
+      // We'll add it to the documents list directly
+      const doc = {
+        id: Date.now(),
+        fileName: 'live_photo_capture.jpg',
+        documentType: 'live_photo',
+        file: file,
+        status: 'pending',
+        uploadedBy: 'RM',
+        createdAt: new Date().toISOString()
+      };
+      setDocuments(prev => [...prev, doc]);
+
+      // Also upload immediately to server if Case ID exists
+      if (caseId) {
+        documentService.uploadDocument(caseId, file, 'live_photo')
+          .then(() => alert('Live photo uploaded successfully'))
+          .catch(err => alert('Failed to upload live photo: ' + err.message));
+      }
+    }
+    setShowCamera(false);
+    setCameraTarget(null);
+  };
 
   const handlePanVerify = async () => {
     if (!applicantKyc.panNumber) {
@@ -722,6 +762,63 @@ const NewCustomerOnboarding = () => {
     }
   }
 
+  const confirmSubmit = async () => {
+    // 1. Validation
+    if (!validateBasicKycTab()) {
+      setActiveTab('basic-kyc')
+      setShowSubmitModal(false)
+      alert('Please complete all required fields in Basic & KYC tab')
+      return
+    }
+    if (!validateDocumentsTab()) {
+      setActiveTab('documents')
+      setShowSubmitModal(false)
+      return
+    }
+
+    setIsSubmitting(true)
+    try {
+      // 2. Initial Case Creation/Update
+      let id = caseId
+      const customerData = {
+        name: formData.customerName,
+        mobile: formData.mobileNumber,
+        email: formData.email,
+        companyType: formData.companyType,
+        companyName: formData.companyName,
+        gstNumber: formData.gstNumber || null,
+        electricityBillNo: formData.electricityBillNumber || null,
+        pushedTo: Object.keys(submissionTargets).filter(k => submissionTargets[k].selected).join(','),
+      }
+
+      if (!id) {
+        const newCase = await dispatch(createCase(customerData)).unwrap()
+        id = newCase.id
+      } else {
+        await dispatch(updateCase({ id, data: customerData })).unwrap()
+      }
+
+      // Note: Full KYC and document saving logic would typically be called here too.
+      // Re-using the core multi-push field we added to the entity.
+
+      // 3. Submit to main workflow if 'credit' selected
+      if (submissionTargets.credit.selected) {
+        await dispatch(submitCase({
+          id,
+          pushedTo: customerData.pushedTo
+        })).unwrap()
+      }
+
+      alert(`Case successfully pushed to selected entities: ${customerData.pushedTo}`)
+      navigate('/rm/dashboard')
+    } catch (error) {
+      alert('Submission failed: ' + error.message)
+    } finally {
+      setIsSubmitting(false)
+      setShowSubmitModal(false)
+    }
+  }
+
   const handleDocumentUploaded = (doc) => {
     setDocuments([...documents, doc])
   }
@@ -873,223 +970,262 @@ const NewCustomerOnboarding = () => {
                   <p className="text-red-500 text-xs mt-1">{errors.email}</p>
                 )}
               </div>
+            </div>
 
-              {/* PAN Upload */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  PAN Upload <span className="text-red-500">*</span>
-                </label>
-                <div className="space-y-2">
-                  <div className="flex space-x-2">
-                    <label className="flex-1 cursor-pointer">
+            {/* KYC Section */}
+            <div className="border-t border-gray-200 pt-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">KYC Documents</h3>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* PAN Card */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    PAN Card <span className="text-red-500">*</span>
+                  </label>
+                  <div className="flex items-center space-x-2">
+                    <div className="flex-1 relative">
                       <input
                         type="file"
                         accept="image/*,.pdf"
                         onChange={handleApplicantPanUpload}
-                        className="hidden"
+                        className="input-field"
+                        disabled={isOcrProcessing}
                       />
-                      <div className="input-field flex items-center justify-center space-x-2 border-dashed">
-                        <FiUpload className="h-4 w-4" />
-                        <span className="text-sm">
-                          {isOcrProcessing ? 'Processing OCR...' : 'Upload PAN'}
-                        </span>
-                      </div>
-                    </label>
+                      {isOcrProcessing && (
+                        <div className="absolute right-2 top-2">
+                          <LoadingSpinner size="sm" />
+                        </div>
+                      )}
+                    </div>
                     <button
                       type="button"
-                      onClick={handlePanVerify}
-                      disabled={isVerifying || !applicantKyc.panNumber}
-                      className="btn-secondary"
+                      onClick={() => {
+                        setCameraTarget('applicant-pan');
+                        setShowCamera(true);
+                      }}
+                      className="p-2 bg-gray-100 text-gray-600 rounded hover:bg-gray-200"
+                      title="Capture with Camera"
                     >
-                      Verify
+                      <FiCamera size={20} />
                     </button>
                   </div>
                   {applicantKyc.panNumber && (
-                    <>
-                      <p className="text-xs text-green-600">PAN: {applicantKyc.panNumber}</p>
-                      <p className="text-xs text-gray-500">Name auto-filled from OCR</p>
-                    </>
+                    <div className="mt-2 text-sm text-green-600 font-medium flex items-center">
+                      <span>PAN: {applicantKyc.panNumber}</span>
+                      <button
+                        type="button"
+                        onClick={handlePanVerify}
+                        disabled={isVerifying}
+                        className="ml-4 text-primary-600 hover:text-primary-700 underline text-xs"
+                      >
+                        {isVerifying ? 'Verifying...' : 'Verify Now'}
+                      </button>
+                    </div>
                   )}
-                  {errors.pan && (
-                    <p className="text-red-500 text-xs">{errors.pan}</p>
-                  )}
+                </div>
+
+                {/* Live Photo Capture (Optional Requirement) */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Live Photo (Selfie) <span className="text-gray-400 text-xs">(Optional)</span>
+                  </label>
+                  <div className="flex items-center space-x-4">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCameraTarget('live-photo');
+                        setShowCamera(true);
+                      }}
+                      className="flex items-center space-x-2 px-4 py-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 border border-blue-200 font-medium transition-colors"
+                    >
+                      <FiCamera size={18} />
+                      <span>Capture Live Photo</span>
+                    </button>
+                    {documents.some(d => d.documentType === 'live_photo') && (
+                      <span className="text-sm text-green-600 font-medium">
+                        ✓ Photo Captured
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
 
-              {/* GST Upload */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  GST Upload
-                </label>
-                <label className="cursor-pointer block">
-                  <input
-                    type="file"
-                    accept="image/*,.pdf"
-                    onChange={handleGstUpload}
-                    className="hidden"
-                  />
-                  <div className="input-field flex items-center justify-center space-x-2 border-dashed">
-                    <FiUpload className="h-4 w-4" />
-                    <span className="text-sm">
-                      {applicantKyc.gstFile ? `Uploaded: ${applicantKyc.gstFile.name}` : 'Upload GST Certificate'}
-                    </span>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+                {/* GST Upload */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    GST Upload
+                  </label>
+                  <label className="cursor-pointer block">
+                    <input
+                      type="file"
+                      accept="image/*,.pdf"
+                      onChange={handleGstUpload}
+                      className="hidden"
+                    />
+                    <div className="input-field flex items-center justify-center space-x-2 border-dashed">
+                      <FiUpload className="h-4 w-4" />
+                      <span className="text-sm">
+                        {applicantKyc.gstFile ? `Uploaded: ${applicantKyc.gstFile.name}` : 'Upload GST Certificate'}
+                      </span>
+                    </div>
+                  </label>
+                </div>
+
+                {/* GST Number */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    GST Number
+                  </label>
+                  <div className="flex space-x-2">
+                    <input
+                      type="text"
+                      value={formData.gstNumber}
+                      onChange={(e) => setFormData({ ...formData, gstNumber: e.target.value.toUpperCase() })}
+                      className="input-field flex-1"
+                      placeholder="Enter GST number"
+                      maxLength={15}
+                    />
+                    <button
+                      type="button"
+                      onClick={handleGstVerify}
+                      disabled={isVerifying}
+                      className="btn-secondary"
+                    >
+                      {isVerifying ? 'Verifying...' : 'Verify'}
+                    </button>
                   </div>
-                </label>
+                </div>
               </div>
 
-              {/* GST Number */}
+              {/* Aadhaar KYC */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  GST Number
+                  Aadhaar KYC <span className="text-red-500">*</span>
                 </label>
-                <div className="flex space-x-2">
-                  <input
-                    type="text"
-                    value={formData.gstNumber}
-                    onChange={(e) => setFormData({ ...formData, gstNumber: e.target.value.toUpperCase() })}
-                    className="input-field flex-1"
-                    placeholder="Enter GST number"
-                    maxLength={15}
-                  />
+                <button
+                  type="button"
+                  onClick={handleAadhaarKyc}
+                  disabled={isVerifying}
+                  className="btn-primary"
+                >
+                  {isVerifying ? 'Processing...' : 'Complete Aadhaar KYC'}
+                </button>
+                <p className="text-xs text-gray-500 mt-1">
+                  This will initiate Aadhaar-based e-KYC verification
+                </p>
+              </div>
+
+              {/* Co-Applicants Section */}
+              <div className="border-t border-gray-200 pt-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold text-gray-900">Co-Applicants / Co-Borrowers</h3>
                   <button
                     type="button"
-                    onClick={handleGstVerify}
-                    disabled={isVerifying}
-                    className="btn-secondary"
+                    onClick={addCoApplicant}
+                    className="btn-secondary flex items-center space-x-2"
                   >
-                    {isVerifying ? 'Verifying...' : 'Verify'}
+                    <FiPlus className="h-4 w-4" />
+                    <span>Add Co-Applicant</span>
                   </button>
                 </div>
-              </div>
-            </div>
 
-            {/* Aadhaar KYC */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Aadhaar KYC <span className="text-red-500">*</span>
-              </label>
-              <button
-                type="button"
-                onClick={handleAadhaarKyc}
-                disabled={isVerifying}
-                className="btn-primary"
-              >
-                {isVerifying ? 'Processing...' : 'Complete Aadhaar KYC'}
-              </button>
-              <p className="text-xs text-gray-500 mt-1">
-                This will initiate Aadhaar-based e-KYC verification
-              </p>
-            </div>
-
-            {/* Co-Applicants Section */}
-            <div className="border-t border-gray-200 pt-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-gray-900">Co-Applicants / Co-Borrowers</h3>
-                <button
-                  type="button"
-                  onClick={addCoApplicant}
-                  className="btn-secondary flex items-center space-x-2"
-                >
-                  <FiPlus className="h-4 w-4" />
-                  <span>Add Co-Applicant</span>
-                </button>
+                {coApplicants.length === 0 ? (
+                  <p className="text-gray-500 text-sm">No co-applicants added yet</p>
+                ) : (
+                  <div className="space-y-4">
+                    {coApplicants.map((coApp, index) => (
+                      <CoApplicantForm
+                        key={index}
+                        index={index}
+                        data={coApp}
+                        onChange={updateCoApplicant}
+                        onRemove={removeCoApplicant}
+                        onPanUpload={handleCoApplicantPanUpload}
+                        kycData={coApplicantKyc[index] || {}}
+                      />
+                    ))}
+                  </div>
+                )}
+                {errors.coApplicants && (
+                  <p className="text-red-500 text-sm mt-2 font-medium">{errors.coApplicants}</p>
+                )}
               </div>
 
-              {coApplicants.length === 0 ? (
-                <p className="text-gray-500 text-sm">No co-applicants added yet</p>
-              ) : (
-                <div className="space-y-4">
-                  {coApplicants.map((coApp, index) => (
-                    <CoApplicantForm
-                      key={index}
-                      index={index}
-                      data={coApp}
-                      onChange={updateCoApplicant}
-                      onRemove={removeCoApplicant}
-                      onPanUpload={handleCoApplicantPanUpload}
-                      kycData={coApplicantKyc[index] || {}}
-                    />
-                  ))}
+              {/* Contact Persons Section */}
+              <div className="border-t border-gray-200 pt-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold text-gray-900">Contact Person Details</h3>
+                  <button
+                    type="button"
+                    onClick={addContactPerson}
+                    className="btn-secondary flex items-center space-x-2"
+                  >
+                    <FiPlus className="h-4 w-4" />
+                    <span>Add Contact Person</span>
+                  </button>
                 </div>
-              )}
-              {errors.coApplicants && (
-                <p className="text-red-500 text-sm mt-2 font-medium">{errors.coApplicants}</p>
-              )}
-            </div>
 
-            {/* Contact Persons Section */}
-            <div className="border-t border-gray-200 pt-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-gray-900">Contact Person Details</h3>
-                <button
-                  type="button"
-                  onClick={addContactPerson}
-                  className="btn-secondary flex items-center space-x-2"
-                >
-                  <FiPlus className="h-4 w-4" />
-                  <span>Add Contact Person</span>
-                </button>
+                {contactPersons.length === 0 ? (
+                  <p className="text-gray-500 text-sm">No contact persons added yet</p>
+                ) : (
+                  <div className="space-y-4">
+                    {contactPersons.map((cp, index) => (
+                      <ContactPersonForm
+                        key={index}
+                        index={index}
+                        data={cp}
+                        onChange={updateContactPerson}
+                        onRemove={removeContactPerson}
+                        errors={{
+                          name: errors[`cp_${index}_name`],
+                          mobile: errors[`cp_${index}_mobile`],
+                          email: errors[`cp_${index}_email`],
+                          gender: errors[`cp_${index}_gender`]
+                        }}
+                      />
+                    ))}
+                  </div>
+                )}
               </div>
 
-              {contactPersons.length === 0 ? (
-                <p className="text-gray-500 text-sm">No contact persons added yet</p>
-              ) : (
-                <div className="space-y-4">
-                  {contactPersons.map((cp, index) => (
-                    <ContactPersonForm
-                      key={index}
-                      index={index}
-                      data={cp}
-                      onChange={updateContactPerson}
-                      onRemove={removeContactPerson}
-                      errors={{
-                        name: errors[`cp_${index}_name`],
-                        mobile: errors[`cp_${index}_mobile`],
-                        email: errors[`cp_${index}_email`],
-                        gender: errors[`cp_${index}_gender`]
-                      }}
-                    />
-                  ))}
+              {/* Address Details Section */}
+              <div className="border-t border-gray-200 pt-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold text-gray-900">Address Details</h3>
+                  <button
+                    type="button"
+                    onClick={addAddress}
+                    className="btn-secondary flex items-center space-x-2"
+                  >
+                    <FiPlus className="h-4 w-4" />
+                    <span>Add Address Details</span>
+                  </button>
                 </div>
-              )}
-            </div>
 
-            {/* Address Details Section */}
-            <div className="border-t border-gray-200 pt-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-gray-900">Address Details</h3>
-                <button
-                  type="button"
-                  onClick={addAddress}
-                  className="btn-secondary flex items-center space-x-2"
-                >
-                  <FiPlus className="h-4 w-4" />
-                  <span>Add Address Details</span>
-                </button>
+                {addresses.length === 0 ? (
+                  <p className="text-gray-500 text-sm">No addresses added yet</p>
+                ) : (
+                  <div className="space-y-4">
+                    {addresses.map((addr, index) => (
+                      <AddressForm
+                        key={index}
+                        index={index}
+                        data={addr}
+                        onChange={updateAddress}
+                        onRemove={removeAddress}
+                        errors={{
+                          type: errors[`addr_${index}_type`],
+                          fullAddress: errors[`addr_${index}_address`],
+                          pincode: errors[`addr_${index}_pincode`],
+                          state: errors[`addr_${index}_state`],
+                          city: errors[`addr_${index}_city`]
+                        }}
+                      />
+                    ))}
+                  </div>
+                )}
               </div>
-
-              {addresses.length === 0 ? (
-                <p className="text-gray-500 text-sm">No addresses added yet</p>
-              ) : (
-                <div className="space-y-4">
-                  {addresses.map((addr, index) => (
-                    <AddressForm
-                      key={index}
-                      index={index}
-                      data={addr}
-                      onChange={updateAddress}
-                      onRemove={removeAddress}
-                      errors={{
-                        type: errors[`addr_${index}_type`],
-                        fullAddress: errors[`addr_${index}_address`],
-                        pincode: errors[`addr_${index}_pincode`],
-                        state: errors[`addr_${index}_state`],
-                        city: errors[`addr_${index}_city`]
-                      }}
-                    />
-                  ))}
-                </div>
-              )}
             </div>
           </>
         )}
@@ -1114,14 +1250,118 @@ const NewCustomerOnboarding = () => {
             {isSubmitting ? <LoadingSpinner size="sm" /> : 'Save as Draft'}
           </button>
           <button
-            onClick={handleSubmit}
+            onClick={() => setShowSubmitModal(true)}
             disabled={isSubmitting}
             className="btn-primary"
           >
-            {isSubmitting ? <LoadingSpinner size="sm" /> : 'Submit to Credit Team'}
+            {isSubmitting ? <LoadingSpinner size="sm" /> : 'Submit Case'}
           </button>
         </div>
       </div>
+
+      {/* Modal for Multi-Entity Submission */}
+      {showSubmitModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6 space-y-6">
+            <div>
+              <h2 className="text-2xl font-bold text-gray-900">Push Case to Entities</h2>
+              <p className="text-sm text-gray-500 mt-1">Select one or more entities to submit this case.</p>
+            </div>
+
+            <div className="space-y-4">
+              {Object.keys(submissionTargets)
+                .filter(target => target !== 'credit') // Hiding Credit Team option as requested
+                .map(target => (
+                  <div key={target} className="border border-gray-100 rounded-lg p-4 bg-gray-50">
+                    <label className="flex items-center space-x-3 cursor-pointer mb-3">
+                      <input
+                        type="checkbox"
+                        checked={submissionTargets[target].selected}
+                        onChange={(e) => setSubmissionTargets({
+                          ...submissionTargets,
+                          [target]: { ...submissionTargets[target], selected: e.target.checked }
+                        })}
+                        className="rounded h-5 w-5 text-primary-600"
+                      />
+                      <span className="font-bold text-gray-800">{target.toUpperCase()}</span>
+                    </label>
+
+                    {submissionTargets[target].selected && (
+                      <div className="space-y-3 pl-8 animate-fadeIn">
+                        <div>
+                          <label className="block text-xs font-bold text-gray-600 uppercase mb-1">To (Emails)</label>
+                          <input
+                            type="text"
+                            value={submissionTargets[target].email}
+                            onChange={(e) => setSubmissionTargets({
+                              ...submissionTargets,
+                              [target]: { ...submissionTargets[target], email: e.target.value }
+                            })}
+                            className="input-field py-1"
+                            placeholder="comma-separated emails"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold text-gray-600 uppercase mb-1">Subject</label>
+                          <input
+                            type="text"
+                            value={submissionTargets[target].subject}
+                            onChange={(e) => setSubmissionTargets({
+                              ...submissionTargets,
+                              [target]: { ...submissionTargets[target], subject: e.target.value }
+                            })}
+                            className="input-field py-1"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold text-gray-600 uppercase mb-1">Email Body</label>
+                          <textarea
+                            value={submissionTargets[target].body}
+                            onChange={(e) => setSubmissionTargets({
+                              ...submissionTargets,
+                              [target]: { ...submissionTargets[target], body: e.target.value }
+                            })}
+                            className="input-field py-1"
+                            rows={2}
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+            </div>
+
+            <div className="flex space-x-3">
+              <button
+                onClick={() => setShowSubmitModal(false)}
+                className="flex-1 btn-secondary"
+                disabled={isSubmitting}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmSubmit}
+                className="flex-1 btn-primary"
+                disabled={isSubmitting || !Object.values(submissionTargets).some(t => t.selected)}
+              >
+                {isSubmitting ? <LoadingSpinner size="sm" /> : 'Confirm & Push Case'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Live Camera Modal */}
+      {showCamera && (
+        <LivePhotoCapture
+          onCapture={handleCameraCapture}
+          onCancel={() => {
+            setShowCamera(false);
+            setCameraTarget(null);
+          }}
+          label={cameraTarget === 'applicant-pan' ? "Capture PAN Card" : "Take Live Photo"}
+        />
+      )}
     </div>
   )
 }

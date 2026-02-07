@@ -19,6 +19,9 @@ const ApprovalScreen = () => {
     sanctionAmount: '',
     tenure: '',
     interestRate: '',
+    penalCharges: '',
+    processingFees: '',
+    conditions: '',
   })
   const [comments, setComments] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -36,6 +39,9 @@ const ApprovalScreen = () => {
             sanctionAmount: s.sanctionAmount || '',
             tenure: s.tenure || '',
             interestRate: s.interestRate || '',
+            penalCharges: s.penalCharges || '',
+            processingFees: s.processingFees || '',
+            conditions: s.conditions || '',
           })
         }
 
@@ -138,6 +144,13 @@ const ApprovalScreen = () => {
   const role = user?.role?.toLowerCase() || ''
   const visibleDocuments = customer.documents?.filter(doc => isCreditDoc(doc)) || []
 
+  // Read-only logic: if case is already approved/rejected by management or past their stage
+  const isReadOnly = (role === 'ceo' && customer.status !== 'credit_l1_approved' && customer.status !== 'credit_l2_approved') ||
+    (role === 'md' && customer.status !== 'ceo_approved') ||
+    (customer.status === 'rejected') ||
+    (customer.status === 'md_approved') ||
+    (customer.status.includes('ops'));
+
   return (
     <div className="space-y-6">
       <div>
@@ -192,7 +205,7 @@ const ApprovalScreen = () => {
 
           <div className="card border-l-4 border-primary-500">
             <h2 className="text-xl font-semibold text-gray-900 mb-4">Sanction Details (Review & Revise)</h2>
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
               <div>
                 <label className="block text-xs text-gray-500 mb-1">Sanction Amount (₹)</label>
                 <input
@@ -200,6 +213,7 @@ const ApprovalScreen = () => {
                   value={sanctionData.sanctionAmount}
                   onChange={(e) => setSanctionData({ ...sanctionData, sanctionAmount: e.target.value })}
                   className="input-field text-sm"
+                  readOnly={isReadOnly}
                 />
               </div>
               <div>
@@ -209,6 +223,7 @@ const ApprovalScreen = () => {
                   value={sanctionData.tenure}
                   onChange={(e) => setSanctionData({ ...sanctionData, tenure: e.target.value })}
                   className="input-field text-sm"
+                  readOnly={isReadOnly}
                 />
               </div>
               <div>
@@ -219,6 +234,39 @@ const ApprovalScreen = () => {
                   value={sanctionData.interestRate}
                   onChange={(e) => setSanctionData({ ...sanctionData, interestRate: e.target.value })}
                   className="input-field text-sm"
+                  readOnly={isReadOnly}
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Penal Charges (%)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={sanctionData.penalCharges}
+                  onChange={(e) => setSanctionData({ ...sanctionData, penalCharges: e.target.value })}
+                  className="input-field text-sm"
+                  readOnly={isReadOnly}
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Processing Fees (%)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={sanctionData.processingFees}
+                  onChange={(e) => setSanctionData({ ...sanctionData, processingFees: e.target.value })}
+                  className="input-field text-sm"
+                  readOnly={isReadOnly}
+                />
+              </div>
+              <div className="col-span-full">
+                <label className="block text-xs text-gray-500 mb-1">Sanction Conditions</label>
+                <textarea
+                  value={sanctionData.conditions}
+                  onChange={(e) => setSanctionData({ ...sanctionData, conditions: e.target.value })}
+                  className="input-field text-sm"
+                  rows={2}
+                  readOnly={isReadOnly}
                 />
               </div>
             </div>
@@ -262,8 +310,9 @@ const ApprovalScreen = () => {
               onChange={(e) => setComments(e.target.value)}
               className="input-field"
               rows={4}
-              placeholder="Enter your approval comments..."
-              required
+              placeholder={isReadOnly ? "No comments allowed in read-only mode" : "Enter your approval comments..."}
+              required={!isReadOnly}
+              readOnly={isReadOnly}
             />
           </div>
         </div>
@@ -274,36 +323,43 @@ const ApprovalScreen = () => {
           </div>
 
           <div className="card">
-            <div className="space-y-3">
-              <button
-                onClick={handleApprove}
-                disabled={isSubmitting}
-                className="w-full btn-primary flex items-center justify-center space-x-2"
-              >
-                {isSubmitting ? (
-                  <LoadingSpinner size="sm" />
-                ) : (
-                  <>
-                    <FiCheck className="h-5 w-5" />
-                    <span>Approve</span>
-                  </>
-                )}
-              </button>
-              <button
-                onClick={handleReject}
-                disabled={isSubmitting}
-                className="w-full btn-danger flex items-center justify-center space-x-2"
-              >
-                {isSubmitting ? (
-                  <LoadingSpinner size="sm" />
-                ) : (
-                  <>
-                    <FiX className="h-5 w-5" />
-                    <span>Reject</span>
-                  </>
-                )}
-              </button>
-            </div>
+            {!isReadOnly ? (
+              <div className="space-y-3">
+                <button
+                  onClick={handleApprove}
+                  disabled={isSubmitting}
+                  className="w-full btn-primary flex items-center justify-center space-x-2"
+                >
+                  {isSubmitting ? (
+                    <LoadingSpinner size="sm" />
+                  ) : (
+                    <>
+                      <FiCheck className="h-5 w-5" />
+                      <span>Approve</span>
+                    </>
+                  )}
+                </button>
+                <button
+                  onClick={handleReject}
+                  disabled={isSubmitting}
+                  className="w-full btn-danger flex items-center justify-center space-x-2"
+                >
+                  {isSubmitting ? (
+                    <LoadingSpinner size="sm" />
+                  ) : (
+                    <>
+                      <FiX className="h-5 w-5" />
+                      <span>Reject</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            ) : (
+              <div className="p-4 bg-gray-50 rounded-lg text-center">
+                <p className="text-sm font-bold text-gray-500 uppercase tracking-wider">Read Only Mode</p>
+                <p className="text-xs text-gray-400 mt-1">Case has been processed or is not at your stage.</p>
+              </div>
+            )}
           </div>
         </div>
       </div>

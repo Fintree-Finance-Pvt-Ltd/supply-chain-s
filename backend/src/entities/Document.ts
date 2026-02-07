@@ -20,7 +20,7 @@ export class Document {
   @Column({ type: 'int' })
   customerId: number;
 
-  @Column({ type: 'enum', enum: Object.values(DOCUMENT_TYPES) })
+  @Column({ type: 'varchar', length: 50 })
   documentType: string;
 
   @Column({ type: 'varchar', length: 50, default: 'applicant' })

@@ -68,11 +68,25 @@ const ManagementDashboard = () => {
       </div>
 
       <div className="card">
+        <h2 className="text-xl font-bold text-gray-800 mb-4">Pending Approvals</h2>
         {isLoading ? (
           <LoadingSpinner />
         ) : (
           <DataTable
-            data={cases}
+            data={cases.pending || []}
+            columns={columns}
+            onRowClick={handleRowClick}
+          />
+        )}
+      </div>
+
+      <div className="card border-t-4 border-gray-300">
+        <h2 className="text-xl font-bold text-gray-500 mb-4">Handled Cases (Read-Only)</h2>
+        {isLoading ? (
+          <LoadingSpinner />
+        ) : (
+          <DataTable
+            data={cases.handled || []}
             columns={columns}
             onRowClick={handleRowClick}
           />

@@ -4,7 +4,7 @@ import { API_ENDPOINTS } from '../constants/api'
 export const workflowService = {
     // Customer Onboarding
     createCustomer: (data) => api.post(API_ENDPOINTS.WORKFLOW_CUSTOMER_CREATE, data),
-    submitCustomer: (id, remarks) => api.post(API_ENDPOINTS.WORKFLOW_CUSTOMER_SUBMIT(id), { remarks }),
+    submitCustomer: (id, remarks, pushedTo) => api.post(API_ENDPOINTS.WORKFLOW_CUSTOMER_SUBMIT(id), { remarks, pushedTo }),
     approveCreditL1: (id, approved, remarks, sanctionData) => api.post(API_ENDPOINTS.WORKFLOW_CUSTOMER_CREDIT_L1(id), { approved, remarks, ...sanctionData }),
     approveCreditL2: (id, approved, remarks, sanctionData) => api.post(API_ENDPOINTS.WORKFLOW_CUSTOMER_CREDIT_L2(id), { approved, remarks, ...sanctionData }),
     approveCEO: (id, approved, remarks, sanctionData) => api.post(API_ENDPOINTS.WORKFLOW_CUSTOMER_CEO(id), { approved, remarks, ...sanctionData }),

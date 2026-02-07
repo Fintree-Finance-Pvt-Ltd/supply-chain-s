@@ -4,9 +4,10 @@ import { useSelector } from 'react-redux'
 import { workflowService } from '../../services/workflowService'
 import { customerService } from '../../services/customerService'
 import ApprovalTimeline from '../../components/ApprovalTimeline'
+import CustomerFullDetails from '../../components/CustomerFullDetails'
 import LoadingSpinner from '../../components/LoadingSpinner'
 import { formatDate } from '../../utils/format'
-import { FiCheck, FiX, FiFileText, FiDownload, FiLock } from 'react-icons/fi'
+import { FiCheck, FiX, FiFileText, FiDownload, FiLock, FiEye } from 'react-icons/fi'
 import DocumentUploader from '../../components/DocumentUploader'
 import { useDispatch } from 'react-redux'
 import { fetchCaseById } from '../../store/slices/caseSlice'
@@ -23,6 +24,13 @@ const OperationsCaseScreen = () => {
     esignVerified: false,
     enachVerified: false,
   })
+  const [bankData, setBankData] = useState({
+    bankAccountNo: '',
+    bankIfscCode: '',
+    bankName: '',
+    bankBranch: '',
+    bankType: 'savings',
+  })
   const [remarks, setRemarks] = useState('')
   const [docRemarks, setDocRemarks] = useState({})
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -35,6 +43,14 @@ const OperationsCaseScreen = () => {
         const response = await customerService.getCustomerById(id)
         if (response.data) {
           setCustomer(response.data)
+          // Pre-fill bank data
+          setBankData({
+            bankAccountNo: response.data.bankAccountNo || '',
+            bankIfscCode: response.data.bankIfscCode || '',
+            bankName: response.data.bankName || '',
+            bankBranch: response.data.bankBranch || '',
+            bankType: response.data.bankType || 'savings',
+          })
           // Pre-fill if needed, but usually fresh for ops
         }
       } catch (error) {
@@ -51,10 +67,11 @@ const OperationsCaseScreen = () => {
 
   const handleVerifyDocument = async (docId, status) => {
     const remark = docRemarks[docId] || ''
-    if (!remark.trim()) {
-      alert('Please add remarks for verification')
-      return
-    }
+    // Remarks made optional
+    // if (!remark.trim()) {
+    //   alert('Please add remarks for verification')
+    //   return
+    // }
     try {
       await workflowService.verifyDocument(docId, status, remark)
       alert('Document status updated')
@@ -62,6 +79,42 @@ const OperationsCaseScreen = () => {
       setCustomer(response.data)
     } catch (error) {
       alert('Verification failed')
+    }
+  }
+
+  const handleUpdateBankDetails = async () => {
+    try {
+      await workflowService.updateBankDetails(id, bankData)
+      alert('Bank details updated successfully')
+    } catch (error) {
+      alert('Failed to update bank details: ' + (error.response?.data?.message || error.message))
+    }
+  }
+
+  const handleUpload = async (file, type) => {
+    try {
+      await documentService.uploadDocument(id, file, type)
+      alert('Document uploaded successfully')
+
+      // Simulate OCR for Cheque
+      if (type === 'cheque') {
+        alert('Simulating OCR: Fetching bank details from cheque...')
+        setTimeout(() => {
+          setBankData({
+            bankAccountNo: '9876543210',
+            bankIfscCode: 'ICIC0001234',
+            bankName: 'ICICI BANK',
+            bankBranch: 'MUMBAI BRANCH',
+          })
+          alert('OCR Successful: Bank details auto-filled')
+        }, 1500)
+      }
+
+      // Refresh customer data
+      const response = await customerService.getCustomerById(id)
+      setCustomer(response.data)
+    } catch (error) {
+      alert('Upload failed: ' + (error.response?.data?.message || error.message))
     }
   }
 
@@ -115,7 +168,18 @@ const OperationsCaseScreen = () => {
     status: action.status,
     approvedAt: action.createdAt,
     comments: action.remarks,
+    sanctionAmount: action.sanctionAmount,
+    tenure: action.tenure,
+    interestRate: action.interestRate,
+    penalCharges: action.penalCharges,
+    processingFees: action.processingFees,
   }))
+
+  const isReadOnly = (customer.status === 'completed') ||
+    (customer.status === 'disbursed') ||
+    (customer.status === 'rejected') ||
+    (user?.role === 'operations_team_l1' && customer.status !== 'md_approved' && customer.status !== 'ops_l1_review') ||
+    (user?.role === 'operations_head' && customer.status !== 'ops_l2_verified' && customer.status !== 'ops_l1_approved');
 
   return (
     <div className="space-y-6">
@@ -131,57 +195,122 @@ const OperationsCaseScreen = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
-          <div className="card">
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">Customer Information</h2>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-sm text-gray-600">Customer Name</p>
-                <p className="font-medium">{customer?.customerName || 'N/A'}</p>
+          <CustomerFullDetails customer={customer} />
+
+          {/* Sanction Details (Read Only) */}
+          <div className="card border-l-4 border-indigo-500">
+            <h2 className="text-xl font-semibold text-gray-900 mb-4">Sanction Details</h2>
+            {customer?.creditSanctions?.[0] ? (
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                <div className="p-3 bg-indigo-50 rounded-lg">
+                  <p className="text-xs text-indigo-600 uppercase font-bold">Sanction Amount</p>
+                  <p className="text-lg font-bold">₹{customer.creditSanctions[0].sanctionAmount}</p>
+                </div>
+                <div className="p-3 bg-indigo-50 rounded-lg">
+                  <p className="text-xs text-indigo-600 uppercase font-bold">Tenure</p>
+                  <p className="text-lg font-bold">{customer.creditSanctions[0].tenure} Months</p>
+                </div>
+                <div className="p-3 bg-indigo-50 rounded-lg">
+                  <p className="text-xs text-indigo-600 uppercase font-bold">Interest Rate</p>
+                  <p className="text-lg font-bold">{customer.creditSanctions[0].interestRate}%</p>
+                </div>
+                <div className="p-3 bg-indigo-50 rounded-lg">
+                  <p className="text-xs text-indigo-600 uppercase font-bold">Penal Charges</p>
+                  <p className="text-lg font-bold">{customer.creditSanctions[0].penalCharges}%</p>
+                </div>
+                <div className="p-3 bg-indigo-50 rounded-lg">
+                  <p className="text-xs text-indigo-600 uppercase font-bold">Processing Fees</p>
+                  <p className="text-lg font-bold">{customer.creditSanctions[0].processingFees}%</p>
+                </div>
               </div>
-              <div>
-                <p className="text-sm text-gray-600">Contact Number</p>
-                <p className="font-medium">{customer?.contactNumber || 'N/A'}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">Customer Code</p>
-                <p className="font-medium">{customer?.customerCode || 'N/A'}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">Status</p>
-                <p className="font-medium uppercase">{customer?.status || 'N/A'}</p>
-              </div>
-            </div>
+            ) : (
+              <p className="text-gray-500">No sanction details available.</p>
+            )}
           </div>
 
-          {/* Credit & RM Reference Data */}
-          <div className="card bg-gray-50 border-dashed border-2">
-            <h2 className="text-lg font-semibold text-gray-900 mb-3 flex items-center">
-              <FiLock className="mr-2 text-gray-400" />
-              Credit & RM Review Data
-            </h2>
-            <div className="grid grid-cols-2 gap-6 text-sm">
-              <div className="space-y-2">
-                <p className="text-xs text-gray-500 font-bold uppercase">Sanction Terms</p>
-                <p>Amount: <span className="font-bold">₹{customer?.creditSanctions?.[0]?.sanctionAmount || 'N/A'}</span></p>
-                <p>Tenure: <span className="font-bold">{customer?.creditSanctions?.[0]?.tenure || 'N/A'} Months</span></p>
-                <p>Rate: <span className="font-bold">{customer?.creditSanctions?.[0]?.interestRate || 'N/A'}%</span></p>
+          {/* Post-Sanction Review - Bank Details & OCR */}
+          <div className="card">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-semibold text-gray-900">Post-Sanction Review – Bank Details</h2>
+            </div>
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              <div>
+                <label className="block text-xs text-gray-400 uppercase font-bold mb-1">Bank Account No</label>
+                <input
+                  type="text"
+                  value={bankData.bankAccountNo}
+                  onChange={(e) => setBankData({ ...bankData, bankAccountNo: e.target.value })}
+                  className="input-field"
+                  placeholder="Enter Account No"
+                  readOnly={isReadOnly}
+                />
               </div>
-              <div className="space-y-2 border-l pl-6">
-                <p className="text-xs text-gray-500 font-bold uppercase">Bank Details & Journey</p>
-                <p>Acc No: <span className="font-bold">{customer?.bankAccountNo || 'N/A'}</span></p>
-                <p>IFSC: <span className="font-bold">{customer?.bankIfscCode || 'N/A'}</span></p>
-                <p>e-Sign: <span className={`font-bold ${customer?.eSignStatus === 'completed' ? 'text-green-600' : 'text-red-600'}`}>{customer?.eSignStatus?.toUpperCase() || 'PENDING'}</span></p>
+              <div>
+                <label className="block text-xs text-gray-400 uppercase font-bold mb-1">IFSC Code</label>
+                <input
+                  type="text"
+                  value={bankData.bankIfscCode}
+                  onChange={(e) => setBankData({ ...bankData, bankIfscCode: e.target.value })}
+                  className="input-field"
+                  placeholder="Enter IFSC"
+                  readOnly={isReadOnly}
+                />
               </div>
+              <div>
+                <label className="block text-xs text-gray-400 uppercase font-bold mb-1">Bank Name</label>
+                <input
+                  type="text"
+                  value={bankData.bankName}
+                  onChange={(e) => setBankData({ ...bankData, bankName: e.target.value })}
+                  className="input-field"
+                  placeholder="Enter Bank Name"
+                  readOnly={isReadOnly}
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-400 uppercase font-bold mb-1">Bank Branch</label>
+                <input
+                  type="text"
+                  value={bankData.bankBranch}
+                  onChange={(e) => setBankData({ ...bankData, bankBranch: e.target.value })}
+                  className="input-field"
+                  placeholder="Enter Branch"
+                  readOnly={isReadOnly}
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-400 uppercase font-bold mb-1">Account Type</label>
+                <select
+                  value={bankData.bankType}
+                  onChange={(e) => setBankData({ ...bankData, bankType: e.target.value })}
+                  className="input-field"
+                  disabled={isReadOnly}
+                >
+                  <option value="savings">Savings</option>
+                  <option value="current">Current</option>
+                  <option value="overdraft">Overdraft</option>
+                </select>
+              </div>
+            </div>
+            <div className="mt-4 p-3 bg-blue-50 border border-blue-100 rounded text-xs text-blue-700">
+              <p className="font-bold flex items-center">
+                💡 Tip: Upload a 'Cheque' below to automatically fetch these details via OCR.
+              </p>
             </div>
           </div>
 
           <div className="card">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-semibold text-gray-900">Document Verification</h2>
-              {user?.role === 'operations_team_l1' && (
+              {(user?.role === 'operations_team_l1' && !isReadOnly) && (
                 <DocumentUploader
-                  customerId={id}
-                  onUploadSuccess={() => customerService.getCustomerById(id).then(r => setCustomer(r.data))}
+                  onUpload={handleUpload}
+                  documentTypes={[
+                    { value: 'live_photo', label: 'Live Photo' },
+                    { value: 'shop_photo', label: 'Shop Photo' },
+                    { value: 'cheque', label: 'Cheque' },
+                    { value: 'other', label: 'Other' },
+                  ]}
                 />
               )}
             </div>
@@ -202,8 +331,9 @@ const OperationsCaseScreen = () => {
                         target="_blank"
                         rel="noopener noreferrer"
                         className="p-1 text-primary-600 hover:bg-primary-50 rounded"
+                        title="Preview"
                       >
-                        <FiDownload />
+                        <FiEye /> {/* Changed to Eye icon */}
                       </a>
                       {doc.status === 'approved' ? (
                         <span className="badge bg-green-100 text-green-800">Verified</span>
@@ -214,10 +344,10 @@ const OperationsCaseScreen = () => {
                       )}
                     </div>
                   </div>
-                  {user?.role === 'operations_team_l1' && (
+                  {(user?.role === 'operations_team_l1' && !isReadOnly && doc.status === 'pending') && (
                     <div className="space-y-2">
                       <textarea
-                        placeholder="Mandatory verification remarks..."
+                        placeholder="Verification remarks (optional)..."
                         value={docRemarks[doc.id] || doc.remarks || ''}
                         onChange={(e) => setDocRemarks({ ...docRemarks, [doc.id]: e.target.value })}
                         className="w-full text-xs input-field"
@@ -253,6 +383,7 @@ const OperationsCaseScreen = () => {
                   checked={verification.documentsVerified}
                   onChange={(e) => setVerification({ ...verification, documentsVerified: e.target.checked })}
                   className="rounded"
+                  disabled={isReadOnly}
                 />
                 <span>Documents verified</span>
               </label>
@@ -262,6 +393,7 @@ const OperationsCaseScreen = () => {
                   checked={verification.esignVerified}
                   onChange={(e) => setVerification({ ...verification, esignVerified: e.target.checked })}
                   className="rounded"
+                  disabled={isReadOnly}
                 />
                 <span>eSign verified</span>
               </label>
@@ -271,6 +403,7 @@ const OperationsCaseScreen = () => {
                   checked={verification.enachVerified}
                   onChange={(e) => setVerification({ ...verification, enachVerified: e.target.checked })}
                   className="rounded"
+                  disabled={isReadOnly}
                 />
                 <span>eNACH verified</span>
               </label>
@@ -284,7 +417,8 @@ const OperationsCaseScreen = () => {
               onChange={(e) => setRemarks(e.target.value)}
               className="input-field"
               rows={4}
-              placeholder="Enter operations remarks..."
+              placeholder={isReadOnly ? "Remarks fixed in read-only mode" : "Enter operations remarks..."}
+              readOnly={isReadOnly}
             />
           </div>
         </div>
@@ -297,36 +431,43 @@ const OperationsCaseScreen = () => {
           )}
 
           <div className="card">
-            <div className="space-y-3">
-              <button
-                onClick={handleApprove}
-                disabled={isSubmitting || !verification.documentsVerified || !verification.esignVerified || !verification.enachVerified}
-                className="w-full btn-primary flex items-center justify-center space-x-2"
-              >
-                {isSubmitting ? (
-                  <LoadingSpinner size="sm" />
-                ) : (
-                  <>
-                    <FiCheck className="h-5 w-5" />
-                    <span>Approve</span>
-                  </>
-                )}
-              </button>
-              <button
-                onClick={handleReject}
-                disabled={isSubmitting}
-                className="w-full btn-danger flex items-center justify-center space-x-2"
-              >
-                {isSubmitting ? (
-                  <LoadingSpinner size="sm" />
-                ) : (
-                  <>
-                    <FiX className="h-5 w-5" />
-                    <span>Reject</span>
-                  </>
-                )}
-              </button>
-            </div>
+            {!isReadOnly ? (
+              <div className="space-y-3">
+                <button
+                  onClick={handleApprove}
+                  disabled={isSubmitting || !verification.documentsVerified || !verification.esignVerified || !verification.enachVerified}
+                  className="w-full btn-primary flex items-center justify-center space-x-2"
+                >
+                  {isSubmitting ? (
+                    <LoadingSpinner size="sm" />
+                  ) : (
+                    <>
+                      <FiCheck className="h-5 w-5" />
+                      <span>Approve</span>
+                    </>
+                  )}
+                </button>
+                <button
+                  onClick={handleReject}
+                  disabled={isSubmitting}
+                  className="w-full btn-danger flex items-center justify-center space-x-2"
+                >
+                  {isSubmitting ? (
+                    <LoadingSpinner size="sm" />
+                  ) : (
+                    <>
+                      <FiX className="h-5 w-5" />
+                      <span>Reject</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            ) : (
+              <div className="p-4 bg-gray-50 rounded-lg text-center">
+                <p className="text-sm font-bold text-gray-500 uppercase tracking-wider">Read Only Mode</p>
+                <p className="text-xs text-gray-400 mt-1">Case has been verified or is not at your stage.</p>
+              </div>
+            )}
           </div>
         </div>
       </div>

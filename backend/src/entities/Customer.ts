@@ -70,6 +70,9 @@ export class Customer {
   @Column({ type: 'text', nullable: true })
   rejectionReason: string;
 
+  @Column({ type: 'text', nullable: true })
+  pushedTo: string; // Comma-separated list of entities (Credit Team, Kite, etc.)
+
   @Column({ type: 'boolean', default: false })
   kycVerified: boolean;
 
@@ -90,6 +93,9 @@ export class Customer {
 
   @Column({ type: 'varchar', length: 255, nullable: true })
   bankBranch: string;
+
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  bankType: string;
 
   @Column({ type: 'enum', enum: ['pending', 'completed'], default: 'pending' })
   eNachStatus: string;

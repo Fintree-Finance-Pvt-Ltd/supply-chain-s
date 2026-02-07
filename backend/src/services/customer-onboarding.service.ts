@@ -1,3 +1,4 @@
+import { In } from 'typeorm';
 import { AppDataSource } from '../config/database';
 import { Customer } from '../entities/Customer';
 import { CaseWorkflow } from '../entities/CaseWorkflow';
@@ -58,6 +59,7 @@ export class CustomerOnboardingService {
     previousStatus: string;
     changedBy: number;
     remarks?: string;
+    sanctionData?: any;
   }) {
     const history = this.historyRepository.create({
       ...data,
@@ -65,6 +67,7 @@ export class CustomerOnboardingService {
       previousStatus: data.previousStatus,
       changedBy: data.changedBy,
       remarks: data.remarks,
+      ...(data.sanctionData || {})
     });
     return await this.historyRepository.save(history);
   }
@@ -105,7 +108,7 @@ export class CustomerOnboardingService {
     return { customer: savedCustomer, workflow: savedWorkflow };
   }
 
-  async submitCustomer(customerId: number, userId: number, remarks: string) {
+  async submitCustomer(customerId: number, userId: number, remarks: string, pushedTo?: string) {
     const customer = await this.customerRepository.findOne({ where: { id: customerId } });
     if (!customer) throw new Error('Customer not found');
 
@@ -118,8 +121,11 @@ export class CustomerOnboardingService {
     workflow.remarks = remarks;
     await this.workflowRepository.save(workflow);
 
-    // Sync customer status
-    await this.customerRepository.update(customerId, { status: 'submitted' as any });
+    // Sync customer status and pushedTo
+    const updateData: any = { status: 'submitted' };
+    if (pushedTo) updateData.pushedTo = pushedTo;
+
+    await this.customerRepository.update(customerId, updateData);
 
     await this.logHistory({
       customerId,
@@ -127,7 +133,7 @@ export class CustomerOnboardingService {
       status: 'submitted',
       previousStatus,
       changedBy: userId,
-      remarks,
+      remarks: remarks + (pushedTo ? ` (Submitted to: ${pushedTo})` : ''),
     });
 
     return workflow;
@@ -185,6 +191,7 @@ export class CustomerOnboardingService {
       previousStatus,
       changedBy: userId,
       remarks,
+      sanctionData
     });
 
     return workflow;
@@ -248,6 +255,7 @@ export class CustomerOnboardingService {
       previousStatus,
       changedBy: userId,
       remarks,
+      sanctionData
     });
 
     return workflow;
@@ -288,6 +296,7 @@ export class CustomerOnboardingService {
       previousStatus,
       changedBy: userId,
       remarks,
+      sanctionData
     });
 
     return workflow;
@@ -329,6 +338,7 @@ export class CustomerOnboardingService {
       previousStatus,
       changedBy: userId,
       remarks,
+      sanctionData
     });
 
     return workflow;
@@ -428,34 +438,98 @@ export class CustomerOnboardingService {
     };
   }
 
-  async getCreditTeamPending(role: string) {
+  async getCreditTeamPending(role: string, userId?: number) {
     const r = role.toUpperCase();
     const statusFilter = r === 'CREDIT_TEAM_L2' ? 'credit_l1_approved' : 'submitted';
-    const workflows = await this.workflowRepository.find({
+
+    // Pending cases
+    const pendingWorkflows = await this.workflowRepository.find({
       where: { workflowType: 'CUSTOMER_ONBOARDING', currentStatus: statusFilter as any },
       relations: ['customer'],
     });
-    return workflows;
+
+    // Handled cases (read-only)
+    let handledWorkflows: any[] = [];
+    if (userId) {
+      const history = await this.historyRepository.find({
+        where: { changedBy: userId },
+        relations: ['customer', 'caseWorkflow'],
+      });
+      const handledIds = Array.from(new Set(history.map(h => h.caseWorkflowId).filter(Boolean)));
+
+      handledWorkflows = await this.workflowRepository.find({
+        where: { id: handledIds.length > 0 ? In(handledIds) : -1 },
+        relations: ['customer'],
+      });
+
+      // Filter out those already in pending
+      const pendingIds = pendingWorkflows.map(w => w.id);
+      handledWorkflows = handledWorkflows.filter(w => !pendingIds.includes(w.id));
+    }
+
+    return { pending: pendingWorkflows, handled: handledWorkflows };
   }
 
-  async getExecutivePending(role: string) {
+  async getExecutivePending(role: string, userId?: number) {
     const r = role.toUpperCase();
     const statusFilter = r === 'MD' ? 'ceo_approved' : 'credit_l2_approved';
-    const workflows = await this.workflowRepository.find({
+
+    // Pending cases
+    const pendingWorkflows = await this.workflowRepository.find({
       where: { workflowType: 'CUSTOMER_ONBOARDING', currentStatus: statusFilter as any },
       relations: ['customer'],
     });
-    return workflows;
+
+    // Handled cases
+    let handledWorkflows: any[] = [];
+    if (userId) {
+      const history = await this.historyRepository.find({
+        where: { changedBy: userId },
+        relations: ['customer', 'caseWorkflow'],
+      });
+      const handledIds = Array.from(new Set(history.map(h => h.caseWorkflowId).filter(Boolean)));
+
+      handledWorkflows = await this.workflowRepository.find({
+        where: { id: handledIds.length > 0 ? In(handledIds) : -1 },
+        relations: ['customer'],
+      });
+
+      const pendingIds = pendingWorkflows.map(w => w.id);
+      handledWorkflows = handledWorkflows.filter(w => !pendingIds.includes(w.id));
+    }
+
+    return { pending: pendingWorkflows, handled: handledWorkflows };
   }
 
-  async getOperationsPending(role: string) {
+  async getOperationsPending(role: string, userId?: number) {
     const r = role.toUpperCase();
     const statusFilter = r === 'OPERATIONS_HEAD' ? 'ops_l1_approved' : 'ops_l1_review';
-    const workflows = await this.workflowRepository.find({
+
+    // Pending cases
+    const pendingWorkflows = await this.workflowRepository.find({
       where: { workflowType: 'CUSTOMER_ONBOARDING', currentStatus: statusFilter as any },
       relations: ['customer'],
     });
-    return workflows;
+
+    // Handled cases
+    let handledWorkflows: any[] = [];
+    if (userId) {
+      const history = await this.historyRepository.find({
+        where: { changedBy: userId },
+        relations: ['customer', 'caseWorkflow'],
+      });
+      const handledIds = Array.from(new Set(history.map(h => h.caseWorkflowId).filter(Boolean)));
+
+      handledWorkflows = await this.workflowRepository.find({
+        where: { id: handledIds.length > 0 ? In(handledIds) : -1 },
+        relations: ['customer'],
+      });
+
+      const pendingIds = pendingWorkflows.map(w => w.id);
+      handledWorkflows = handledWorkflows.filter(w => !pendingIds.includes(w.id));
+    }
+
+    return { pending: pendingWorkflows, handled: handledWorkflows };
   }
 
   async updateBankDetails(customerId: number, data: any) {
@@ -468,6 +542,7 @@ export class CustomerOnboardingService {
     if (bankIfscCode) customer.bankIfscCode = bankIfscCode;
     if (bankName) customer.bankName = bankName;
     if (bankBranch) customer.bankBranch = bankBranch;
+    if (data.bankType) customer.bankType = data.bankType;
     if (eNachStatus) customer.eNachStatus = eNachStatus;
     if (eSignStatus) customer.eSignStatus = eSignStatus;
 
