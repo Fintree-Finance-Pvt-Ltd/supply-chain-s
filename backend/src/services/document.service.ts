@@ -25,6 +25,7 @@ export class DocumentService {
     issueDate?: Date;
     expiryDate?: Date;
     remarks?: string;
+    rmRemarks?: string;
   }): Promise<Document> {
     // Verify customer exists
     const customer = await this.customerRepository.findOne({
@@ -83,6 +84,8 @@ export class DocumentService {
       issueDate?: Date;
       expiryDate?: Date;
       remarks?: string;
+      rmRemarks?: string;
+      documentType?: string;
     }
   ): Promise<Document> {
     const document = await this.documentRepository.findOne({ where: { id } });
@@ -94,6 +97,8 @@ export class DocumentService {
     if (data.issueDate !== undefined) document.issueDate = data.issueDate;
     if (data.expiryDate !== undefined) document.expiryDate = data.expiryDate;
     if (data.remarks !== undefined) document.remarks = data.remarks;
+    if (data.rmRemarks !== undefined) document.rmRemarks = data.rmRemarks;
+    if (data.documentType !== undefined) document.documentType = data.documentType;
 
     return await this.documentRepository.save(document);
   }

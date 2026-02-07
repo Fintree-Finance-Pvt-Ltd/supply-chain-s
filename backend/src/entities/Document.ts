@@ -68,6 +68,9 @@ export class Document {
   @Column({ type: 'text', nullable: true })
   remarks: string;
 
+  @Column({ type: 'text', nullable: true })
+  rmRemarks: string;
+
   @CreateDateColumn()
   createdAt: Date;
 

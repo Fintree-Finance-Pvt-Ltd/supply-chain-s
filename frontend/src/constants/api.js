@@ -61,6 +61,8 @@ export const API_ENDPOINTS = {
   WORKFLOW_CUSTOMER_OPS_SUBMIT: (id) => `/workflows/customers/${id}/ops-submit`,
   WORKFLOW_CUSTOMER_OPS_L1: (id) => `/workflows/customers/${id}/ops-l1`,
   WORKFLOW_CUSTOMER_OPS_HEAD: (id) => `/workflows/customers/${id}/ops-head`,
+  WORKFLOW_CUSTOMER_BANK_DETAILS: (id) => `/workflows/customers/${id}/bank-details`,
+  WORKFLOW_DOCUMENT_UPDATE: (id) => `/workflows/documents/${id}`,
 
   // Supplier Workflow
   WORKFLOW_SUPPLIER_CREATE: '/workflows/suppliers/create',

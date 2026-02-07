@@ -142,14 +142,17 @@ router.patch('/customers/:customerId/bank-details', checkRole(['relationship_man
 router.post('/customers/:customerId/credit-l1', checkRole(['credit_team_l1']), async (req: Request, res: Response) => {
   try {
     const { customerId } = req.params;
-    const { approved, remarks } = req.body;
+    const { approved, remarks, sanctionAmount, tenure, interestRate, conditions } = req.body;
     const user = (req as any).user;
+
+    const sanctionData = sanctionAmount ? { sanctionAmount, tenure, interestRate, conditions } : undefined;
 
     const workflow = await customerOnboardingService.creditL1Approve(
       parseInt(customerId),
       user.id,
       remarks || '',
       approved,
+      sanctionData
     );
 
     res.json({
@@ -172,10 +175,10 @@ router.post('/customers/:customerId/credit-l1', checkRole(['credit_team_l1']), a
 router.post('/customers/:customerId/credit-l2', checkRole(['credit_team_l2']), async (req: Request, res: Response) => {
   try {
     const { customerId } = req.params;
-    const { approved, remarks, sanctionAmount, tenure, interestRate } = req.body;
+    const { approved, remarks, sanctionAmount, tenure, interestRate, conditions } = req.body;
     const user = (req as any).user;
 
-    const sanctionData = sanctionAmount ? { sanctionAmount, tenure, interestRate } : undefined;
+    const sanctionData = sanctionAmount ? { sanctionAmount, tenure, interestRate, conditions } : undefined;
 
     const workflow = await customerOnboardingService.creditL2Approve(
       parseInt(customerId),
@@ -205,10 +208,10 @@ router.post('/customers/:customerId/credit-l2', checkRole(['credit_team_l2']), a
 router.post('/customers/:customerId/ceo-approve', checkRole(['ceo']), async (req: Request, res: Response) => {
   try {
     const { customerId } = req.params;
-    const { approved, remarks, sanctionAmount, tenure, interestRate } = req.body;
+    const { approved, remarks, sanctionAmount, tenure, interestRate, conditions } = req.body;
     const user = (req as any).user;
 
-    const sanctionData = sanctionAmount ? { sanctionAmount, tenure, interestRate } : undefined;
+    const sanctionData = sanctionAmount ? { sanctionAmount, tenure, interestRate, conditions } : undefined;
 
     const workflow = await customerOnboardingService.ceoApprove(
       parseInt(customerId),
@@ -238,10 +241,10 @@ router.post('/customers/:customerId/ceo-approve', checkRole(['ceo']), async (req
 router.post('/customers/:customerId/md-approve', checkRole(['md']), async (req: Request, res: Response) => {
   try {
     const { customerId } = req.params;
-    const { approved, remarks, sanctionAmount, tenure, interestRate } = req.body;
+    const { approved, remarks, sanctionAmount, tenure, interestRate, conditions } = req.body;
     const user = (req as any).user;
 
-    const sanctionData = sanctionAmount ? { sanctionAmount, tenure, interestRate } : undefined;
+    const sanctionData = sanctionAmount ? { sanctionAmount, tenure, interestRate, conditions } : undefined;
 
     const workflow = await customerOnboardingService.mdApprove(
       parseInt(customerId),
@@ -312,6 +315,31 @@ router.post('/documents/:documentId/verify', checkRole(['relationship_manager', 
 
     res.json({
       success: true,
+      data: document,
+    });
+  } catch (error: any) {
+    res.status(400).json({
+      success: false,
+      message: error.message,
+    });
+  }
+});
+
+/**
+ * PATCH /api/workflows/documents/:documentId
+ * Update document metadata (type, remarks, etc.)
+ */
+router.patch('/documents/:documentId', checkRole(['relationship_manager', 'credit_team_l1', 'credit_team_l2', 'operations_team_l1', 'operations_head']), async (req: Request, res: Response) => {
+  try {
+    const { documentId } = req.params;
+    const data = req.body;
+
+    const documentService = new DocumentService();
+    const document = await documentService.updateMetadata(parseInt(documentId), data);
+
+    res.json({
+      success: true,
+      message: 'Document updated successfully',
       data: document,
     });
   } catch (error: any) {

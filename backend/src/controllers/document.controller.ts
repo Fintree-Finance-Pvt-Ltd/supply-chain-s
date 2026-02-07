@@ -30,12 +30,13 @@ export class DocumentController {
       console.log('Raw Body:', req.body);
       console.log('File:', req.file ? req.file.originalname : 'None');
 
-      const { customerId, documentType, applicantType, applicantIndex, coApplicantId, issueDate, expiryDate, remarks } = req.body;
+      const { customerId, documentType, applicantType, applicantIndex, coApplicantId, issueDate, expiryDate, remarks, rmRemarks } = req.body;
 
       // Robust parsing
       const parsedIssueDate = (issueDate && typeof issueDate === 'string' && issueDate.trim() !== '') ? new Date(issueDate) : undefined;
       const parsedExpiryDate = (expiryDate && typeof expiryDate === 'string' && expiryDate.trim() !== '') ? new Date(expiryDate) : undefined;
       const parsedRemarks = (remarks && typeof remarks === 'string' && remarks.trim() !== '') ? remarks : undefined;
+      const parsedRmRemarks = (rmRemarks && typeof rmRemarks === 'string' && rmRemarks.trim() !== '') ? rmRemarks : undefined;
 
       if (!customerId || !documentType) {
         res.status(400).json({
@@ -59,6 +60,7 @@ export class DocumentController {
         issueDate: parsedIssueDate,
         expiryDate: parsedExpiryDate,
         remarks: parsedRemarks,
+        rmRemarks: parsedRmRemarks,
       });
 
       res.status(201).json({
@@ -77,7 +79,7 @@ export class DocumentController {
   updateMetadata = async (req: Request, res: Response): Promise<void> => {
     try {
       const { id } = req.params;
-      const { issueDate, expiryDate, remarks } = req.body;
+      const { issueDate, expiryDate, remarks, rmRemarks, documentType } = req.body;
 
       const parsedIssueDate = (issueDate && typeof issueDate === 'string' && issueDate.trim() !== '') ? new Date(issueDate) : undefined;
       const parsedExpiryDate = (expiryDate && typeof expiryDate === 'string' && expiryDate.trim() !== '') ? new Date(expiryDate) : undefined;
@@ -86,7 +88,9 @@ export class DocumentController {
       const document = await this.documentService.updateMetadata(Number(id), {
         issueDate: parsedIssueDate,
         expiryDate: parsedExpiryDate,
-        remarks: parsedRemarks
+        remarks: parsedRemarks,
+        rmRemarks: rmRemarks,
+        documentType: documentType
       });
 
       res.json({

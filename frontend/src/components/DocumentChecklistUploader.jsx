@@ -60,7 +60,7 @@ const DocumentChecklistUploader = ({
                 // Clear meta for this item after successful upload
                 handleMetaChange(checklistItem.key, 'issueDate', '')
                 handleMetaChange(checklistItem.key, 'expiryDate', '')
-                handleMetaChange(checklistItem.key, 'remarks', '')
+                handleMetaChange(checklistItem.key, 'rmRemarks', '')
                 alert('Document uploaded successfully')
             }
         } catch (error) {
@@ -125,7 +125,7 @@ const DocumentChecklistUploader = ({
                     const uploaded = isDocumentUploaded(item.documentType)
                     const uploadedDocs = getUploadedDocs(item.documentType)
                     const isUploading = uploadingKey === item.key
-                    const meta = docMeta[item.key] || { issueDate: '', expiryDate: '', remarks: '' }
+                    const meta = docMeta[item.key] || { issueDate: '', expiryDate: '', rmRemarks: '' }
 
                     return (
                         <div
@@ -176,16 +176,49 @@ const DocumentChecklistUploader = ({
                                                                 </button>
                                                             </div>
                                                         </div>
-                                                        {(doc.issueDate || doc.expiryDate || doc.remarks) && (
-                                                            <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-gray-500 border-t pt-2">
+                                                        {/* Show RM Remarks and allow editing if not verified */}
+                                                        <div className="mt-2 text-xs border-t pt-2">
+                                                            <div className="flex items-center justify-between mb-1">
+                                                                <span className="font-bold text-gray-500 uppercase tracking-tight">RM Remarks:</span>
+                                                                {doc.status !== 'approved' && (
+                                                                    <button
+                                                                        onClick={async () => {
+                                                                            const newRemarks = prompt('Update RM Remarks:', doc.rmRemarks || '')
+                                                                            if (newRemarks !== null) {
+                                                                                try {
+                                                                                    await documentService.updateDocumentMetadata(doc.id, { rmRemarks: newRemarks })
+                                                                                    alert('Remarks updated')
+                                                                                    // Trigger refresh from parent
+                                                                                    if (onDocumentUploaded) onDocumentUploaded(doc)
+                                                                                } catch (e) {
+                                                                                    alert('Failed to update remarks')
+                                                                                }
+                                                                            }
+                                                                        }}
+                                                                        className="text-primary-600 hover:underline"
+                                                                    >
+                                                                        Edit
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                            <p className="text-gray-600 italic">
+                                                                {doc.rmRemarks || 'No remarks provided'}
+                                                            </p>
+                                                        </div>
+
+                                                        {doc.remarks && (
+                                                            <div className="mt-2 text-xs text-blue-600 bg-blue-50 p-1 rounded border border-blue-100">
+                                                                <span className="font-bold uppercase tracking-tight">Credit/Ops Remark:</span> {doc.remarks}
+                                                            </div>
+                                                        )}
+
+                                                        {(doc.issueDate || doc.expiryDate) && (
+                                                            <div className="mt-2 grid grid-cols-2 gap-2 text-[10px] text-gray-400 border-t pt-2">
                                                                 {doc.issueDate && (
-                                                                    <div><span className="font-semibold">Issue:</span> {new Date(doc.issueDate).toLocaleDateString()}</div>
+                                                                    <div><span className="font-semibold uppercase">Issue:</span> {new Date(doc.issueDate).toLocaleDateString()}</div>
                                                                 )}
                                                                 {doc.expiryDate && (
-                                                                    <div><span className="font-semibold">Expiry:</span> {new Date(doc.expiryDate).toLocaleDateString()}</div>
-                                                                )}
-                                                                {doc.remarks && (
-                                                                    <div className="col-span-2"><span className="font-semibold">Remarks:</span> {doc.remarks}</div>
+                                                                    <div><span className="font-semibold uppercase">Expiry:</span> {new Date(doc.expiryDate).toLocaleDateString()}</div>
                                                                 )}
                                                             </div>
                                                         )}
@@ -254,8 +287,8 @@ const DocumentChecklistUploader = ({
                                         <input
                                             type="text"
                                             placeholder="Add notes about this document..."
-                                            value={meta.remarks || ''}
-                                            onChange={(e) => handleMetaChange(item.key, 'remarks', e.target.value)}
+                                            value={meta.rmRemarks || ''}
+                                            onChange={(e) => handleMetaChange(item.key, 'rmRemarks', e.target.value)}
                                             className="w-full text-sm border-gray-200 rounded-lg focus:ring-primary-500 focus:border-primary-500 bg-white transition-all hover:border-gray-300"
                                         />
                                     </div>

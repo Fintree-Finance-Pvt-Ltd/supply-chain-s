@@ -15,6 +15,9 @@ export const documentService = {
       formData.append('issueDate', meta.issueDate || '')
       formData.append('expiryDate', meta.expiryDate || '')
       formData.append('remarks', meta.remarks || '')
+      if (meta.rmRemarks) {
+        formData.append('rmRemarks', meta.rmRemarks)
+      }
 
       formData.append('file', file)
 

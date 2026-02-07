@@ -74,6 +74,7 @@ export class CustomerService {
       relations: [
         'rm',
         'documents',
+        'documents.uploadedByUser',
         'kycDetails',
         'creditSanctions',
         'postSanctions',

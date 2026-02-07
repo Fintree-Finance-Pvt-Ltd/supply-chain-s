@@ -5,13 +5,15 @@ export const workflowService = {
     // Customer Onboarding
     createCustomer: (data) => api.post(API_ENDPOINTS.WORKFLOW_CUSTOMER_CREATE, data),
     submitCustomer: (id, remarks) => api.post(API_ENDPOINTS.WORKFLOW_CUSTOMER_SUBMIT(id), { remarks }),
-    approveCreditL1: (id, approved, remarks) => api.post(API_ENDPOINTS.WORKFLOW_CUSTOMER_CREDIT_L1(id), { approved, remarks }),
-    approveCreditL2: (id, approved, remarks) => api.post(API_ENDPOINTS.WORKFLOW_CUSTOMER_CREDIT_L2(id), { approved, remarks }),
-    approveCEO: (id, approved, remarks) => api.post(API_ENDPOINTS.WORKFLOW_CUSTOMER_CEO(id), { approved, remarks }),
-    approveMD: (id, approved, remarks) => api.post(API_ENDPOINTS.WORKFLOW_CUSTOMER_MD(id), { approved, remarks }),
+    approveCreditL1: (id, approved, remarks, sanctionData) => api.post(API_ENDPOINTS.WORKFLOW_CUSTOMER_CREDIT_L1(id), { approved, remarks, ...sanctionData }),
+    approveCreditL2: (id, approved, remarks, sanctionData) => api.post(API_ENDPOINTS.WORKFLOW_CUSTOMER_CREDIT_L2(id), { approved, remarks, ...sanctionData }),
+    approveCEO: (id, approved, remarks, sanctionData) => api.post(API_ENDPOINTS.WORKFLOW_CUSTOMER_CEO(id), { approved, remarks, ...sanctionData }),
+    approveMD: (id, approved, remarks, sanctionData) => api.post(API_ENDPOINTS.WORKFLOW_CUSTOMER_MD(id), { approved, remarks, ...sanctionData }),
     submitToOperations: (id, remarks) => api.post(API_ENDPOINTS.WORKFLOW_CUSTOMER_OPS_SUBMIT(id), { remarks }),
     approveOpsL1: (id, approved, remarks) => api.post(API_ENDPOINTS.WORKFLOW_CUSTOMER_OPS_L1(id), { approved, remarks }),
     approveOpsHead: (id, remarks) => api.post(API_ENDPOINTS.WORKFLOW_CUSTOMER_OPS_HEAD(id), { remarks }),
+    updateBankDetails: (id, data) => api.patch(API_ENDPOINTS.WORKFLOW_CUSTOMER_BANK_DETAILS(id), data),
+    updateDocumentMetadata: (id, data) => api.patch(API_ENDPOINTS.WORKFLOW_DOCUMENT_UPDATE(id), data),
 
     // Supplier Onboarding
     createSupplier: (data) => api.post(API_ENDPOINTS.WORKFLOW_SUPPLIER_CREATE, data),

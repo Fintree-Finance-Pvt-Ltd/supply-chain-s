@@ -133,7 +133,10 @@ export class CustomerOnboardingService {
     return workflow;
   }
 
-  async creditL1Approve(customerId: number, userId: number, remarks: string, approved: boolean) {
+  async creditL1Approve(customerId: number, userId: number, remarks: string, approved: boolean, sanctionData?: any) {
+    const customer = await this.customerRepository.findOne({ where: { id: customerId } });
+    if (!customer) throw new Error('Customer not found');
+
     const workflow = await this.getOrCreateWorkflow(customerId);
     if (workflow.currentStatus.toLowerCase() !== 'submitted') throw new Error('Cannot approve: Pending at Credit Team L1');
 
@@ -143,6 +146,34 @@ export class CustomerOnboardingService {
     if (!approved) workflow.isRejected = true;
     workflow.remarks = remarks;
     await this.workflowRepository.save(workflow);
+
+    if (approved && sanctionData) {
+      // Save or update sanction limit
+      let sanction = await this.sanctionRepository.findOne({ where: { customerId } });
+      if (!sanction) {
+        const newSanction = this.sanctionRepository.create({
+          customerId,
+          creditOfficerId: userId,
+          ...sanctionData,
+          status: 'pending' // Pending full approval
+        });
+        await this.sanctionRepository.save(newSanction);
+      } else {
+        await this.sanctionRepository.update(sanction.id, {
+          ...sanctionData,
+          creditOfficerId: userId
+        });
+      }
+
+      // Record history
+      await this.sanctionHistoryRepository.save(this.sanctionHistoryRepository.create({
+        customerId,
+        changedByUserId: userId,
+        changedByRole: 'CREDIT_L1',
+        remarks,
+        ...sanctionData
+      }));
+    }
 
     // Sync customer status
     await this.customerRepository.update(customerId, { status: workflow.currentStatus as any });

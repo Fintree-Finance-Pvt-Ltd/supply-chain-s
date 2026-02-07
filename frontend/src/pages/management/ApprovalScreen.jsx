@@ -130,6 +130,14 @@ const ApprovalScreen = () => {
     comments: action.remarks,
   }))
 
+  const isCreditDoc = (doc) => {
+    const role = doc.uploadedByUser?.defaultRole?.toLowerCase() || ''
+    return role.includes('credit')
+  }
+
+  const role = user?.role?.toLowerCase() || ''
+  const visibleDocuments = customer.documents?.filter(doc => isCreditDoc(doc)) || []
+
   return (
     <div className="space-y-6">
       <div>
@@ -144,51 +152,45 @@ const ApprovalScreen = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
-          <div className="card">
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">Case Summary</h2>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-sm text-gray-600">Customer Name</p>
-                <p className="font-medium">{customer?.customerName || 'N/A'}</p>
+          {/* Only show RM data for context if not strictly forbidden by "show only Credit data" */}
+          {/* But user specifically asked "display only data filled by Credit L1/L2" */}
+          {(role !== 'ceo' && role !== 'md') && (
+            <>
+              <div className="card">
+                <h2 className="text-xl font-semibold text-gray-900 mb-4">Case Summary</h2>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm text-gray-600">Customer Name</p>
+                    <p className="font-medium">{customer?.customerName || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Customer Code</p>
+                    <p className="font-medium">{customer?.customerCode || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">RM Name</p>
+                    <p className="font-medium">{customer?.rm?.name || 'N/A'}</p>
+                  </div>
+                </div>
               </div>
-              <div>
-                <p className="text-sm text-gray-600">Customer Code</p>
-                <p className="font-medium">{customer?.customerCode || 'N/A'}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">Contact Number</p>
-                <p className="font-medium">{customer?.contactNumber || 'N/A'}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">Email Address</p>
-                <p className="font-medium">{customer?.email || 'N/A'}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">RM Name</p>
-                <p className="font-medium">{customer?.rm?.name || 'N/A'}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">Industry</p>
-                <p className="font-medium">{customer?.industryType || 'N/A'}</p>
-              </div>
-            </div>
-          </div>
 
-          <div className="card">
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">Onboarding Details</h2>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-sm text-gray-600">Annual Turnover</p>
-                <p className="font-medium">{customer?.annualTurnover || 'N/A'}</p>
+              <div className="card">
+                <h2 className="text-xl font-semibold text-gray-900 mb-4">Onboarding Details</h2>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm text-gray-600">Annual Turnover</p>
+                    <p className="font-medium">{customer?.annualTurnover || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Address</p>
+                    <p className="font-medium">{customer?.address || 'N/A'}</p>
+                  </div>
+                </div>
               </div>
-              <div>
-                <p className="text-sm text-gray-600">Address</p>
-                <p className="font-medium">{customer?.address || 'N/A'}</p>
-              </div>
-            </div>
-          </div>
+            </>
+          )}
 
-          <div className="card">
+          <div className="card border-l-4 border-primary-500">
             <h2 className="text-xl font-semibold text-gray-900 mb-4">Sanction Details (Review & Revise)</h2>
             <div className="grid grid-cols-3 gap-4">
               <div>
@@ -220,6 +222,37 @@ const ApprovalScreen = () => {
                 />
               </div>
             </div>
+          </div>
+
+          <div className="card">
+            <h2 className="text-xl font-semibold text-gray-900 mb-4">Credit Uploaded Documents</h2>
+            {visibleDocuments.length > 0 ? (
+              <div className="space-y-2">
+                {visibleDocuments.map(doc => (
+                  <div key={doc.id} className="flex items-center justify-between p-3 bg-gray-50 rounded border border-gray-100">
+                    <div className="flex items-center space-x-3">
+                      <div className="p-2 bg-white rounded shadow-sm">
+                        <FiCheck className="text-green-500" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium">{doc.fileName}</p>
+                        <p className="text-[10px] text-gray-400 uppercase font-bold">{doc.documentType}</p>
+                      </div>
+                    </div>
+                    <a
+                      href={`${import.meta.env.VITE_API_BASE_URL}/documents/download/${doc.id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-primary-600 hover:underline text-xs"
+                    >
+                      View
+                    </a>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-gray-500 italic">No credit-uploaded documents visible.</p>
+            )}
           </div>
 
           <div className="card">
