@@ -2,7 +2,12 @@ import { Navigate } from 'react-router-dom'
 import { useSelector } from 'react-redux'
 
 const ProtectedRoute = ({ children, allowedRoles = [] }) => {
-  const { isAuthenticated, user } = useSelector((state) => state.auth)
+  const { isAuthenticated, user, isLoading  } = useSelector((state) => state.auth)
+
+  // Show loading state while checking authentication
+  if (isLoading) {
+    return null   // or loading spinner
+  }
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />
