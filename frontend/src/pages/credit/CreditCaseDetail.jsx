@@ -162,7 +162,13 @@ const CreditCaseDetail = () => {
     }
   }
 
-  // ...
+  const [previewedDocs, setPreviewedDocs] = useState(new Set())
+
+  const handlePreview = (doc) => {
+    setPreviewedDocs(prev => new Set(prev).add(doc.id))
+    const fileUrl = `${import.meta.env.VITE_API_BASE_URL}/documents/download/${doc.id}`
+    window.open(fileUrl, '_blank')
+  }
 
   if (isLoading) {
     return (
@@ -195,9 +201,10 @@ const CreditCaseDetail = () => {
     )
   }
 
+  const allDocsPreviewed = currentCase.documents?.every(doc => previewedDocs.has(doc.id)) || true
+
   return (
     <div className="space-y-6">
-      {/* ... header ... */}
       <div>
         <button
           onClick={() => navigate('/credit/dashboard')}
@@ -210,8 +217,6 @@ const CreditCaseDetail = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
-          {/* Customer Info Card */}
-          {/* Customer Info Card */}
           <CustomerFullDetails customer={currentCase} />
 
           <div className="card">
@@ -236,7 +241,14 @@ const CreditCaseDetail = () => {
                       <div className="flex items-center space-x-3">
                         <FiFileText className="h-5 w-5 text-gray-500" />
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-gray-900 truncate">{doc.fileName}</p>
+                          <div className="flex items-center space-x-2">
+                            <p className="text-sm font-medium text-gray-900 truncate max-w-[200px]">{doc.fileName}</p>
+                            {doc.applicantType === 'co-applicant' ? (
+                              <span className="text-[9px] bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded-full font-bold">CO-APP {doc.applicantIndex || ''}</span>
+                            ) : (
+                              <span className="text-[9px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded-full font-bold">APPLICANT</span>
+                            )}
+                          </div>
                           {!readOnly && (user?.role === 'credit_team_l1' || user?.role === 'credit_team_l2') ? (
                             <select
                               value={doc.documentType}
@@ -256,27 +268,35 @@ const CreditCaseDetail = () => {
                         </div>
                       </div>
                       <div className="flex items-center space-x-2">
-                        {/* Changed from Download to Preview */}
-                        <a
-                          href={`${import.meta.env.VITE_API_BASE_URL}/documents/download/${doc.id}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="p-1 text-primary-600 hover:bg-primary-50 rounded"
+                        <button
+                          onClick={() => handlePreview(doc)}
+                          className={`p-1 ${previewedDocs.has(doc.id) ? 'text-green-600' : 'text-primary-600'} hover:bg-primary-50 rounded flex items-center space-x-1`}
                           title="Preview"
                         >
-                          <FiEye className="h-4 w-4" /> {/* Changed icon */}
-                        </a>
+                          <FiEye className="h-4 w-4" />
+                          {previewedDocs.has(doc.id) && <span className="text-[10px] font-bold">VIEWED</span>}
+                        </button>
                         <StatusBadge status={doc.status} />
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
+                    {/* Metadata View (Issue/Expiry) */}
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mt-2">
                       <div>
-                        <p className="text-[10px] text-gray-400 uppercase font-bold mb-1">RM Remarks</p>
-                        <p className="text-xs text-gray-600 bg-white p-2 rounded border border-gray-100 min-h-[30px]">
-                          {doc.rmRemarks || 'No remarks from RM'}
-                        </p>
+                        <p className="text-[10px] text-gray-400 uppercase font-bold">Issue Date</p>
+                        <p className="text-xs text-gray-700">{doc.issueDate ? formatDate(doc.issueDate) : 'N/A'}</p>
                       </div>
+                      <div>
+                        <p className="text-[10px] text-gray-400 uppercase font-bold">Expiry Date</p>
+                        <p className="text-xs text-gray-700">{doc.expiryDate ? formatDate(doc.expiryDate) : 'N/A'}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-gray-400 uppercase font-bold">RM Remarks</p>
+                        <p className="text-xs text-gray-700 truncate" title={doc.rmRemarks}>{doc.rmRemarks || 'N/A'}</p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
                       <div>
                         <p className="text-[10px] text-gray-400 uppercase font-bold mb-1">Credit Remarks</p>
                         <textarea
@@ -291,13 +311,15 @@ const CreditCaseDetail = () => {
                     </div>
 
                     {!readOnly && (user?.role === 'credit_team_l1' || user?.role === 'credit_team_l2') && doc.status === 'pending' && (
-                      <div className="flex space-x-2 mt-2">
+                      <div className="flex space-x-2 mt-4">
                         <button
                           onClick={() => handleVerifyDocument(doc.id, 'approved')}
-                          className="flex-1 py-1 px-2 text-xs bg-green-600 text-white rounded hover:bg-green-700 flex items-center justify-center space-x-1"
+                          disabled={!previewedDocs.has(doc.id)}
+                          className={`flex-1 py-1 px-2 text-xs text-white rounded flex items-center justify-center space-x-1 ${!previewedDocs.has(doc.id) ? 'bg-gray-400 cursor-not-allowed' : 'bg-green-600 hover:bg-green-700'}`}
+                          title={!previewedDocs.has(doc.id) ? "Preview document before internal approval" : ""}
                         >
                           <FiCheck className="h-3 w-3" />
-                          <span>Approve Doc</span>
+                          <span>{previewedDocs.has(doc.id) ? 'Approve Doc' : 'Preview to Approve'}</span>
                         </button>
                         <button
                           onClick={() => handleVerifyDocument(doc.id, 'rejected')}
@@ -316,7 +338,6 @@ const CreditCaseDetail = () => {
             )}
           </div>
 
-
           <div className="card">
             <h2 className="text-xl font-semibold text-gray-900 mb-4">Internal Remarks</h2>
             <textarea
@@ -332,13 +353,10 @@ const CreditCaseDetail = () => {
 
         <div className="space-y-6">
           <div className="card">
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">Sanction Limit</h2>
+            <h2 className="text-xl font-semibold text-gray-900 mb-4">Sanction Details</h2>
             <div className="space-y-4">
-              {/* Inputs disabled if readOnly */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Sanction Amount (₹)
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Sanction Amount (₹)</label>
                 <input
                   type="number"
                   value={sanctionData.sanctionAmount}
@@ -348,63 +366,44 @@ const CreditCaseDetail = () => {
                   disabled={readOnly}
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Tenure (months)
-                </label>
+              <div className="hidden">
+                <label className="block text-sm font-medium text-gray-700 mb-2">Tenor (Months)</label>
                 <input
                   type="number"
                   value={sanctionData.tenure}
                   onChange={(e) => setSanctionData({ ...sanctionData, tenure: e.target.value })}
                   className="input-field"
-                  placeholder="Enter tenure"
+                  placeholder="Enter tenor"
                   disabled={readOnly}
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Interest Rate (%)
-                </label>
+              <div className="hidden">
+                <label className="block text-sm font-medium text-gray-700 mb-2">Proposed ROI (%)</label>
                 <input
                   type="number"
                   step="0.01"
                   value={sanctionData.interestRate}
                   onChange={(e) => setSanctionData({ ...sanctionData, interestRate: e.target.value })}
                   className="input-field"
-                  placeholder="Enter interest rate"
+                  placeholder="Enter ROI"
                   disabled={readOnly}
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Penal Charges (%)
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={sanctionData.penalCharges}
-                  onChange={(e) => setSanctionData({ ...sanctionData, penalCharges: e.target.value })}
-                  className="input-field"
-                  placeholder="Enter penal charges"
-                  disabled={readOnly}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Processing Fees (%)
-                </label>
+              <div className="hidden">
+                <label className="block text-sm font-medium text-gray-700 mb-2">Processing Fee (%)</label>
                 <input
                   type="number"
                   step="0.01"
                   value={sanctionData.processingFees}
                   onChange={(e) => setSanctionData({ ...sanctionData, processingFees: e.target.value })}
                   className="input-field"
-                  placeholder="Enter processing fees"
+                  placeholder="Enter fee"
                   disabled={readOnly}
                 />
               </div>
             </div>
           </div>
+
           {formattedApprovals.length > 0 && (
             <div className="card">
               <ApprovalTimeline approvals={formattedApprovals} />
@@ -413,15 +412,16 @@ const CreditCaseDetail = () => {
 
           <button
             onClick={handleSaveSanction}
-            disabled={isSubmitting || readOnly}
-            className={`w-full btn-primary flex items-center justify-center space-x-2 ${readOnly ? 'opacity-50 cursor-not-allowed' : ''}`}
+            disabled={isSubmitting || readOnly || (!allDocsPreviewed && currentCase.documents?.length > 0)}
+            className={`w-full btn-primary flex items-center justify-center space-x-2 ${(readOnly || (!allDocsPreviewed && currentCase.documents?.length > 0)) ? 'opacity-50 cursor-not-allowed' : ''}`}
+            title={(!allDocsPreviewed && currentCase.documents?.length > 0) ? "Please preview all documents before proceeding" : ""}
           >
             {isSubmitting ? (
               <LoadingSpinner size="sm" />
             ) : (
               <>
                 <FiCheck className="h-5 w-5" />
-                <span>Save & Submit for Approval</span>
+                <span>{(!allDocsPreviewed && currentCase.documents?.length > 0) ? 'Preview All Docs to Enable' : 'Save & Submit'}</span>
               </>
             )}
           </button>
@@ -432,4 +432,3 @@ const CreditCaseDetail = () => {
 }
 
 export default CreditCaseDetail
-

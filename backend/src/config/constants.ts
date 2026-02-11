@@ -20,6 +20,8 @@ export const CASE_STATUS = {
   CREDIT_L1_APPROVED: 'credit_l1_approved',
   CREDIT_L2_APPROVED: 'credit_l2_approved',
   CEO_APPROVED: 'ceo_approved',
+  MD_PENDING_TERMS: 'md_pending_terms',
+  MD_TERMS_SUBMITTED: 'md_terms_submitted',
   MD_APPROVED: 'md_approved',
   OPS_L1_REVIEW: 'ops_l1_review',
   OPS_L1_APPROVED: 'ops_l1_approved',

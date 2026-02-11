@@ -24,10 +24,30 @@ export class KycService {
         kycType: string;
         kycNumber: string;
     }): Promise<KycDetail> {
-        const kycEntry = this.kycRepository.create({
-            ...data,
-            verified: false,
-        });
+        // Try to find existing entry
+        const where: any = {
+            customerId: data.customerId,
+            applicantType: data.applicantType,
+            applicantIndex: data.applicantIndex,
+            kycType: data.kycType
+        };
+
+        if (data.coApplicantId) {
+            where.coApplicantId = data.coApplicantId;
+        }
+
+        let kycEntry = await this.kycRepository.findOne({ where });
+
+        if (kycEntry) {
+            kycEntry.kycNumber = data.kycNumber;
+            // Optionally update verified status if needed, but usually we'd keep it or reset it
+            // kycEntry.verified = false; 
+        } else {
+            kycEntry = this.kycRepository.create({
+                ...data,
+                verified: false,
+            });
+        }
 
         return await this.kycRepository.save(kycEntry);
     }

@@ -46,6 +46,18 @@ export class Customer {
   @Column({ type: 'varchar', length: 15, nullable: true, unique: true })
   gstNumber: string;
 
+  @Column({ type: 'varchar', length: 20, nullable: true })
+  companyMobile: string;
+
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  companyEmail: string;
+
+  @Column({ type: 'varchar', length: 20, nullable: true })
+  companyPan: string;
+
+  @Column({ type: 'varchar', length: 20, nullable: true })
+  pan: string;
+
   @Column({ type: 'varchar', length: 100, nullable: true })
   electricityBillNo: string;
 

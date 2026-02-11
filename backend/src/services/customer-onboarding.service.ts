@@ -43,7 +43,7 @@ export class CustomerOnboardingService {
       case 'credit_l2_approved': return 'CEO';
       case 'ceo_approved': return 'MD';
       case 'md_approved': return 'RM';
-      case 'ops_l1_review': return 'OPERATIONS_L1';
+      case 'ops_l1_review': return 'OPERATIONS_TEAM_L1';
       case 'ops_l1_approved': return 'OPERATIONS_HEAD';
       case 'completed': return 'None';
       default: return 'RM';
@@ -302,9 +302,51 @@ export class CustomerOnboardingService {
     return workflow;
   }
 
+  async rmSubmitToMD(customerId: number, rmId: number, remarks: string, sanctionData?: any) {
+    const workflow = await this.getOrCreateWorkflow(customerId);
+    if (workflow.currentStatus.toLowerCase() !== 'md_pending_terms') throw new Error('Case must be MD pending terms before submitting back to MD');
+
+    const previousStatus = workflow.currentStatus;
+
+    if (sanctionData) {
+      await this.sanctionRepository.update({ customerId }, sanctionData);
+      // Record history
+      await this.sanctionHistoryRepository.save(this.sanctionHistoryRepository.create({
+        customerId,
+        changedByUserId: rmId,
+        changedByRole: 'RM',
+        remarks: remarks || 'Final terms submitted by RM',
+        ...sanctionData
+      }));
+    }
+
+    workflow.currentStatus = 'md_terms_submitted';
+    workflow.currentApproverRoleName = 'MD';
+    workflow.remarks = remarks;
+    await this.workflowRepository.save(workflow);
+
+    // Sync customer status
+    await this.customerRepository.update(customerId, { status: workflow.currentStatus as any });
+
+    await this.logHistory({
+      customerId,
+      caseWorkflowId: workflow.id,
+      status: workflow.currentStatus,
+      previousStatus,
+      changedBy: rmId,
+      remarks,
+      sanctionData
+    });
+
+    return workflow;
+  }
+
   async mdApprove(customerId: number, userId: number, remarks: string, approved: boolean, sanctionData?: any) {
     const workflow = await this.getOrCreateWorkflow(customerId);
-    if (workflow.currentStatus.toLowerCase() !== 'ceo_approved') throw new Error('Cannot approve: Pending at Managing Director');
+    const status = workflow.currentStatus.toLowerCase();
+    if (status !== 'ceo_approved' && status !== 'md_terms_submitted') {
+      throw new Error('Case not pending at MD for review or final terms');
+    }
 
     const previousStatus = workflow.currentStatus;
 
@@ -321,8 +363,13 @@ export class CustomerOnboardingService {
       }));
     }
 
-    workflow.currentStatus = approved ? 'md_approved' : 'rejected';
-    // After MD approval, it returns to RM bucket (RM role)
+    if (status === 'ceo_approved') {
+      workflow.currentStatus = approved ? 'md_pending_terms' : 'rejected';
+    } else {
+      workflow.currentStatus = approved ? 'md_approved' : 'rejected';
+    }
+
+    // After MD approval (either 1st or 2nd), it returns to RM bucket (RM role)
     workflow.currentApproverRoleName = 'RM';
     if (!approved) workflow.isRejected = true;
     workflow.remarks = remarks;
@@ -350,7 +397,7 @@ export class CustomerOnboardingService {
 
     const previousStatus = workflow.currentStatus;
     workflow.currentStatus = 'ops_l1_review';
-    workflow.currentApproverRoleName = 'OPERATIONS_L1';
+    workflow.currentApproverRoleName = 'OPERATIONS_TEAM_L1';
     workflow.remarks = remarks;
     await this.workflowRepository.save(workflow);
 
@@ -427,11 +474,15 @@ export class CustomerOnboardingService {
   }
 
   async getRMDashboard(rmId: number) {
-    const customers = await this.customerRepository.find({ where: { rmId } });
+    const customers = await this.customerRepository.find({
+      where: { rmId },
+      relations: ['workflows']
+    });
+
     return {
       totalCustomers: customers?.length || 0,
       draft: customers?.filter((c) => (c.status as string).toLowerCase() === 'draft').length || 0,
-      submitted: customers?.filter((c) => (c.status as string).toLowerCase() === 'submitted').length || 0,
+      submitted: customers?.filter((c) => !['draft', 'completed', 'rejected'].includes((c.status as string).toLowerCase())).length || 0,
       approved: customers?.filter((c) => (c.status as string).toLowerCase() === 'completed').length || 0,
       rejected: customers?.filter((c) => c.rejectionReason !== null).length || 0,
       customers,
@@ -444,7 +495,11 @@ export class CustomerOnboardingService {
 
     // Pending cases
     const pendingWorkflows = await this.workflowRepository.find({
-      where: { workflowType: 'CUSTOMER_ONBOARDING', currentStatus: statusFilter as any },
+      where: {
+        workflowType: 'CUSTOMER_ONBOARDING',
+        currentStatus: statusFilter as any,
+        currentApproverRoleName: r
+      },
       relations: ['customer'],
     });
 
@@ -472,11 +527,15 @@ export class CustomerOnboardingService {
 
   async getExecutivePending(role: string, userId?: number) {
     const r = role.toUpperCase();
-    const statusFilter = r === 'MD' ? 'ceo_approved' : 'credit_l2_approved';
+    let statusFilter: any = r === 'MD' ? In(['ceo_approved', 'md_terms_submitted']) : 'credit_l2_approved';
 
     // Pending cases
     const pendingWorkflows = await this.workflowRepository.find({
-      where: { workflowType: 'CUSTOMER_ONBOARDING', currentStatus: statusFilter as any },
+      where: {
+        workflowType: 'CUSTOMER_ONBOARDING',
+        currentStatus: statusFilter,
+        currentApproverRoleName: r
+      },
       relations: ['customer'],
     });
 
@@ -507,7 +566,11 @@ export class CustomerOnboardingService {
 
     // Pending cases
     const pendingWorkflows = await this.workflowRepository.find({
-      where: { workflowType: 'CUSTOMER_ONBOARDING', currentStatus: statusFilter as any },
+      where: {
+        workflowType: 'CUSTOMER_ONBOARDING',
+        currentStatus: statusFilter as any,
+        currentApproverRoleName: r
+      },
       relations: ['customer'],
     });
 
@@ -536,7 +599,7 @@ export class CustomerOnboardingService {
     const customer = await this.customerRepository.findOne({ where: { id: customerId } });
     if (!customer) throw new Error('Customer not found');
 
-    const { bankAccountNo, bankIfscCode, bankName, bankBranch, eNachStatus, eSignStatus } = data;
+    const { bankAccountNo, bankIfscCode, bankName, bankBranch, eNachStatus, eSignStatus, sanctionData } = data;
 
     if (bankAccountNo) customer.bankAccountNo = bankAccountNo;
     if (bankIfscCode) customer.bankIfscCode = bankIfscCode;
@@ -545,6 +608,10 @@ export class CustomerOnboardingService {
     if (data.bankType) customer.bankType = data.bankType;
     if (eNachStatus) customer.eNachStatus = eNachStatus;
     if (eSignStatus) customer.eSignStatus = eSignStatus;
+
+    if (sanctionData) {
+      await this.sanctionRepository.update({ customerId }, sanctionData);
+    }
 
     return await this.customerRepository.save(customer);
   }

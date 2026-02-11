@@ -13,6 +13,12 @@ const CoApplicantForm = ({
 }) => {
     const [isOcrProcessing, setIsOcrProcessing] = useState(false)
     const [isVerifying, setIsVerifying] = useState(false)
+    const [verified, setVerified] = useState({
+        pan: false,
+        mobile: false,
+        email: false,
+        aadhaar: false
+    })
 
     const handlePanImageUpload = async (e) => {
         const file = e.target.files[0]
@@ -53,6 +59,7 @@ const CoApplicantForm = ({
         try {
             const result = await kycService.verifyPan(kycData.panNumber)
             if (result.success) {
+                setVerified(prev => ({ ...prev, pan: true }))
                 alert(result.message || 'PAN verified successfully')
             }
         } catch (error) {
@@ -72,6 +79,7 @@ const CoApplicantForm = ({
         try {
             const result = await kycService.verifyMobile(data.mobile)
             if (result.success) {
+                setVerified(prev => ({ ...prev, mobile: true }))
                 alert(result.message || 'Mobile verified successfully')
             }
         } catch (error) {
@@ -91,6 +99,7 @@ const CoApplicantForm = ({
         try {
             const result = await kycService.verifyEmail(data.email)
             if (result.success) {
+                setVerified(prev => ({ ...prev, email: true }))
                 alert(result.message || 'Email verified successfully')
             }
         } catch (error) {
@@ -105,7 +114,8 @@ const CoApplicantForm = ({
         try {
             const result = await kycService.initiateAadhaarKyc(data.aadhaarNumber || '')
             if (result.success) {
-                alert(result.message || 'Aadhaar KYC initiated successfully')
+                setVerified(prev => ({ ...prev, aadhaar: true }))
+                alert(result.message || 'Aadhaar KYC completed successfully')
             }
         } catch (error) {
             alert('Aadhaar KYC failed: ' + error.message)
@@ -165,14 +175,11 @@ const CoApplicantForm = ({
                             type="button"
                             onClick={handleMobileVerify}
                             disabled={isVerifying}
-                            className="btn-secondary whitespace-nowrap"
+                            className={`btn-${verified.mobile ? 'success' : 'secondary'} whitespace-nowrap`}
                         >
-                            {isVerifying ? 'Verifying...' : 'Verify'}
+                            {verified.mobile ? '✓ Verified' : (isVerifying ? '...' : 'Verify')}
                         </button>
                     </div>
-                    {errors.mobile && (
-                        <p className="text-red-500 text-xs mt-1">{errors.mobile}</p>
-                    )}
                 </div>
 
                 {/* Email */}
@@ -192,9 +199,9 @@ const CoApplicantForm = ({
                             type="button"
                             onClick={handleEmailVerify}
                             disabled={isVerifying}
-                            className="btn-secondary whitespace-nowrap"
+                            className={`btn-${verified.email ? 'success' : 'secondary'} whitespace-nowrap`}
                         >
-                            {isVerifying ? 'Verifying...' : 'Verify'}
+                            {verified.email ? '✓ Verified' : (isVerifying ? '...' : 'Verify')}
                         </button>
                     </div>
                 </div>
@@ -245,9 +252,9 @@ const CoApplicantForm = ({
                             type="button"
                             onClick={handlePanVerify}
                             disabled={isVerifying || !kycData.panNumber}
-                            className="btn-secondary whitespace-nowrap"
+                            className={`btn-${verified.pan ? 'success' : 'secondary'} whitespace-nowrap`}
                         >
-                            {isVerifying ? 'Verifying...' : 'Verify'}
+                            {verified.pan ? '✓ Verified' : (isVerifying ? '...' : 'Verify')}
                         </button>
                     </div>
                     {kycData.panNumber && (
@@ -263,14 +270,10 @@ const CoApplicantForm = ({
                     <button
                         type="button"
                         onClick={handleAadhaarKyc}
-                        disabled={isVerifying}
-                        className="btn-primary"
+                        className={`btn-${verified.aadhaar ? 'success' : 'primary'} w-full`}
                     >
-                        {isVerifying ? 'Processing...' : 'Complete Aadhaar KYC'}
+                        {verified.aadhaar ? '✓ Aadhaar Verified' : (isVerifying ? 'Processing...' : 'Complete Aadhaar KYC')}
                     </button>
-                    <p className="text-xs text-gray-500 mt-1">
-                        This will initiate Aadhaar-based e-KYC verification
-                    </p>
                 </div>
             </div>
         </div>

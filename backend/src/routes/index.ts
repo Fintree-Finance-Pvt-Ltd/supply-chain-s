@@ -10,6 +10,8 @@ import documentRoutes from './document.routes';
 import operationsRoutes from './operations.routes';
 import coApplicantRoutes from './coApplicant.routes';
 import workflowRoutes from './workflow.routes';
+import debugRoutes from './debug.routes';
+import migrationRoutes from './migration.routes';
 
 const router = Router();
 
@@ -24,6 +26,8 @@ router.use('/documents', documentRoutes);
 router.use('/operations', operationsRoutes);
 router.use('/co-applicants', coApplicantRoutes);
 router.use('/workflows', workflowRoutes);
+router.use('/debug', debugRoutes);
+router.use('/migration', migrationRoutes);
 
 export default router;
 

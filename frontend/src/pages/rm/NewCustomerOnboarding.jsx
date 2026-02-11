@@ -28,16 +28,33 @@ const NewCustomerOnboarding = () => {
   const [formData, setFormData] = useState({
     companyType: '',
     companyName: '',
-    customerName: '',
-    mobileNumber: '',
-    email: '',
-    gstNumber: '',
-    electricityBillNumber: '',
+    companyMobile: '',
+    companyEmail: '',
+    companyPan: '',
+    companyGst: '',
+
+    // Applicant details
+    applicantName: '',
+    applicantMobile: '',
+    applicantEmail: '',
+    applicantPan: '',
+
+    // Verification states
+    verified: {
+      companyMobile: false,
+      companyEmail: false,
+      companyPan: false,
+      companyGst: false,
+      applicantMobile: false,
+      applicantEmail: false,
+      applicantPan: false,
+      aadhaarKyc: false
+    },
+    remarks: ''
   })
 
-  // KYC data for applicant
+  // KYC data for applicant (to be merged into formData or handled separately)
   const [applicantKyc, setApplicantKyc] = useState({
-    panNumber: '',
     panFile: null,
     gstFile: null,
   })
@@ -78,15 +95,24 @@ const NewCustomerOnboarding = () => {
 
   useEffect(() => {
     if (currentCase && caseId) {
-      setFormData({
+      setFormData(prev => ({
+        ...prev,
         companyType: currentCase.companyType || '',
         companyName: currentCase.companyName || '',
-        customerName: currentCase.name || currentCase.customerName || '',
-        mobileNumber: currentCase.mobile || currentCase.mobileNumber || '',
-        email: currentCase.email || '',
-        gstNumber: currentCase.gstNumber || '',
-        electricityBillNumber: currentCase.electricityBillNo || currentCase.electricityBillNumber || '',
-      })
+        companyMobile: currentCase.companyMobile || '',
+        companyEmail: currentCase.companyEmail || '',
+        companyPan: currentCase.companyPan || '',
+        companyGst: currentCase.gstNumber || '',
+        applicantName: currentCase.name || '',
+        applicantMobile: currentCase.mobile || '',
+        applicantEmail: currentCase.email || '',
+        applicantPan: currentCase.pan || '',
+        remarks: currentCase.remarks || '',
+        verified: {
+          ...prev.verified,
+          aadhaarKyc: !!currentCase.aadhaarVerified || false
+        }
+      }))
       setDocuments(currentCase.documents || [])
 
       // Load KYC data if it exists
@@ -153,6 +179,55 @@ const NewCustomerOnboarding = () => {
   // Get document checklist based on company type
   const documentChecklist = getDocumentChecklist(formData.companyType)
 
+  const handleVerify = async (field, value, type = 'company') => {
+    if (!value) {
+      alert(`Please enter ${field} first`)
+      return
+    }
+
+    setIsVerifying(true)
+    try {
+      let result;
+      if (field.toLowerCase().includes('mobile')) result = await kycService.verifyMobile(value)
+      else if (field.toLowerCase().includes('email')) result = await kycService.verifyEmail(value)
+      else if (field.toLowerCase().includes('pan')) result = await kycService.verifyPan(value)
+      else if (field.toLowerCase().includes('gst')) result = await kycService.verifyGst(value)
+
+      if (result?.success) {
+        setFormData(prev => ({
+          ...prev,
+          verified: {
+            ...prev.verified,
+            [field]: true
+          }
+        }))
+        alert(`${field} verified successfully`)
+      }
+    } catch (error) {
+      alert(`${field} verification failed: ` + error.message)
+    } finally {
+      setIsVerifying(false)
+    }
+  }
+
+  const handleAadhaarKyc = async () => {
+    setIsVerifying(true)
+    try {
+      const result = await kycService.initiateAadhaarKyc('')
+      if (result.success) {
+        setFormData(prev => ({
+          ...prev,
+          verified: { ...prev.verified, aadhaarKyc: true }
+        }))
+        alert(result.message || 'Aadhaar KYC completed successfully')
+      }
+    } catch (error) {
+      alert('Aadhaar KYC failed: ' + error.message)
+    } finally {
+      setIsVerifying(false)
+    }
+  }
+
   // PAN Upload and OCR for applicant
   const handleApplicantPanUpload = async (e) => {
     const file = e.target.files[0]
@@ -162,14 +237,14 @@ const NewCustomerOnboarding = () => {
     try {
       const result = await kycService.runPanOcr(file)
       if (result.success) {
-        setApplicantKyc(prev => ({
-          ...prev,
-          panNumber: result.data.panNumber,
-          panFile: file,
-        }))
         setFormData(prev => ({
           ...prev,
-          customerName: result.data.name,
+          applicantPan: result.data.panNumber,
+          applicantName: result.data.name,
+        }))
+        setApplicantKyc(prev => ({
+          ...prev,
+          panFile: file,
         }))
         alert(`OCR completed! PAN: ${result.data.panNumber}, Name: ${result.data.name}`)
       }
@@ -182,11 +257,8 @@ const NewCustomerOnboarding = () => {
 
   const handleCameraCapture = (file) => {
     if (cameraTarget === 'applicant-pan') {
-      // Simulate event object for handleApplicantPanUpload
       handleApplicantPanUpload({ target: { files: [file] } });
     } else if (cameraTarget === 'live-photo') {
-      // Handle specific live photo document upload
-      // We'll add it to the documents list directly
       const doc = {
         id: Date.now(),
         fileName: 'live_photo_capture.jpg',
@@ -197,8 +269,6 @@ const NewCustomerOnboarding = () => {
         createdAt: new Date().toISOString()
       };
       setDocuments(prev => [...prev, doc]);
-
-      // Also upload immediately to server if Case ID exists
       if (caseId) {
         documentService.uploadDocument(caseId, file, 'live_photo')
           .then(() => alert('Live photo uploaded successfully'))
@@ -209,104 +279,32 @@ const NewCustomerOnboarding = () => {
     setCameraTarget(null);
   };
 
-  const handlePanVerify = async () => {
-    if (!applicantKyc.panNumber) {
-      alert('Please upload PAN first')
-      return
-    }
-
-    setIsVerifying(true)
-    try {
-      const result = await kycService.verifyPan(applicantKyc.panNumber)
-      if (result.success) {
-        alert(result.message || 'PAN verified successfully')
-      }
-    } catch (error) {
-      alert('PAN verification failed: ' + error.message)
-    } finally {
-      setIsVerifying(false)
-    }
-  }
-
   const handleGstUpload = async (e) => {
     const file = e.target.files[0]
     if (!file) return
-
-    setApplicantKyc(prev => ({
-      ...prev,
-      gstFile: file,
-    }))
+    setApplicantKyc(prev => ({ ...prev, gstFile: file }))
     alert('GST document uploaded')
   }
 
-  const handleGstVerify = async () => {
-    if (!formData.gstNumber) {
-      alert('Please enter GST number first')
-      return
-    }
+  const handleCompanyPanUpload = async (e) => {
+    const file = e.target.files[0]
+    if (!file) return
 
-    setIsVerifying(true)
+    setIsOcrProcessing(true)
     try {
-      const result = await kycService.verifyGst(formData.gstNumber)
+      const result = await kycService.runPanOcr(file)
       if (result.success) {
-        alert(result.message || 'GST verified successfully')
+        setFormData(prev => ({
+          ...prev,
+          companyPan: result.data.panNumber,
+          companyName: prev.companyType === COMPANY_TYPES.PROPRIETORSHIP ? result.data.name : prev.companyName
+        }))
+        alert(`OCR completed! Company PAN: ${result.data.panNumber}`)
       }
     } catch (error) {
-      alert('GST verification failed: ' + error.message)
+      alert('OCR failed: ' + error.message)
     } finally {
-      setIsVerifying(false)
-    }
-  }
-
-  const handleMobileVerify = async () => {
-    if (!formData.mobileNumber) {
-      alert('Please enter mobile number first')
-      return
-    }
-
-    setIsVerifying(true)
-    try {
-      const result = await kycService.verifyMobile(formData.mobileNumber)
-      if (result.success) {
-        alert(result.message || 'Mobile verified successfully')
-      }
-    } catch (error) {
-      alert('Mobile verification failed: ' + error.message)
-    } finally {
-      setIsVerifying(false)
-    }
-  }
-
-  const handleEmailVerify = async () => {
-    if (!formData.email) {
-      alert('Please enter email first')
-      return
-    }
-
-    setIsVerifying(true)
-    try {
-      const result = await kycService.verifyEmail(formData.email)
-      if (result.success) {
-        alert(result.message || 'Email verified successfully')
-      }
-    } catch (error) {
-      alert('Email verification failed: ' + error.message)
-    } finally {
-      setIsVerifying(false)
-    }
-  }
-
-  const handleAadhaarKyc = async () => {
-    setIsVerifying(true)
-    try {
-      const result = await kycService.initiateAadhaarKyc('')
-      if (result.success) {
-        alert(result.message || 'Aadhaar KYC initiated successfully')
-      }
-    } catch (error) {
-      alert('Aadhaar KYC failed: ' + error.message)
-    } finally {
-      setIsVerifying(false)
+      setIsOcrProcessing(false)
     }
   }
 
@@ -401,23 +399,45 @@ const NewCustomerOnboarding = () => {
       newErrors.companyType = 'Company type is required'
     }
 
-    if (!formData.customerName.trim()) {
-      newErrors.customerName = 'Entity name is required'
+    // Company Name (Mandatory for non-proprietorship)
+    if (formData.companyType && formData.companyType !== COMPANY_TYPES.PROPRIETORSHIP) {
+      if (!formData.companyName?.trim()) {
+        newErrors.companyName = 'Company name is required'
+      }
     }
 
-    if (!validateMobile(formData.mobileNumber)) {
-      newErrors.mobileNumber = 'Valid mobile number is required'
+    // Company Contact Details
+    if (!validateMobile(formData.companyMobile)) {
+      newErrors.companyMobile = 'Valid company mobile is required'
     }
 
-    if (formData.email && !validateEmail(formData.email)) {
-      newErrors.email = 'Valid email is required'
+    if (!validateEmail(formData.companyEmail)) {
+      newErrors.companyEmail = 'Valid company email is required'
     }
 
-    if (!applicantKyc.panNumber) {
-      newErrors.pan = 'PAN is required - please upload PAN card'
+    // Applicant details
+    if (!formData.applicantName?.trim()) {
+      newErrors.applicantName = 'Applicant name is required'
     }
 
-    // Mandatory female co-applicant rule
+    if (!validateMobile(formData.applicantMobile)) {
+      newErrors.applicantMobile = 'Valid applicant mobile is required'
+    }
+
+    if (!validateEmail(formData.applicantEmail)) {
+      newErrors.applicantEmail = 'Valid applicant email is required'
+    }
+
+    if (!applicantKyc.panNumber && !formData.applicantPan) {
+      newErrors.pan = 'Applicant PAN is required'
+    }
+
+    // Aadhaar KYC is mandatory
+    if (!formData.verified.aadhaarKyc) {
+      newErrors.aadhaar = 'Aadhaar KYC is mandatory'
+    }
+
+    // Mandatory female co-applicant rule if needed
     if (formData.companyType === COMPANY_TYPES.PROPRIETORSHIP || formData.companyType === COMPANY_TYPES.PVT_LTD) {
       const hasFemaleCoApp = coApplicants.some(ca => ca.gender === 'Female')
       if (!hasFemaleCoApp) {
@@ -427,14 +447,14 @@ const NewCustomerOnboarding = () => {
 
     // Co-applicant field validation
     coApplicants.forEach((ca, index) => {
-      if (!ca.name) newErrors[`coApp_${index}_name`] = 'Name is required'
+      if (!ca.name?.trim()) newErrors[`coApp_${index}_name`] = 'Name is required'
       if (!validateMobile(ca.mobile)) newErrors[`coApp_${index}_mobile`] = 'Valid mobile is required'
       if (!ca.gender) newErrors[`coApp_${index}_gender`] = 'Gender is required'
     })
 
     // Contact Person field validation
     contactPersons.forEach((cp, index) => {
-      if (!cp.name) newErrors[`cp_${index}_name`] = 'Name is required'
+      if (!cp.name?.trim()) newErrors[`cp_${index}_name`] = 'Name is required'
       if (!validateMobile(cp.mobile)) newErrors[`cp_${index}_mobile`] = 'Valid mobile is required'
       if (cp.email && !validateEmail(cp.email)) newErrors[`cp_${index}_email`] = 'Valid email is required'
       if (!cp.gender) newErrors[`cp_${index}_gender`] = 'Gender is required'
@@ -443,7 +463,7 @@ const NewCustomerOnboarding = () => {
     // Address field validation
     addresses.forEach((addr, index) => {
       if (!addr.type) newErrors[`addr_${index}_type`] = 'Address type is required'
-      if (!addr.fullAddress) newErrors[`addr_${index}_address`] = 'Full address is required'
+      if (!addr.fullAddress?.trim()) newErrors[`addr_${index}_address`] = 'Full address is required'
       if (!addr.pincode || addr.pincode.length !== 6) newErrors[`addr_${index}_pincode`] = 'Valid 6-digit pincode is required'
       if (!addr.state) newErrors[`addr_${index}_state`] = 'State is required'
       if (!addr.city) newErrors[`addr_${index}_city`] = 'City is required'
@@ -470,6 +490,22 @@ const NewCustomerOnboarding = () => {
     return true
   }
 
+  const getCustomerData = () => {
+    return {
+      name: formData.applicantName,
+      mobile: formData.applicantMobile,
+      email: formData.applicantEmail,
+      companyType: formData.companyType,
+      companyName: formData.companyName || formData.applicantName,
+      companyMobile: formData.companyMobile,
+      companyEmail: formData.companyEmail,
+      companyPan: formData.companyPan,
+      gstNumber: formData.companyGst,
+      pan: formData.applicantPan,
+      remarks: formData.remarks,
+    }
+  }
+
   const handleSaveDraft = async () => {
     if (!validateBasicKycTab()) {
       setActiveTab('basic-kyc')
@@ -478,15 +514,8 @@ const NewCustomerOnboarding = () => {
 
     setIsSubmitting(true)
     try {
-      const customerData = {
-        name: formData.customerName,
-        mobile: formData.mobileNumber,
-        email: formData.email,
-        companyType: formData.companyType,
-        companyName: formData.companyName,
-        gstNumber: formData.gstNumber || null,
-        electricityBillNo: formData.electricityBillNumber || null,
-      }
+      const customerData = getCustomerData()
+
 
       let id = caseId
       if (caseId) {
@@ -516,12 +545,12 @@ const NewCustomerOnboarding = () => {
         }
       }
 
-      if (id && formData.gstNumber) {
+      if (id && formData.companyGst) {
         await kycService.createKyc(id, {
           applicantType: 'applicant',
           applicantIndex: 0,
           kycType: 'GST',
-          kycNumber: formData.gstNumber,
+          kycNumber: formData.companyGst,
         })
 
         if (applicantKyc.gstFile) {
@@ -628,15 +657,7 @@ const NewCustomerOnboarding = () => {
     setIsSubmitting(true)
     try {
       let id = caseId
-      const customerData = {
-        name: formData.customerName,
-        mobile: formData.mobileNumber,
-        email: formData.email,
-        companyType: formData.companyType,
-        companyName: formData.companyName,
-        gstNumber: formData.gstNumber || null,
-        electricityBillNo: formData.electricityBillNumber || null,
-      }
+      const customerData = getCustomerData()
 
       if (!id) {
         const newCase = await dispatch(createCase(customerData)).unwrap()
@@ -665,12 +686,12 @@ const NewCustomerOnboarding = () => {
         }
       }
 
-      if (formData.gstNumber) {
+      if (formData.companyGst) {
         await kycService.createKyc(id, {
           applicantType: 'applicant',
           applicantIndex: 0,
           kycType: 'GST',
-          kycNumber: formData.gstNumber,
+          kycNumber: formData.companyGst,
         })
 
         if (applicantKyc.gstFile) {
@@ -781,13 +802,7 @@ const NewCustomerOnboarding = () => {
       // 2. Initial Case Creation/Update
       let id = caseId
       const customerData = {
-        name: formData.customerName,
-        mobile: formData.mobileNumber,
-        email: formData.email,
-        companyType: formData.companyType,
-        companyName: formData.companyName,
-        gstNumber: formData.gstNumber || null,
-        electricityBillNo: formData.electricityBillNumber || null,
+        ...getCustomerData(),
         pushedTo: Object.keys(submissionTargets).filter(k => submissionTargets[k].selected).join(','),
       }
 
@@ -820,7 +835,13 @@ const NewCustomerOnboarding = () => {
   }
 
   const handleDocumentUploaded = (doc) => {
-    setDocuments([...documents, doc])
+    setDocuments(prev => {
+      const exists = prev.find(d => d.id === doc.id)
+      if (exists) {
+        return prev.map(d => d.id === doc.id ? doc : d)
+      }
+      return [...prev, doc]
+    })
   }
 
   const handleDocumentRemoved = (docId) => {
@@ -861,373 +882,406 @@ const NewCustomerOnboarding = () => {
       {/* Tab Content */}
       <div className="card space-y-6">
         {activeTab === 'basic-kyc' && (
-          <>
-            {/* Company Type - MANDATORY FIRST */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Company Type <span className="text-red-500">*</span>
-              </label>
-              <select
-                value={formData.companyType}
-                onChange={(e) => setFormData({ ...formData, companyType: e.target.value })}
-                className="input-field"
-              >
-                <option value="">Select company type</option>
-                {Object.values(COMPANY_TYPES).map((type) => (
-                  <option key={type} value={type}>{type}</option>
-                ))}
-              </select>
-              {errors.companyType && (
-                <p className="text-red-500 text-xs mt-1">{errors.companyType}</p>
-              )}
-            </div>
-
-            {/* Company Name - conditional */}
-            {formData.companyType && formData.companyType !== COMPANY_TYPES.PROPRIETORSHIP && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Company Name <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={formData.companyName}
-                  onChange={(e) => setFormData({ ...formData, companyName: e.target.value })}
-                  className="input-field"
-                  placeholder="Enter company name"
-                />
-              </div>
-            )}
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Entity Name */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Entity Name <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={formData.customerName}
-                  onChange={(e) => setFormData({ ...formData, customerName: e.target.value })}
-                  className="input-field"
-                  placeholder="Enter entity name"
-                />
-                {errors.customerName && (
-                  <p className="text-red-500 text-xs mt-1">{errors.customerName}</p>
-                )}
-              </div>
-
-              {/* Mobile Number */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Mobile Number <span className="text-red-500">*</span>
-                </label>
-                <div className="flex space-x-2">
-                  <input
-                    type="tel"
-                    value={formData.mobileNumber}
-                    onChange={(e) => setFormData({ ...formData, mobileNumber: e.target.value })}
-                    className="input-field flex-1"
-                    placeholder="Enter mobile number"
-                    maxLength={10}
-                  />
-                  <button
-                    type="button"
-                    onClick={handleMobileVerify}
-                    disabled={isVerifying}
-                    className="btn-secondary"
-                  >
-                    {isVerifying ? 'Verifying...' : 'Verify'}
-                  </button>
-                </div>
-                {errors.mobileNumber && (
-                  <p className="text-red-500 text-xs mt-1">{errors.mobileNumber}</p>
-                )}
-              </div>
-
-              {/* Email */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Email ID
-                </label>
-                <div className="flex space-x-2">
-                  <input
-                    type="email"
-                    value={formData.email}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    className="input-field flex-1"
-                    placeholder="Enter email address"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleEmailVerify}
-                    disabled={isVerifying}
-                    className="btn-secondary"
-                  >
-                    {isVerifying ? 'Verifying...' : 'Verify'}
-                  </button>
-                </div>
-                {errors.email && (
-                  <p className="text-red-500 text-xs mt-1">{errors.email}</p>
-                )}
-              </div>
-            </div>
-
-            {/* KYC Section */}
-            <div className="border-t border-gray-200 pt-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">KYC Documents</h3>
+          <div className="space-y-8">
+            {/* --- Section 1: Company Details --- */}
+            <div className="space-y-6">
+              <h3 className="text-xl font-bold text-gray-900 border-b pb-2">Company Details</h3>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* PAN Card */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    PAN Card <span className="text-red-500">*</span>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Company Type <span className="text-red-500">*</span>
                   </label>
-                  <div className="flex items-center space-x-2">
-                    <div className="flex-1 relative">
-                      <input
-                        type="file"
-                        accept="image/*,.pdf"
-                        onChange={handleApplicantPanUpload}
-                        className="input-field"
-                        disabled={isOcrProcessing}
-                      />
-                      {isOcrProcessing && (
-                        <div className="absolute right-2 top-2">
-                          <LoadingSpinner size="sm" />
-                        </div>
-                      )}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setCameraTarget('applicant-pan');
-                        setShowCamera(true);
-                      }}
-                      className="p-2 bg-gray-100 text-gray-600 rounded hover:bg-gray-200"
-                      title="Capture with Camera"
-                    >
-                      <FiCamera size={20} />
-                    </button>
-                  </div>
-                  {applicantKyc.panNumber && (
-                    <div className="mt-2 text-sm text-green-600 font-medium flex items-center">
-                      <span>PAN: {applicantKyc.panNumber}</span>
-                      <button
-                        type="button"
-                        onClick={handlePanVerify}
-                        disabled={isVerifying}
-                        className="ml-4 text-primary-600 hover:text-primary-700 underline text-xs"
-                      >
-                        {isVerifying ? 'Verifying...' : 'Verify Now'}
-                      </button>
-                    </div>
+                  <select
+                    value={formData.companyType}
+                    onChange={(e) => setFormData({ ...formData, companyType: e.target.value })}
+                    className="input-field"
+                  >
+                    <option value="">Select company type</option>
+                    {Object.values(COMPANY_TYPES).map((type) => (
+                      <option key={type} value={type}>{type}</option>
+                    ))}
+                  </select>
+                  {errors.companyType && (
+                    <p className="text-red-500 text-xs mt-1">{errors.companyType}</p>
                   )}
                 </div>
 
-                {/* Live Photo Capture (Optional Requirement) */}
+                {formData.companyType && formData.companyType !== COMPANY_TYPES.PROPRIETORSHIP && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Company Name <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.companyName}
+                      onChange={(e) => setFormData({ ...formData, companyName: e.target.value })}
+                      className="input-field"
+                      placeholder="Enter company name"
+                    />
+                  </div>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Company Mobile */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Live Photo (Selfie) <span className="text-gray-400 text-xs">(Optional)</span>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Company Mobile Number <span className="text-red-500">*</span>
                   </label>
-                  <div className="flex items-center space-x-4">
+                  <div className="flex space-x-2">
+                    <input
+                      type="tel"
+                      value={formData.companyMobile}
+                      onChange={(e) => setFormData({ ...formData, companyMobile: e.target.value })}
+                      className="input-field flex-1"
+                      placeholder="Enter mobile"
+                      maxLength={10}
+                    />
                     <button
                       type="button"
-                      onClick={() => {
-                        setCameraTarget('live-photo');
-                        setShowCamera(true);
-                      }}
-                      className="flex items-center space-x-2 px-4 py-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 border border-blue-200 font-medium transition-colors"
+                      onClick={() => handleVerify('companyMobile', formData.companyMobile)}
+                      className={`btn-${formData.verified.companyMobile ? 'success' : 'secondary'} whitespace-nowrap`}
                     >
-                      <FiCamera size={18} />
-                      <span>Capture Live Photo</span>
+                      {formData.verified.companyMobile ? '✓ Verified' : 'Verify'}
                     </button>
-                    {documents.some(d => d.documentType === 'live_photo') && (
-                      <span className="text-sm text-green-600 font-medium">
-                        ✓ Photo Captured
-                      </span>
-                    )}
+                  </div>
+                </div>
+
+                {/* Company Business Email */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Business Email ID <span className="text-red-500">*</span>
+                  </label>
+                  <div className="flex space-x-2">
+                    <input
+                      type="email"
+                      value={formData.companyEmail}
+                      onChange={(e) => setFormData({ ...formData, companyEmail: e.target.value })}
+                      className="input-field flex-1"
+                      placeholder="Enter business email"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleVerify('companyEmail', formData.companyEmail)}
+                      className={`btn-${formData.verified.companyEmail ? 'success' : 'secondary'} whitespace-nowrap`}
+                    >
+                      {formData.verified.companyEmail ? '✓ Verified' : 'Verify'}
+                    </button>
                   </div>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
-                {/* GST Upload */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Company PAN Upload */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    GST Upload
+                    Company PAN Card Upload <span className="text-red-500">*</span>
                   </label>
-                  <label className="cursor-pointer block">
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="file"
+                      accept="image/*,.pdf"
+                      onChange={handleCompanyPanUpload}
+                      className="input-field flex-1"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleVerify('companyPan', formData.companyPan)}
+                      className={`btn-${formData.verified.companyPan ? 'success' : 'secondary'} whitespace-nowrap`}
+                    >
+                      {formData.verified.companyPan ? '✓ Verified' : 'Verify'}
+                    </button>
+                  </div>
+                  {formData.companyPan && <p className="text-xs text-blue-600 mt-1">PAN: {formData.companyPan}</p>}
+                </div>
+
+                {/* GST Certificate Upload */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    GST Certificate Upload <span className="text-red-500">*</span>
+                  </label>
+                  <div className="flex items-center space-x-2">
                     <input
                       type="file"
                       accept="image/*,.pdf"
                       onChange={handleGstUpload}
-                      className="hidden"
-                    />
-                    <div className="input-field flex items-center justify-center space-x-2 border-dashed">
-                      <FiUpload className="h-4 w-4" />
-                      <span className="text-sm">
-                        {applicantKyc.gstFile ? `Uploaded: ${applicantKyc.gstFile.name}` : 'Upload GST Certificate'}
-                      </span>
-                    </div>
-                  </label>
-                </div>
-
-                {/* GST Number */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    GST Number
-                  </label>
-                  <div className="flex space-x-2">
-                    <input
-                      type="text"
-                      value={formData.gstNumber}
-                      onChange={(e) => setFormData({ ...formData, gstNumber: e.target.value.toUpperCase() })}
                       className="input-field flex-1"
-                      placeholder="Enter GST number"
-                      maxLength={15}
                     />
                     <button
                       type="button"
-                      onClick={handleGstVerify}
-                      disabled={isVerifying}
-                      className="btn-secondary"
+                      onClick={() => handleVerify('companyGst', formData.companyGst)}
+                      className={`btn-${formData.verified.companyGst ? 'success' : 'secondary'} whitespace-nowrap`}
+                      disabled={!formData.companyGst}
                     >
-                      {isVerifying ? 'Verifying...' : 'Verify'}
+                      {formData.verified.companyGst ? '✓ Verified' : 'Verify GST'}
+                    </button>
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="Enter GST Number"
+                    className="input-field mt-2"
+                    value={formData.companyGst}
+                    onChange={(e) => setFormData({ ...formData, companyGst: e.target.value.toUpperCase() })}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* --- Section 2: Applicant Details --- */}
+            <div className="space-y-6 border-t pt-6">
+              <h3 className="text-xl font-bold text-gray-900 border-b pb-2">Applicant Details</h3>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Applicant Name */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Applicant Name <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.applicantName}
+                    onChange={(e) => setFormData({ ...formData, applicantName: e.target.value })}
+                    className="input-field"
+                    placeholder="Enter applicant name"
+                  />
+                </div>
+
+                {/* Applicant Mobile */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Applicant Mobile Number <span className="text-red-500">*</span>
+                  </label>
+                  <div className="flex space-x-2">
+                    <input
+                      type="tel"
+                      value={formData.applicantMobile}
+                      onChange={(e) => setFormData({ ...formData, applicantMobile: e.target.value })}
+                      className="input-field flex-1"
+                      placeholder="Enter mobile"
+                      maxLength={10}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleVerify('applicantMobile', formData.applicantMobile)}
+                      className={`btn-${formData.verified.applicantMobile ? 'success' : 'secondary'} whitespace-nowrap`}
+                    >
+                      {formData.verified.applicantMobile ? '✓ Verified' : 'Verify'}
                     </button>
                   </div>
                 </div>
               </div>
 
-              {/* Aadhaar KYC */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Aadhaar KYC <span className="text-red-500">*</span>
-                </label>
-                <button
-                  type="button"
-                  onClick={handleAadhaarKyc}
-                  disabled={isVerifying}
-                  className="btn-primary"
-                >
-                  {isVerifying ? 'Processing...' : 'Complete Aadhaar KYC'}
-                </button>
-                <p className="text-xs text-gray-500 mt-1">
-                  This will initiate Aadhaar-based e-KYC verification
-                </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Applicant Email */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Applicant Email ID <span className="text-red-500">*</span>
+                  </label>
+                  <div className="flex space-x-2">
+                    <input
+                      type="email"
+                      value={formData.applicantEmail}
+                      onChange={(e) => setFormData({ ...formData, applicantEmail: e.target.value })}
+                      className="input-field flex-1"
+                      placeholder="Enter email"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleVerify('applicantEmail', formData.applicantEmail)}
+                      className={`btn-${formData.verified.applicantEmail ? 'success' : 'secondary'} whitespace-nowrap`}
+                    >
+                      {formData.verified.applicantEmail ? '✓ Verified' : 'Verify'}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Applicant PAN */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Applicant PAN upload <span className="text-red-500">*</span>
+                  </label>
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="file"
+                      accept="image/*,.pdf"
+                      onChange={handleApplicantPanUpload}
+                      className="input-field flex-1"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleVerify('applicantPan', formData.applicantPan)}
+                      className={`btn-${formData.verified.applicantPan ? 'success' : 'secondary'} whitespace-nowrap`}
+                    >
+                      {formData.verified.applicantPan ? '✓ Verified' : 'Verify'}
+                    </button>
+                  </div>
+                  {formData.applicantPan && <p className="text-xs text-blue-600 mt-1">PAN: {formData.applicantPan}</p>}
+                </div>
               </div>
 
-              {/* Co-Applicants Section */}
-              <div className="border-t border-gray-200 pt-6">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-semibold text-gray-900">Co-Applicants / Co-Borrowers</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Aadhaar KYC - MANDATORY */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Complete Aadhaar KYC <span className="text-red-500">*</span>
+                  </label>
                   <button
                     type="button"
-                    onClick={addCoApplicant}
-                    className="btn-secondary flex items-center space-x-2"
+                    onClick={handleAadhaarKyc}
+                    className={`btn-${formData.verified.aadhaarKyc ? 'success' : 'primary'} w-full`}
                   >
-                    <FiPlus className="h-4 w-4" />
-                    <span>Add Co-Applicant</span>
+                    {formData.verified.aadhaarKyc ? '✓ Aadhaar Verified' : 'Proceed with Aadhaar KYC'}
                   </button>
                 </div>
 
-                {coApplicants.length === 0 ? (
-                  <p className="text-gray-500 text-sm">No co-applicants added yet</p>
-                ) : (
-                  <div className="space-y-4">
-                    {coApplicants.map((coApp, index) => (
-                      <CoApplicantForm
-                        key={index}
-                        index={index}
-                        data={coApp}
-                        onChange={updateCoApplicant}
-                        onRemove={removeCoApplicant}
-                        onPanUpload={handleCoApplicantPanUpload}
-                        kycData={coApplicantKyc[index] || {}}
-                      />
-                    ))}
-                  </div>
-                )}
-                {errors.coApplicants && (
-                  <p className="text-red-500 text-sm mt-2 font-medium">{errors.coApplicants}</p>
-                )}
-              </div>
-
-              {/* Contact Persons Section */}
-              <div className="border-t border-gray-200 pt-6">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-semibold text-gray-900">Contact Person Details</h3>
+                {/* Live Photo Capture - OPTIONAL */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Live Photo Capture <span className="text-gray-400 font-normal">(Optional)</span>
+                  </label>
                   <button
                     type="button"
-                    onClick={addContactPerson}
-                    className="btn-secondary flex items-center space-x-2"
+                    onClick={() => {
+                      setCameraTarget('live-photo');
+                      setShowCamera(true);
+                    }}
+                    className="btn-secondary w-full flex items-center justify-center space-x-2"
                   >
-                    <FiPlus className="h-4 w-4" />
-                    <span>Add Contact Person</span>
+                    <FiCamera />
+                    <span>Take Live Photo</span>
                   </button>
+                  {documents.some(d => d.documentType === 'live_photo') && (
+                    <p className="text-xs text-green-600 mt-1">✓ Photo Captured</p>
+                  )}
                 </div>
-
-                {contactPersons.length === 0 ? (
-                  <p className="text-gray-500 text-sm">No contact persons added yet</p>
-                ) : (
-                  <div className="space-y-4">
-                    {contactPersons.map((cp, index) => (
-                      <ContactPersonForm
-                        key={index}
-                        index={index}
-                        data={cp}
-                        onChange={updateContactPerson}
-                        onRemove={removeContactPerson}
-                        errors={{
-                          name: errors[`cp_${index}_name`],
-                          mobile: errors[`cp_${index}_mobile`],
-                          email: errors[`cp_${index}_email`],
-                          gender: errors[`cp_${index}_gender`]
-                        }}
-                      />
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Address Details Section */}
-              <div className="border-t border-gray-200 pt-6">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-semibold text-gray-900">Address Details</h3>
-                  <button
-                    type="button"
-                    onClick={addAddress}
-                    className="btn-secondary flex items-center space-x-2"
-                  >
-                    <FiPlus className="h-4 w-4" />
-                    <span>Add Address Details</span>
-                  </button>
-                </div>
-
-                {addresses.length === 0 ? (
-                  <p className="text-gray-500 text-sm">No addresses added yet</p>
-                ) : (
-                  <div className="space-y-4">
-                    {addresses.map((addr, index) => (
-                      <AddressForm
-                        key={index}
-                        index={index}
-                        data={addr}
-                        onChange={updateAddress}
-                        onRemove={removeAddress}
-                        errors={{
-                          type: errors[`addr_${index}_type`],
-                          fullAddress: errors[`addr_${index}_address`],
-                          pincode: errors[`addr_${index}_pincode`],
-                          state: errors[`addr_${index}_state`],
-                          city: errors[`addr_${index}_city`]
-                        }}
-                      />
-                    ))}
-                  </div>
-                )}
               </div>
             </div>
-          </>
+
+            {/* --- Section 3: Co-Applicants / Co-Borrowers --- */}
+            <div className="border-t pt-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xl font-bold text-gray-900">Co-Applicants / Co-Borrowers</h3>
+                <button
+                  type="button"
+                  onClick={addCoApplicant}
+                  className="btn-secondary flex items-center space-x-2"
+                >
+                  <FiPlus className="h-4 w-4" />
+                  <span>Add Co-Applicant</span>
+                </button>
+              </div>
+
+              {coApplicants.length === 0 ? (
+                <p className="text-gray-500 text-sm italic">No co-applicants added yet</p>
+              ) : (
+                <div className="space-y-6">
+                  {coApplicants.map((coApp, index) => (
+                    <CoApplicantForm
+                      key={index}
+                      index={index}
+                      data={coApp}
+                      onChange={updateCoApplicant}
+                      onRemove={removeCoApplicant}
+                      onPanUpload={handleCoApplicantPanUpload}
+                      kycData={coApplicantKyc[index] || {}}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Contact Persons Section */}
+            <div className="border-t border-gray-200 pt-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-gray-900">Contact Person Details</h3>
+                <button
+                  type="button"
+                  onClick={addContactPerson}
+                  className="btn-secondary flex items-center space-x-2"
+                >
+                  <FiPlus className="h-4 w-4" />
+                  <span>Add Contact Person</span>
+                </button>
+              </div>
+
+              {contactPersons.length === 0 ? (
+                <p className="text-gray-500 text-sm">No contact persons added yet</p>
+              ) : (
+                <div className="space-y-4">
+                  {contactPersons.map((cp, index) => (
+                    <ContactPersonForm
+                      key={index}
+                      index={index}
+                      data={cp}
+                      onChange={updateContactPerson}
+                      onRemove={removeContactPerson}
+                      errors={{
+                        name: errors[`cp_${index}_name`],
+                        mobile: errors[`cp_${index}_mobile`],
+                        email: errors[`cp_${index}_email`],
+                        gender: errors[`cp_${index}_gender`]
+                      }}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Address Details Section */}
+            <div className="border-t border-gray-200 pt-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-gray-900">Address Details</h3>
+                <button
+                  type="button"
+                  onClick={addAddress}
+                  className="btn-secondary flex items-center space-x-2"
+                >
+                  <FiPlus className="h-4 w-4" />
+                  <span>Add Address Details</span>
+                </button>
+              </div>
+
+              {addresses.length === 0 ? (
+                <p className="text-gray-500 text-sm">No addresses added yet</p>
+              ) : (
+                <div className="space-y-4">
+                  {addresses.map((addr, index) => (
+                    <AddressForm
+                      key={index}
+                      index={index}
+                      data={addr}
+                      onChange={updateAddress}
+                      onRemove={removeAddress}
+                      errors={{
+                        type: errors[`addr_${index}_type`],
+                        fullAddress: errors[`addr_${index}_address`],
+                        pincode: errors[`addr_${index}_pincode`],
+                        state: errors[`addr_${index}_state`],
+                        city: errors[`addr_${index}_city`]
+                      }}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* RM Remarks */}
+            <div className="card mt-6">
+              <label className="block text-sm font-medium text-gray-700 mb-2 font-bold uppercase tracking-wider text-primary-600">
+                RM Remarks
+              </label>
+              <textarea
+                value={formData.remarks}
+                onChange={(e) => setFormData({ ...formData, remarks: e.target.value })}
+                className="input-field w-full"
+                rows={4}
+                placeholder="Add any general remarks for the review team..."
+              />
+              <p className="text-[10px] text-gray-400 mt-1 italic">Note: These remarks apply to the entire case.</p>
+            </div>
+          </div>
+
         )}
 
         {activeTab === 'documents' && (
@@ -1260,109 +1314,113 @@ const NewCustomerOnboarding = () => {
       </div>
 
       {/* Modal for Multi-Entity Submission */}
-      {showSubmitModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
-          <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6 space-y-6">
-            <div>
-              <h2 className="text-2xl font-bold text-gray-900">Push Case to Entities</h2>
-              <p className="text-sm text-gray-500 mt-1">Select one or more entities to submit this case.</p>
-            </div>
+      {
+        showSubmitModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
+            <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6 space-y-6">
+              <div>
+                <h2 className="text-2xl font-bold text-gray-900">Push Case to Entities</h2>
+                <p className="text-sm text-gray-500 mt-1">Select one or more entities to submit this case.</p>
+              </div>
 
-            <div className="space-y-4">
-              {Object.keys(submissionTargets)
-                .filter(target => target !== 'credit') // Hiding Credit Team option as requested
-                .map(target => (
-                  <div key={target} className="border border-gray-100 rounded-lg p-4 bg-gray-50">
-                    <label className="flex items-center space-x-3 cursor-pointer mb-3">
-                      <input
-                        type="checkbox"
-                        checked={submissionTargets[target].selected}
-                        onChange={(e) => setSubmissionTargets({
-                          ...submissionTargets,
-                          [target]: { ...submissionTargets[target], selected: e.target.checked }
-                        })}
-                        className="rounded h-5 w-5 text-primary-600"
-                      />
-                      <span className="font-bold text-gray-800">{target.toUpperCase()}</span>
-                    </label>
+              <div className="space-y-4">
+                {Object.keys(submissionTargets)
+                  .filter(target => target !== 'credit') // Hiding Credit Team option as requested
+                  .map(target => (
+                    <div key={target} className="border border-gray-100 rounded-lg p-4 bg-gray-50">
+                      <label className="flex items-center space-x-3 cursor-pointer mb-3">
+                        <input
+                          type="checkbox"
+                          checked={submissionTargets[target].selected}
+                          onChange={(e) => setSubmissionTargets({
+                            ...submissionTargets,
+                            [target]: { ...submissionTargets[target], selected: e.target.checked }
+                          })}
+                          className="rounded h-5 w-5 text-primary-600"
+                        />
+                        <span className="font-bold text-gray-800">{target.toUpperCase()}</span>
+                      </label>
 
-                    {submissionTargets[target].selected && (
-                      <div className="space-y-3 pl-8 animate-fadeIn">
-                        <div>
-                          <label className="block text-xs font-bold text-gray-600 uppercase mb-1">To (Emails)</label>
-                          <input
-                            type="text"
-                            value={submissionTargets[target].email}
-                            onChange={(e) => setSubmissionTargets({
-                              ...submissionTargets,
-                              [target]: { ...submissionTargets[target], email: e.target.value }
-                            })}
-                            className="input-field py-1"
-                            placeholder="comma-separated emails"
-                          />
+                      {submissionTargets[target].selected && (
+                        <div className="space-y-3 pl-8 animate-fadeIn">
+                          <div>
+                            <label className="block text-xs font-bold text-gray-600 uppercase mb-1">To (Emails)</label>
+                            <input
+                              type="text"
+                              value={submissionTargets[target].email}
+                              onChange={(e) => setSubmissionTargets({
+                                ...submissionTargets,
+                                [target]: { ...submissionTargets[target], email: e.target.value }
+                              })}
+                              className="input-field py-1"
+                              placeholder="comma-separated emails"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-bold text-gray-600 uppercase mb-1">Subject</label>
+                            <input
+                              type="text"
+                              value={submissionTargets[target].subject}
+                              onChange={(e) => setSubmissionTargets({
+                                ...submissionTargets,
+                                [target]: { ...submissionTargets[target], subject: e.target.value }
+                              })}
+                              className="input-field py-1"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-bold text-gray-600 uppercase mb-1">Email Body</label>
+                            <textarea
+                              value={submissionTargets[target].body}
+                              onChange={(e) => setSubmissionTargets({
+                                ...submissionTargets,
+                                [target]: { ...submissionTargets[target], body: e.target.value }
+                              })}
+                              className="input-field py-1"
+                              rows={2}
+                            />
+                          </div>
                         </div>
-                        <div>
-                          <label className="block text-xs font-bold text-gray-600 uppercase mb-1">Subject</label>
-                          <input
-                            type="text"
-                            value={submissionTargets[target].subject}
-                            onChange={(e) => setSubmissionTargets({
-                              ...submissionTargets,
-                              [target]: { ...submissionTargets[target], subject: e.target.value }
-                            })}
-                            className="input-field py-1"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-bold text-gray-600 uppercase mb-1">Email Body</label>
-                          <textarea
-                            value={submissionTargets[target].body}
-                            onChange={(e) => setSubmissionTargets({
-                              ...submissionTargets,
-                              [target]: { ...submissionTargets[target], body: e.target.value }
-                            })}
-                            className="input-field py-1"
-                            rows={2}
-                          />
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ))}
-            </div>
+                      )}
+                    </div>
+                  ))}
+              </div>
 
-            <div className="flex space-x-3">
-              <button
-                onClick={() => setShowSubmitModal(false)}
-                className="flex-1 btn-secondary"
-                disabled={isSubmitting}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={confirmSubmit}
-                className="flex-1 btn-primary"
-                disabled={isSubmitting || !Object.values(submissionTargets).some(t => t.selected)}
-              >
-                {isSubmitting ? <LoadingSpinner size="sm" /> : 'Confirm & Push Case'}
-              </button>
+              <div className="flex space-x-3">
+                <button
+                  onClick={() => setShowSubmitModal(false)}
+                  className="flex-1 btn-secondary"
+                  disabled={isSubmitting}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmSubmit}
+                  className="flex-1 btn-primary"
+                  disabled={isSubmitting || !Object.values(submissionTargets).some(t => t.selected)}
+                >
+                  {isSubmitting ? <LoadingSpinner size="sm" /> : 'Confirm & Push Case'}
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )
+      }
 
       {/* Live Camera Modal */}
-      {showCamera && (
-        <LivePhotoCapture
-          onCapture={handleCameraCapture}
-          onCancel={() => {
-            setShowCamera(false);
-            setCameraTarget(null);
-          }}
-          label={cameraTarget === 'applicant-pan' ? "Capture PAN Card" : "Take Live Photo"}
-        />
-      )}
-    </div>
+      {
+        showCamera && (
+          <LivePhotoCapture
+            onCapture={handleCameraCapture}
+            onCancel={() => {
+              setShowCamera(false);
+              setCameraTarget(null);
+            }}
+            label={cameraTarget === 'applicant-pan' ? "Capture PAN Card" : "Take Live Photo"}
+          />
+        )
+      }
+    </div >
   )
 }
 

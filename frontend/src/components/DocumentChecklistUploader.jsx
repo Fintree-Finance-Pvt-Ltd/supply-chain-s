@@ -93,26 +93,29 @@ const DocumentChecklistUploader = ({
         }
     }
 
-    const handleMetaChange = (key, field, value) => {
-        setMeta(prev => ({
+    const [editingMeta, setEditingMeta] = useState({})
+
+    const handleLocalUpdate = (docId, field, value) => {
+        setEditingMeta(prev => ({
             ...prev,
-            [key]: { ...prev[key], [field]: value }
+            [docId]: {
+                ...(prev[docId] || {}),
+                [field]: value
+            }
         }))
     }
 
-    const handleSaveMeta = async (item, doc) => {
-        if (!doc) return
-        const itemMeta = meta[item.key] || {}
+    const handleSaveMeta = async (docId, field, value) => {
         try {
-            await documentService.updateDocumentMetadata(doc.id, {
-                rmRemarks: itemMeta.rmRemarks
-            })
-            // Optionally notify parent to refresh list?
-            // Usually updateDocumentMetadata response returns updated doc, we could call onDocumentUploaded(updatedDoc) 
-            // but that might duplicate it in the list if logic isn't robust.
-            // For now, silent success or toast.
+            const updates = { [field]: value }
+            const response = await documentService.updateDocumentMetadata(docId, updates)
+            if (response.success && onDocumentUploaded) {
+                // Clear local edit for this specific field if successful
+                // actually, keeping it until refresh is fine if it matches.
+                onDocumentUploaded(response.data)
+            }
         } catch (error) {
-            console.error('Failed to save remarks:', error)
+            console.error('Failed to save metadata:', error)
         }
     }
 
@@ -156,36 +159,85 @@ const DocumentChecklistUploader = ({
                                         <p className="text-xs text-gray-500 mt-1">{item.description}</p>
 
                                         {uploadedDocs.length > 0 && (
-                                            <div className="space-y-2 mt-3">
-                                                {uploadedDocs.map((doc) => (
-                                                    <div key={doc.id} className="flex items-center justify-between p-2 bg-white rounded border border-green-100 shadow-sm">
-                                                        <div className="flex items-center space-x-2">
-                                                            <FiFile className="h-4 w-4 text-gray-500" />
-                                                            <span className="text-sm font-medium text-gray-700 truncate max-w-[200px]">{doc.fileName}</span>
-                                                        </div>
-                                                        <div className="flex items-center space-x-2">
-                                                            <button
-                                                                onClick={() => handlePreview(doc)}
-                                                                className="p-1 text-primary-600 hover:text-primary-700"
-                                                                title="Preview"
-                                                            >
-                                                                <FiEye className="h-4 w-4" />
-                                                            </button>
+                                            <div className="space-y-4 mt-3">
+                                                {uploadedDocs.map((doc) => {
+                                                    const currentEdits = editingMeta[doc.id] || {}
+
+                                                    return (
+                                                        <div key={doc.id} className="p-3 bg-white rounded-lg border border-green-100 shadow-sm space-y-3">
+                                                            <div className="flex items-center justify-between">
+                                                                <div className="flex items-center space-x-2">
+                                                                    <FiFile className="h-4 w-4 text-gray-500" />
+                                                                    <span className="text-sm font-medium text-gray-700 truncate max-w-[150px]">{doc.fileName}</span>
+                                                                    {doc.applicantType === 'co-applicant' ? (
+                                                                        <span className="text-[9px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full font-bold">CO-APP {doc.applicantIndex || ''}</span>
+                                                                    ) : (
+                                                                        <span className="text-[9px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded-full font-bold">APPLICANT</span>
+                                                                    )}
+                                                                </div>
+                                                                <div className="flex items-center space-x-2">
+                                                                    <button
+                                                                        onClick={() => handlePreview(doc)}
+                                                                        className="p-1 text-primary-600 hover:text-primary-700"
+                                                                        title="Preview"
+                                                                    >
+                                                                        <FiEye className="h-4 w-4" />
+                                                                    </button>
+                                                                    {!readOnly && (
+                                                                        <button
+                                                                            onClick={() => handleRemoveDocument(doc)}
+                                                                            className="p-1 text-red-600 hover:text-red-700"
+                                                                            title="Remove"
+                                                                        >
+                                                                            <FiX className="h-4 w-4" />
+                                                                        </button>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+
+                                                            {/* Metadata Fields for Each Document */}
                                                             {!readOnly && (
-                                                                <button
-                                                                    onClick={() => handleRemoveDocument(doc)}
-                                                                    className="p-1 text-red-600 hover:text-red-700"
-                                                                    title="Remove"
-                                                                >
-                                                                    <FiX className="h-4 w-4" />
-                                                                </button>
+                                                                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-2 border-t border-gray-50">
+                                                                    <div>
+                                                                        <label className="text-[10px] font-bold text-gray-400 uppercase">Issue Date</label>
+                                                                        <input
+                                                                            type="date"
+                                                                            value={currentEdits.issueDate !== undefined ? currentEdits.issueDate : (doc.issueDate?.split('T')[0] || '')}
+                                                                            onChange={(e) => handleLocalUpdate(doc.id, 'issueDate', e.target.value)}
+                                                                            onBlur={(e) => handleSaveMeta(doc.id, 'issueDate', e.target.value)}
+                                                                            className="w-full text-[11px] border-gray-200 rounded p-1"
+                                                                        />
+                                                                    </div>
+                                                                    <div>
+                                                                        <label className="text-[10px] font-bold text-gray-400 uppercase">Expiry Date</label>
+                                                                        <input
+                                                                            type="date"
+                                                                            value={currentEdits.expiryDate !== undefined ? currentEdits.expiryDate : (doc.expiryDate?.split('T')[0] || '')}
+                                                                            onChange={(e) => handleLocalUpdate(doc.id, 'expiryDate', e.target.value)}
+                                                                            onBlur={(e) => handleSaveMeta(doc.id, 'expiryDate', e.target.value)}
+                                                                            className="w-full text-[11px] border-gray-200 rounded p-1"
+                                                                        />
+                                                                    </div>
+                                                                    <div>
+                                                                        <label className="text-[10px] font-bold text-gray-400 uppercase">RM Remarks</label>
+                                                                        <input
+                                                                            type="text"
+                                                                            placeholder="Add remarks..."
+                                                                            value={currentEdits.rmRemarks !== undefined ? currentEdits.rmRemarks : (doc.rmRemarks || '')}
+                                                                            onChange={(e) => handleLocalUpdate(doc.id, 'rmRemarks', e.target.value)}
+                                                                            onBlur={(e) => handleSaveMeta(doc.id, 'rmRemarks', e.target.value)}
+                                                                            className="w-full text-[11px] border-gray-200 rounded p-1"
+                                                                        />
+                                                                    </div>
+                                                                </div>
                                                             )}
                                                         </div>
-                                                    </div>
-                                                ))}
+                                                    )
+                                                })}
                                             </div>
                                         )}
                                     </div>
+
 
                                     {!readOnly && (
                                         <div className="ml-4">
@@ -209,25 +261,6 @@ const DocumentChecklistUploader = ({
                                         </div>
                                     )}
                                 </div>
-
-                                {!readOnly && isUploaded && (
-                                    <div className="grid grid-cols-1 gap-4 bg-gray-50/50 p-3 rounded-lg border border-gray-100">
-                                        <div className="space-y-1">
-                                            <div className="flex items-center space-x-1.5 text-gray-600">
-                                                <FiMessageSquare className="h-3.5 w-3.5" />
-                                                <label className="text-[10px] font-bold uppercase tracking-wider">Remarks (Optional)</label>
-                                            </div>
-                                            <input
-                                                type="text"
-                                                placeholder="Add notes..."
-                                                value={itemMeta.rmRemarks || ''}
-                                                onChange={(e) => handleMetaChange(item.key, 'rmRemarks', e.target.value)}
-                                                onBlur={() => handleSaveMeta(item, uploadedDocs[0])}
-                                                className="w-full text-xs border-gray-200 rounded focus:ring-primary-500 focus:border-primary-500"
-                                            />
-                                        </div>
-                                    </div>
-                                )}
                             </div>
                         </div>
                     )

@@ -1,12 +1,12 @@
 import { useState } from 'react'
 import { FiUpload, FiX, FiFile, FiEye } from 'react-icons/fi'
 
-const DocumentUploader = ({ 
-  documents = [], 
-  onUpload, 
-  onRemove, 
+const DocumentUploader = ({
+  documents = [],
+  onUpload,
+  onRemove,
   documentTypes = [],
-  maxFiles = 10 
+  maxFiles = 10
 }) => {
   const [selectedFiles, setSelectedFiles] = useState([])
   const [selectedType, setSelectedType] = useState('')
@@ -21,11 +21,11 @@ const DocumentUploader = ({
       alert('Please select files and document type')
       return
     }
-    
+
     selectedFiles.forEach((file) => {
       onUpload(file, selectedType)
     })
-    
+
     setSelectedFiles([])
     setSelectedType('')
     // Reset file input
@@ -59,7 +59,7 @@ const DocumentUploader = ({
             ))}
           </select>
         </div>
-        
+
         <div className="flex-1">
           <label className="block text-sm font-medium text-gray-700 mb-2">
             Upload Files
@@ -109,18 +109,25 @@ const DocumentUploader = ({
               >
                 <div className="flex items-center space-x-3">
                   <FiFile className="h-5 w-5 text-gray-500" />
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">{doc.fileName}</p>
-                    <p className="text-xs text-gray-500">{doc.documentType}</p>
+                  <div className="flex flex-col">
+                    <div className="flex items-center space-x-2">
+                      <p className="text-sm font-medium text-gray-900">{doc.fileName}</p>
+                      {doc.applicantType === 'co-applicant' ? (
+                        <span className="text-[9px] bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded-full font-bold">CO-APP {doc.applicantIndex || ''}</span>
+                      ) : (
+                        <span className="text-[9px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded-full font-bold">APPLICANT</span>
+                      )}
+                    </div>
+                    <p className="text-xs text-gray-500 uppercase font-bold">{doc.documentType}</p>
                   </div>
                 </div>
                 <div className="flex items-center space-x-2">
                   {doc.filePath && (
                     <button
                       onClick={() => {
-                        const fileUrl = doc.filePath.startsWith('http') 
-                          ? doc.filePath 
-                          : `${import.meta.env.VITE_API_BASE_URL?.replace('/api', '') || 'http://localhost:3000'}${doc.filePath.startsWith('/') ? '' : '/'}${doc.filePath}`
+                        const fileUrl = doc.filePath.startsWith('http')
+                          ? doc.filePath
+                          : `${import.meta.env.VITE_API_BASE_URL?.replace('/api', '') || 'http://localhost:3000'}/${doc.filePath.replace(/\\/g, '/')}`
                         window.open(fileUrl, '_blank')
                       }}
                       className="p-2 text-gray-600 hover:text-primary-600"

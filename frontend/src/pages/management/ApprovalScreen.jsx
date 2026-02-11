@@ -5,8 +5,9 @@ import { workflowService } from '../../services/workflowService'
 import { customerService } from '../../services/customerService'
 import ApprovalTimeline from '../../components/ApprovalTimeline'
 import LoadingSpinner from '../../components/LoadingSpinner'
+import CustomerFullDetails from '../../components/CustomerFullDetails'
 import { formatDate } from '../../utils/format'
-import { FiCheck, FiX } from 'react-icons/fi'
+import { FiCheck, FiX, FiEye, FiFileText } from 'react-icons/fi'
 
 const ApprovalScreen = () => {
   const { id } = useParams() // This is now customerId
@@ -26,6 +27,7 @@ const ApprovalScreen = () => {
   const [comments, setComments] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
+  const [previewedDocs, setPreviewedDocs] = useState(new Set())
 
   useEffect(() => {
     const loadData = async () => {
@@ -134,6 +136,11 @@ const ApprovalScreen = () => {
     status: action.status,
     approvedAt: action.createdAt,
     comments: action.remarks,
+    sanctionAmount: action.sanctionAmount,
+    tenure: action.tenure,
+    interestRate: action.interestRate,
+    penalCharges: action.penalCharges,
+    processingFees: action.processingFees,
   }))
 
   const isCreditDoc = (doc) => {
@@ -141,15 +148,25 @@ const ApprovalScreen = () => {
     return role.includes('credit')
   }
 
-  const role = user?.role?.toLowerCase() || ''
-  const visibleDocuments = customer.documents?.filter(doc => isCreditDoc(doc)) || []
+  const handlePreview = (doc) => {
+    setPreviewedDocs(prev => new Set(prev).add(doc.id))
+    const fileUrl = `${import.meta.env.VITE_API_BASE_URL}/documents/download/${doc.id}`
+    window.open(fileUrl, '_blank')
+  }
 
-  // Read-only logic: if case is already approved/rejected by management or past their stage
-  const isReadOnly = (role === 'ceo' && customer.status !== 'credit_l1_approved' && customer.status !== 'credit_l2_approved') ||
-    (role === 'md' && customer.status !== 'ceo_approved') ||
+  const role = (user?.role || '').toLowerCase()
+  const isReadOnly = (customer.status === 'credit_l2_rejected') ||
+    (customer.status === 'ceo_rejected') ||
+    (customer.status === 'md_rejected') ||
     (customer.status === 'rejected') ||
-    (customer.status === 'md_approved') ||
-    (customer.status.includes('ops'));
+    (customer.status === 'completed') ||
+    (customer.status.includes('ops')) ||
+    (role === 'ceo' && customer.status !== 'credit_l2_approved') ||
+    (role === 'md' && !['ceo_approved', 'md_terms_submitted'].includes(customer.status));
+
+  const visibleDocuments = customer.documents || []
+  // Management (CEO/MD) can approve even without viewing documents as per new request
+  const allDocsPreviewed = true
 
   return (
     <div className="space-y-6">
@@ -165,43 +182,7 @@ const ApprovalScreen = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
-          {/* Only show RM data for context if not strictly forbidden by "show only Credit data" */}
-          {/* But user specifically asked "display only data filled by Credit L1/L2" */}
-          {(role !== 'ceo' && role !== 'md') && (
-            <>
-              <div className="card">
-                <h2 className="text-xl font-semibold text-gray-900 mb-4">Case Summary</h2>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-sm text-gray-600">Customer Name</p>
-                    <p className="font-medium">{customer?.customerName || 'N/A'}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-600">Customer Code</p>
-                    <p className="font-medium">{customer?.customerCode || 'N/A'}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-600">RM Name</p>
-                    <p className="font-medium">{customer?.rm?.name || 'N/A'}</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="card">
-                <h2 className="text-xl font-semibold text-gray-900 mb-4">Onboarding Details</h2>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-sm text-gray-600">Annual Turnover</p>
-                    <p className="font-medium">{customer?.annualTurnover || 'N/A'}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-600">Address</p>
-                    <p className="font-medium">{customer?.address || 'N/A'}</p>
-                  </div>
-                </div>
-              </div>
-            </>
-          )}
+          <CustomerFullDetails customer={customer} />
 
           <div className="card border-l-4 border-primary-500">
             <h2 className="text-xl font-semibold text-gray-900 mb-4">Sanction Details (Review & Revise)</h2>
@@ -216,8 +197,8 @@ const ApprovalScreen = () => {
                   readOnly={isReadOnly}
                 />
               </div>
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">Tenure (Months)</label>
+              <div className={role === 'md' ? "" : "hidden"}>
+                <label className="block text-xs text-gray-500 mb-1">Tenor (Months)</label>
                 <input
                   type="number"
                   value={sanctionData.tenure}
@@ -226,8 +207,8 @@ const ApprovalScreen = () => {
                   readOnly={isReadOnly}
                 />
               </div>
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">Interest Rate (%)</label>
+              <div className={role === 'md' ? "" : "hidden"}>
+                <label className="block text-xs text-gray-500 mb-1">Proposed ROI (%)</label>
                 <input
                   type="number"
                   step="0.01"
@@ -237,7 +218,7 @@ const ApprovalScreen = () => {
                   readOnly={isReadOnly}
                 />
               </div>
-              <div>
+              <div className={role === 'md' ? "" : "hidden"}>
                 <label className="block text-xs text-gray-500 mb-1">Penal Charges (%)</label>
                 <input
                   type="number"
@@ -248,8 +229,8 @@ const ApprovalScreen = () => {
                   readOnly={isReadOnly}
                 />
               </div>
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">Processing Fees (%)</label>
+              <div className={role === 'md' ? "" : "hidden"}>
+                <label className="block text-xs text-gray-500 mb-1">Processing Fee (%)</label>
                 <input
                   type="number"
                   step="0.01"
@@ -259,7 +240,7 @@ const ApprovalScreen = () => {
                   readOnly={isReadOnly}
                 />
               </div>
-              <div className="col-span-full">
+              <div className={role === 'md' ? "col-span-full" : "hidden col-span-full"}>
                 <label className="block text-xs text-gray-500 mb-1">Sanction Conditions</label>
                 <textarea
                   value={sanctionData.conditions}
@@ -273,44 +254,76 @@ const ApprovalScreen = () => {
           </div>
 
           <div className="card">
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">Credit Uploaded Documents</h2>
+            <h2 className="text-xl font-semibold text-gray-900 mb-4">Documents for Review</h2>
             {visibleDocuments.length > 0 ? (
-              <div className="space-y-2">
+              <div className="space-y-4">
                 {visibleDocuments.map(doc => (
-                  <div key={doc.id} className="flex items-center justify-between p-3 bg-gray-50 rounded border border-gray-100">
-                    <div className="flex items-center space-x-3">
-                      <div className="p-2 bg-white rounded shadow-sm">
-                        <FiCheck className="text-green-500" />
+                  <div key={doc.id} className="p-4 bg-gray-50 rounded-lg border border-gray-100 flex flex-col space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-3">
+                        <div className="p-2 bg-white rounded shadow-sm">
+                          <FiFileText className="text-gray-500" />
+                        </div>
+                        <div>
+                          <div className="flex items-center space-x-2">
+                            <p className="text-sm font-medium">{doc.fileName}</p>
+                            {doc.applicantType === 'co-applicant' ? (
+                              <span className="text-[9px] bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded-full font-bold">CO-APP {doc.applicantIndex || ''}</span>
+                            ) : (
+                              <span className="text-[9px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded-full font-bold">APPLICANT</span>
+                            )}
+                          </div>
+                          <p className="text-[10px] text-gray-400 uppercase font-bold">{doc.documentType}</p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => handlePreview(doc)}
+                        className={`px-3 py-1 rounded text-xs font-bold border transition-colors flex items-center space-x-1 ${previewedDocs.has(doc.id) ? 'bg-green-100 text-green-700 border-green-200' : 'bg-primary-50 text-primary-600 border-primary-200 hover:bg-primary-100'}`}
+                      >
+                        {previewedDocs.has(doc.id) ? (
+                          <>
+                            <FiCheck className="h-3 w-3" />
+                            <span>VIEWED</span>
+                          </>
+                        ) : (
+                          <>
+                            <FiEye className="h-3 w-3" />
+                            <span>VIEW DOCUMENT</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mt-2">
+                      <div>
+                        <p className="text-[10px] text-gray-400 uppercase font-bold">Issue Date</p>
+                        <p className="text-xs text-gray-700">{doc.issueDate ? formatDate(doc.issueDate) : 'N/A'}</p>
                       </div>
                       <div>
-                        <p className="text-sm font-medium">{doc.fileName}</p>
-                        <p className="text-[10px] text-gray-400 uppercase font-bold">{doc.documentType}</p>
+                        <p className="text-[10px] text-gray-400 uppercase font-bold">Expiry Date</p>
+                        <p className="text-xs text-gray-700">{doc.expiryDate ? formatDate(doc.expiryDate) : 'N/A'}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-gray-400 uppercase font-bold">RM Remarks</p>
+                        <p className="text-xs text-gray-700 truncate" title={doc.rmRemarks}>{doc.rmRemarks || 'N/A'}</p>
                       </div>
                     </div>
-                    <a
-                      href={`${import.meta.env.VITE_API_BASE_URL}/documents/download/${doc.id}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-primary-600 hover:underline text-xs"
-                    >
-                      View
-                    </a>
                   </div>
                 ))}
               </div>
             ) : (
-              <p className="text-sm text-gray-500 italic">No credit-uploaded documents visible.</p>
+              <p className="text-sm text-gray-500 italic">No documents visible for review.</p>
             )}
           </div>
 
           <div className="card">
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">Approval Comments</h2>
+            <h2 className="text-xl font-semibold text-gray-900 mb-4">Approval Remarks</h2>
             <textarea
               value={comments}
               onChange={(e) => setComments(e.target.value)}
               className="input-field"
               rows={4}
-              placeholder={isReadOnly ? "No comments allowed in read-only mode" : "Enter your approval comments..."}
+              placeholder={isReadOnly ? "Read-only mode" : "Enter your remarks/comments..."}
               required={!isReadOnly}
               readOnly={isReadOnly}
             />
@@ -327,15 +340,15 @@ const ApprovalScreen = () => {
               <div className="space-y-3">
                 <button
                   onClick={handleApprove}
-                  disabled={isSubmitting}
-                  className="w-full btn-primary flex items-center justify-center space-x-2"
+                  disabled={isSubmitting || (!allDocsPreviewed && visibleDocuments.length > 0)}
+                  className={`w-full btn-primary flex items-center justify-center space-x-2 ${(!allDocsPreviewed && visibleDocuments.length > 0) ? 'opacity-50 cursor-not-allowed' : ''}`}
                 >
                   {isSubmitting ? (
                     <LoadingSpinner size="sm" />
                   ) : (
                     <>
                       <FiCheck className="h-5 w-5" />
-                      <span>Approve</span>
+                      <span>{(!allDocsPreviewed && visibleDocuments.length > 0) ? 'Preview Docs to Enable' : 'Approve'}</span>
                     </>
                   )}
                 </button>

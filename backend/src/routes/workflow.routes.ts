@@ -236,6 +236,38 @@ router.post('/customers/:customerId/ceo-approve', checkRole(['ceo']), async (req
 });
 
 /**
+ * POST /api/workflows/customers/:customerId/rm-submit-md
+ * RM submits final terms to MD after CEO approval
+ */
+router.post('/customers/:customerId/rm-submit-md', checkRole(['relationship_manager']), async (req: Request, res: Response) => {
+  try {
+    const { customerId } = req.params;
+    const { remarks, sanctionAmount, tenure, interestRate, conditions, penalCharges, processingFees } = req.body;
+    const user = (req as any).user;
+
+    const sanctionData = sanctionAmount ? { sanctionAmount, tenure, interestRate, conditions, penalCharges, processingFees } : undefined;
+
+    const workflow = await customerOnboardingService.rmSubmitToMD(
+      parseInt(customerId),
+      user.id,
+      remarks || '',
+      sanctionData
+    );
+
+    res.json({
+      success: true,
+      message: 'Case submitted to MD with final sanction terms',
+      data: workflow,
+    });
+  } catch (error: any) {
+    res.status(400).json({
+      success: false,
+      message: error.message,
+    });
+  }
+});
+
+/**
  * POST /api/workflows/customers/:customerId/md-approve
  * MD reviews and approves/rejects (final credit decision)
  */

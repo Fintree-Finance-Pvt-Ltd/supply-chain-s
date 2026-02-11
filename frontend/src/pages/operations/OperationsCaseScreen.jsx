@@ -321,7 +321,14 @@ const OperationsCaseScreen = () => {
                     <div className="flex items-center space-x-3">
                       <FiFileText className="text-gray-400" />
                       <div>
-                        <p className="text-sm font-medium">{doc.fileName}</p>
+                        <div className="flex items-center space-x-2">
+                          <p className="text-sm font-medium">{doc.fileName}</p>
+                          {doc.applicantType === 'co-applicant' ? (
+                            <span className="text-[9px] bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded-full font-bold">CO-APP {doc.applicantIndex || ''}</span>
+                          ) : (
+                            <span className="text-[9px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded-full font-bold">APPLICANT</span>
+                          )}
+                        </div>
                         <p className="text-xs text-gray-400 uppercase font-bold">{doc.documentType}</p>
                       </div>
                     </div>
