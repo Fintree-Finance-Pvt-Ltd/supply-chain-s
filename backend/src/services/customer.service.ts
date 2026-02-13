@@ -22,6 +22,10 @@ export class CustomerService {
     electricityBillNo?: string;
     rmId: number;
     customerCode?: string;
+    companyMobile?: string;
+    companyEmail?: string;
+    companyPan?: string;
+    pan?: string;
   }): Promise<Customer> {
     // Clean up empty strings
     const cleanedData = { ...data };
