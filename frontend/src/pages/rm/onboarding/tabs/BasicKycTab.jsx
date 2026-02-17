@@ -41,7 +41,6 @@ const BasicKycTab = ({
             {errors.companyType && <p className="text-red-500 text-xs mt-1">{errors.companyType}</p>}
           </div>
 
-          {formData.companyType && formData.companyType !== COMPANY_TYPES.PROPRIETORSHIP && (
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Company Name <span className="text-red-500">*</span>
@@ -54,7 +53,6 @@ const BasicKycTab = ({
               />
               {errors.companyName && <p className="text-red-500 text-xs mt-1">{errors.companyName}</p>}
             </div>
-          )}
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -74,10 +72,12 @@ const BasicKycTab = ({
               <button
                 type="button"
                 onClick={() => onVerify("companyMobile", formData.companyMobile)}
-                disabled={loadingStates["companyMobile"] || mainVerified.mobile}
+                disabled={loadingStates["companyMobile_main"] || mainVerified.mobile}
                 className={`btn-${mainVerified.mobile ? "success" : "secondary"} min-w-[110px]`}
               >
-                {loadingStates["companyMobile"] ? <LoadingSpinner size="sm" /> : (mainVerified.mobile ? "✓ Verified" : "Verify")}
+                {loadingStates["companyMobile_main"]
+  ? <LoadingSpinner size="sm" />
+  : mainVerified.mobile ? "✓ Verified" : "Verify"}
               </button>
             </div>
             {errors.companyMobile && <p className="text-red-500 text-xs mt-1">{errors.companyMobile}</p>}
@@ -96,10 +96,12 @@ const BasicKycTab = ({
               <button
                 type="button"
                 onClick={() => onVerify("companyEmail", formData.companyEmail)}
-                disabled={loadingStates["companyEmail"] || mainVerified.email}
+                disabled={loadingStates["companyEmail_main"] || mainVerified.email}
                 className={`btn-${mainVerified.email ? "success" : "secondary"} min-w-[110px]`}
               >
-                {loadingStates["companyEmail"] ? <LoadingSpinner size="sm" /> : (mainVerified.email ? "✓ Verified" : "Verify")}
+                {loadingStates["companyEmail_main"]
+  ? <LoadingSpinner size="sm" />
+  : mainVerified.email ? "✓ Verified" : "Verify"}
               </button>
             </div>
             {errors.companyEmail && <p className="text-red-500 text-xs mt-1">{errors.companyEmail}</p>}
@@ -121,10 +123,13 @@ const BasicKycTab = ({
               <button
                 type="button"
                 onClick={() => onVerify("companyPan", formData.companyPan)}
-                disabled={loadingStates["companyPan"] || mainVerified.pan}
+                disabled={loadingStates["companyPan_main"] || mainVerified.pan}
                 className={`btn-${mainVerified.pan ? "success" : "secondary"} min-w-[110px]`}
               >
-                {loadingStates["companyPan"] ? <LoadingSpinner size="sm" /> : (mainVerified.pan ? "✓ Verified" : "Verify")}
+                {loadingStates["companyPan_main"]
+  ? <LoadingSpinner size="sm" />
+  : mainVerified.pan ? "✓ Verified" : "Verify"}
+
               </button>
             </div>
             {formData.companyPan && <p className="text-xs text-blue-600 mt-1">PAN: {formData.companyPan}</p>}
@@ -140,13 +145,22 @@ const BasicKycTab = ({
               placeholder="Enter GST"
             />
             <button
-              type="button"
-              onClick={() => onVerify("companyGst", formData.companyGst)}
-              disabled={loadingStates["companyGst"] || mainVerified.gst || !formData.companyGst}
-              className={`mt-2 btn-${mainVerified.gst ? "success" : "secondary"} w-full`}
-            >
-              {loadingStates["companyGst"] ? <LoadingSpinner size="sm" /> : (mainVerified.gst ? "✓ Verified" : "Verify GST")}
-            </button>
+  type="button"
+  onClick={() => onVerify("companyGst", formData.companyGst)}
+  disabled={
+    loadingStates["companyGst_main"] ||
+    mainVerified.gst ||
+    !formData.companyGst
+  }
+  className={`mt-2 btn-${mainVerified.gst ? "success" : "secondary"} w-full`}
+>
+  {loadingStates["companyGst_main"]
+    ? <LoadingSpinner size="sm" />
+    : mainVerified.gst
+      ? "✓ Verified"
+      : "Verify GST"}
+</button>
+
           </div>
         </div>
       </div>
@@ -209,13 +223,21 @@ const BasicKycTab = ({
               placeholder="Email"
             />
             <button
-    type="button"
-    onClick={() => onVerify("applicantEmail", formData.applicantEmail)}
-    disabled={applicantVerified.email}
-    className={`btn-${applicantVerified.email ? "success" : "secondary"}`}
-  >
-    {applicantVerified.email ? "✓ Verified" : "Verify"}
-  </button>
+  type="button"
+  onClick={() => onVerify("applicantEmail", formData.applicantEmail)}
+  disabled={
+    loadingStates["applicantEmail_main"] ||
+    applicantVerified.email
+  }
+  className={`btn-${applicantVerified.email ? "success" : "secondary"} min-w-[110px]`}
+>
+  {loadingStates["applicantEmail_main"]
+    ? <LoadingSpinner size="sm" />
+    : applicantVerified.email
+      ? "✓ Verified"
+      : "Verify"}
+</button>
+
             {errors.applicantEmail && <p className="text-red-500 text-xs mt-1">{errors.applicantEmail}</p>}
           </div>
 
@@ -249,10 +271,11 @@ const BasicKycTab = ({
   type="button"
   onClick={() => onVerify("applicantPan", formData.applicantPan)}
   disabled={
-    loadingStates["applicantPan"] ||
-    applicantVerified.pan ||
-    !formData.applicantPan
-  }
+  loadingStates["applicantPan_main"] ||
+  applicantVerified.pan ||
+  !formData.applicantPan
+}
+
   className={`mt-2 btn-${applicantVerified.pan ? "success" : "secondary"} w-full`}
 >
   {applicantVerified.pan ? "✓ PAN Verified" : "Verify PAN"}

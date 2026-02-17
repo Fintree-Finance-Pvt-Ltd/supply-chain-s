@@ -370,21 +370,38 @@ const CoApplicantForm = ({
     }
   }
 
-  const safeVerify = (field, value) => {
+  const safeVerify = (field, value, localKey = null) => {
+    console.log(field, value, data.id, customerId);
+    console.log(data.id);
+    console.log("VERIFY CLICK", { field, value, coApplicantId: data.id, localKey, customerId });
+
     if (!mustHaveCaseId()) return
-    if (!mustHaveCoApplicantId()) return
+    // if (!mustHaveCoApplicantId()) return
+
+    console.log(`Requesting verification for ${field} with value "${value}" (co-applicant ID: ${data.id})`)
 
     // prevent reclick while loading
-    const key = `${field}_${data.id}`
+    const key = `${field}_${data.id || localKey || "main"}`;
     if (loadingStates[key]) return
 
-    onVerify?.(field, value, data.id)
+    onVerify?.(field, value, data.id, localKey)
+
+    console.log(`button verified ended`)
   }
 
-  const handleMobileVerify = () => safeVerify('applicantMobile', data.mobile)
-const handleEmailVerify = () => safeVerify('applicantEmail', data.email)
-const handlePanVerify = () => safeVerify('applicantPan', kycData.panNumber)
-const handleAadhaarKyc = () => safeVerify('aadhaar', true)
+const handleMobileVerify = () =>
+  safeVerify('coApplicantMobile', data.mobile, data.localKey);
+
+const handleEmailVerify = () =>
+  safeVerify('coApplicantEmail', data.email, data.localKey);
+
+const handlePanVerify = () =>
+  safeVerify('coApplicantPan', kycData.panNumber, data.localKey);
+
+const handleAadhaarKyc = () =>
+  safeVerify('coApplicantAadhaar', true, data.localKey);
+
+
 
 
   // Mutations should notify parent so it can refresh/reset verification
@@ -396,7 +413,8 @@ const handleAadhaarKyc = () => safeVerify('aadhaar', true)
   }
 
   const isSaved = !!data?.id
-  const canVerify = !!customerId && isSaved
+  // const canVerify = !!customerId && isSaved
+  const canVerify = !!customerId
 
   return (
     <div className="border border-gray-300 rounded-lg p-6 mb-4 bg-gray-50 relative">
@@ -413,11 +431,11 @@ const handleAadhaarKyc = () => safeVerify('aadhaar', true)
         Co-Applicant {typeof index === 'number' ? index + 1 : ''}
       </h4>
 
-      {!isSaved && (
+      {/* {!isSaved && (
         <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2 mb-4">
           Note: Save Draft to generate Co-Applicant ID before verification.
         </p>
-      )}
+      )} */}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Name */}
@@ -454,7 +472,7 @@ const handleAadhaarKyc = () => safeVerify('aadhaar', true)
               onClick={handleMobileVerify}
               disabled={
                 !canVerify ||
-                loadingStates[`applicantMobile_${data.id}`] ||
+                loadingStates[`coApplicantMobile_${data.id || data.localKey}`] ||
                 verificationStatus.mobileStatus === 'VERIFIED'
               }
               className={`btn-${verificationStatus.mobileStatus === 'VERIFIED' ? 'success' : 'secondary'} whitespace-nowrap min-w-[90px] flex items-center justify-center`}
@@ -462,7 +480,7 @@ const handleAadhaarKyc = () => safeVerify('aadhaar', true)
             >
               {verificationStatus.mobileStatus === 'VERIFIED'
                 ? '✓ Verified'
-                : loadingStates[`applicantMobile_${data.id}`]
+                : loadingStates[`coApplicantMobile_${data.id || data.localKey}`]
                   ? <LoadingSpinner size="sm" />
                   : 'Verify'}
             </button>
@@ -486,7 +504,7 @@ const handleAadhaarKyc = () => safeVerify('aadhaar', true)
               onClick={handleEmailVerify}
               disabled={
                 !canVerify ||
-                loadingStates[`coApp_email_${data.id}`] ||
+                loadingStates[`coApplicantEmail_${data.id || data.localKey}`] ||
                 verificationStatus.emailStatus === 'VERIFIED' ||
                 !data.email
               }
@@ -494,7 +512,7 @@ const handleAadhaarKyc = () => safeVerify('aadhaar', true)
             >
               {verificationStatus.emailStatus === 'VERIFIED'
                 ? '✓ Verified'
-                : loadingStates[`coApp_email_${data.id}`]
+                : loadingStates[`coApplicantEmail_${data.id || data.localKey}`]
                   ? <LoadingSpinner size="sm" />
                   : 'Verify'}
             </button>
@@ -534,12 +552,12 @@ const handleAadhaarKyc = () => safeVerify('aadhaar', true)
           <div className="flex space-x-2">
             <label className="flex-1 cursor-pointer">
               <input
-  type="file"
-  accept="image/*,.pdf"
-  disabled={verificationStatus.panStatus === 'VERIFIED'}
-  onChange={handlePanImageUpload}
-  className="hidden"
-/>
+                type="file"
+                accept="image/*,.pdf"
+                disabled={verificationStatus.panStatus === 'VERIFIED'}
+                onChange={handlePanImageUpload}
+                className="hidden"
+              />
 
               <div className="input-field flex items-center justify-center space-x-2 border-dashed">
                 <FiUpload className="h-4 w-4" />
@@ -554,7 +572,7 @@ const handleAadhaarKyc = () => safeVerify('aadhaar', true)
               onClick={handlePanVerify}
               disabled={
                 !canVerify ||
-                loadingStates[`coApp_pan_${data.id}`] ||
+                loadingStates[`coApplicantPan_${data.id || data.localKey}`] ||
                 verificationStatus.panStatus === 'VERIFIED' ||
                 !kycData.panNumber
               }
@@ -562,7 +580,7 @@ const handleAadhaarKyc = () => safeVerify('aadhaar', true)
             >
               {verificationStatus.panStatus === 'VERIFIED'
                 ? '✓ Verified'
-                : loadingStates[`coApp_pan_${data.id}`]
+                : loadingStates[`coApplicantPan_${data.id || data.localKey}`]
                   ? <LoadingSpinner size="sm" />
                   : 'Verify'}
             </button>
@@ -585,14 +603,14 @@ const handleAadhaarKyc = () => safeVerify('aadhaar', true)
             onClick={handleAadhaarKyc}
             disabled={
               !canVerify ||
-              loadingStates[`coApp_aadhaar_${data.id}`] ||
+              loadingStates[`coApplicantAadhaar_${data.id || data.localKey}`] ||
               verificationStatus.aadhaarStatus === 'VERIFIED'
             }
             className={`btn-${verificationStatus.aadhaarStatus === 'VERIFIED' ? 'success' : 'primary'} w-full`}
           >
             {verificationStatus.aadhaarStatus === 'VERIFIED'
               ? '✓ Aadhaar Verified'
-              : loadingStates[`coApp_aadhaar_${data.id}`]
+              : loadingStates[`coApplicantAadhaar_${data.id || data.localKey}`]
                 ? 'Processing...'
                 : 'Complete Aadhaar KYC'}
           </button>

@@ -60,7 +60,28 @@ export class OnboardingIntegrationService {
   ownerType: KycOwnerType,
   applicantId?: number,
   coApplicantId?: number
-): Promise<void> {
+): Promise<{ coApplicantId?: number }> {
+
+     const coApplicantRepo = AppDataSource.getRepository(CoApplicant);
+
+    if (ownerType === KycOwnerType.CO_APPLICANT && !coApplicantId) {
+
+    if (!customerId)
+      throw new Error("customerId required for co-applicant");
+
+  const coApplicant = await coApplicantRepo.save(
+  coApplicantRepo.create({
+    customerId: customerId as number,
+    mobile: mobileNumber,
+    name: '',
+    email: undefined,
+    gender: undefined,
+    pan: undefined,
+  } as Partial<CoApplicant>)
+);
+
+coApplicantId = coApplicant.id;
+    }
 
   // ✅ prevent spam: if valid OTP already sent for same owner, block
   const recentSession = await this.otpSessionRepository.findOne({
@@ -102,6 +123,11 @@ export class OnboardingIntegrationService {
   const message = `OTP for mobile number verification is ${session.otp}. Do not share this OTP with anyone. Thanks & Regards Fintree Finance Private Limited.`;
 
   await this.smsProvider.sendSms(mobileNumber, message);
+
+  return ownerType === KycOwnerType.CO_APPLICANT
+  ? { coApplicantId }
+  : {};
+
 }
 
 
@@ -379,7 +405,6 @@ async verifyMobileOtp(
     applicant = await applicantRepo.save(
       applicantRepo.create({
         customerId: finalCustomer.id,
-        mobile: mobileNumber,
         name: ''
       })
     );
@@ -436,7 +461,7 @@ async sendEmailOtp(
   ownerType: KycOwnerType,
   email: string,
   coApplicantId?: number
-): Promise<void> {
+): Promise<{ coApplicantId?: number }> {
 
   const customerRepo = this.customerRepository;
   const applicantRepo = AppDataSource.getRepository(Applicant);
@@ -486,14 +511,34 @@ async sendEmailOtp(
       throw new Error("Email does not match registered applicant email");
   }
 
+    // ---------------------------------------------------
+  // ✅ AUTO-CREATE CO-APPLICANT (NEW)
+  // ---------------------------------------------------
   else if (ownerType === KycOwnerType.CO_APPLICANT) {
 
-    if (!coApplicantId)
-      throw new Error("coApplicantId required");
+    if (!customerId)
+      throw new Error("customerId required for co-applicant");
 
-    const coApplicant = await coApplicantRepo.findOne({
-      where: { id: coApplicantId, customerId }
-    });
+    let coApplicant: CoApplicant | null = null;
+
+    // 🔹 Create ONLY if missing
+    if (!coApplicantId) {
+      coApplicant = await coApplicantRepo.save(
+        coApplicantRepo.create({
+          customerId,
+          email,
+          name: '',
+          mobile: '',
+          gender: undefined,
+          pan: undefined,
+        } as Partial<CoApplicant>)
+      );
+      coApplicantId = coApplicant.id;
+    } else {
+      coApplicant = await coApplicantRepo.findOne({
+        where: { id: coApplicantId, customerId }
+      });
+    }
 
     if (!coApplicant)
       throw new Error("Co-applicant not found");
@@ -504,11 +549,9 @@ async sendEmailOtp(
       await coApplicantRepo.save(coApplicant);
     }
 
-    // 🔒 Block if mismatch
     if (coApplicant.email !== email)
       throw new Error("Email does not match registered co-applicant email");
   }
-
   // ---------------------------------------------------
   // 🔒 Prevent multiple OTP spam
   // ---------------------------------------------------
@@ -554,6 +597,10 @@ async sendEmailOtp(
   `;
 
   await this.emailProvider.sendEmail(email, subject, html);
+
+  return ownerType === KycOwnerType.CO_APPLICANT
+    ? { coApplicantId }
+    : {};
 }
 
 
@@ -686,12 +733,29 @@ async verifyPan(
   coApplicantId?: number
 ): Promise<any> {
 
+  
+
   return await AppDataSource.transaction(async (manager) => {
 
     const kycRepo = manager.getRepository(KycVerificationStatus);
     const applicantRepo = manager.getRepository(Applicant);
     const coApplicantRepo = manager.getRepository(CoApplicant);
     const customerRepo = manager.getRepository(Customer);
+
+
+    if (ownerType === KycOwnerType.CO_APPLICANT && !coApplicantId) {
+
+  const coApplicant = await coApplicantRepo.save(
+    coApplicantRepo.create({
+      customerId,
+      name,
+      pan,
+    })
+  );
+
+  coApplicantId = coApplicant.id;
+}
+
 
     // ---------------------------------------------------
     // 🔐 Get or Create Correct KYC Row
@@ -998,6 +1062,11 @@ private async getOrCreateKycStatus(
     ownerType,
     applicantId: resolvedApplicantId,
     coApplicantId: resolvedCoApplicantId,
+    mobileStatus: KycStatus.PENDING,
+  emailStatus: KycStatus.PENDING,
+  panStatus: KycStatus.PENDING,
+  gstStatus: KycStatus.PENDING,
+  aadhaarStatus: KycStatus.PENDING,
   });
 
   return await this.kycStatusRepository.save(status);

@@ -20,7 +20,7 @@ export class OnboardingController {
       return;
     }
 
-    await this.onboardingService.sendMobileOtp(
+    const result = await this.onboardingService.sendMobileOtp(
       customerId ? Number(customerId) : undefined,
       mobileNumber,
       ownerType,
@@ -28,7 +28,8 @@ export class OnboardingController {
       coApplicantId ? Number(coApplicantId) : undefined
     );
 
-    res.json({ success: true, message: "Mobile OTP sent successfully" });
+    res.json({ success: true, message: "Mobile OTP sent successfully",
+  coApplicantId: result?.coApplicantId });
   } catch (error: any) {
     res.status(400).json({ success: false, message: error.message || "Failed to send mobile OTP" });
   }
@@ -82,14 +83,14 @@ verifyMobileOtp = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    await this.onboardingService.sendEmailOtp(
+    const result = await this.onboardingService.sendEmailOtp(
       Number(customerId),
       ownerType,
       email,
       coApplicantId ? Number(coApplicantId) : undefined
     );
 
-    res.json({ success: true, message: "Email OTP sent successfully" });
+    res.json({ success: true, message: "Email OTP sent successfully", coApplicantId: result?.coApplicantId });
 
   } catch (error: any) {
     res.status(400).json({

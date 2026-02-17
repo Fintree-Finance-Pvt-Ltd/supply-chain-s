@@ -9,6 +9,7 @@ const CoApplicantSection = ({
   setCoApplicantKyc,
   onVerify,
   verificationStatuses,
+  loadingStates,
   errors,
 }) => {
   const addCoApplicant = () => {
@@ -56,10 +57,8 @@ const CoApplicantSection = ({
         <div className="space-y-6">
           {coApplicants.map((coApp, idx) => {
             const key = coApp.id || coApp.localKey;
-            const vs =
-  coApp.id
-    ? verificationStatuses.find((s) => s.coApplicantId === coApp.id) || {}
-    : {};
+            const vs = coApp.id ? verificationStatuses[coApp.id] || {} : {};
+
 
 
             return (
@@ -73,7 +72,7 @@ const CoApplicantSection = ({
                 kycData={coApplicantKyc[key] || {}}
                 customerId={customerId}
                 onVerify={onVerify}
-                loadingStates={{}} // optional: extend if you want per-field loading
+                loadingStates={loadingStates} // optional: extend if you want per-field loading
                 verificationStatus={vs}
               />
             );
