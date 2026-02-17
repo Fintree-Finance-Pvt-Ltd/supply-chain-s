@@ -1,283 +1,606 @@
-import { useState } from 'react'
+// import { useState } from 'react'
+// import { FiX, FiUpload } from 'react-icons/fi'
+// import kycService from '../services/kycService'
+// import LoadingSpinner from './LoadingSpinner'
+
+// const CoApplicantForm = ({
+//     index,
+//     data = {},
+//     onChange,
+//     onRemove,
+//     onPanUpload,
+//     kycData = {},
+//     errors = {},
+//     customerId,
+//     onVerify,
+//     loadingStates = {},
+//     verificationStatus = {}
+// }) => {
+//     const [isOcrProcessing, setIsOcrProcessing] = useState(false)
+
+//     const handlePanImageUpload = async (e) => {
+//         const file = e.target.files[0]
+//         if (!file) return
+
+//         setIsOcrProcessing(true)
+//         try {
+//             // Call real OCR
+//             const result = await kycService.runOcr(file, 'PAN')
+//             if (result.success) {
+//                 // Auto-fill PAN number and name
+//                 onChange(index, {
+//                     ...data,
+//                     name: result.data.name,
+//                 })
+
+//                 // Store PAN separately (would be saved to backend)
+//                 if (onPanUpload) {
+//                     onPanUpload(index, file, result.data.panNumber)
+//                 }
+
+//                 alert(`OCR completed! PAN: ${result.data.panNumber}, Name: ${result.data.name}`)
+//             }
+//         } catch (error) {
+//             alert('OCR failed: ' + error.message)
+//         } finally {
+//             setIsOcrProcessing(false)
+//         }
+//     }
+
+//     const handlePanVerify = () => {
+//         onVerify('coApp_pan', kycData.panNumber, 'applicant', data.id)
+//     }
+
+//     const handleMobileVerify = () => {
+//         onVerify('coApp_mobile', data.mobile, 'applicant', data.id)
+//     }
+
+//     const handleEmailVerify = () => {
+//         onVerify('coApp_email', data.email, 'applicant', data.id)
+//     }
+
+//     const handleAadhaarKyc = () => {
+//         onVerify('coApp_aadhaar', 'dummy', 'applicant', data.id)
+//     }
+
+//     return (
+//         <div className="border border-gray-300 rounded-lg p-6 mb-4 bg-gray-50 relative">
+//             <button
+//                 type="button"
+//                 onClick={() => onRemove(index)}
+//                 className="absolute top-4 right-4 p-2 text-red-600 hover:text-red-700 hover:bg-red-50 rounded"
+//                 title="Remove Co-Applicant"
+//             >
+//                 <FiX className="h-5 w-5" />
+//             </button>
+
+//             <h4 className="text-lg font-semibold text-gray-900 mb-4">
+//                 Co-Applicant {index + 1}
+//             </h4>
+
+//             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+//                 {/* Name */}
+//                 <div>
+//                     <label className="block text-sm font-medium text-gray-700 mb-2">
+//                         Name <span className="text-red-500">*</span>
+//                     </label>
+//                     <input
+//                         type="text"
+//                         value={data.name || ''}
+//                         onChange={(e) => onChange(index, { ...data, name: e.target.value })}
+//                         className="input-field"
+//                         placeholder="Enter co-applicant name"
+//                     />
+//                     {errors.name && (
+//                         <p className="text-red-500 text-xs mt-1">{errors.name}</p>
+//                     )}
+//                 </div>
+
+//                 {/* Mobile */}
+//                 <div>
+//                     <label className="block text-sm font-medium text-gray-700 mb-2">
+//                         Mobile Number <span className="text-red-500">*</span>
+//                     </label>
+//                     <div className="flex space-x-2">
+//                         <input
+//                             type="tel"
+//                             value={data.mobile || ''}
+//                             onChange={(e) => onChange(index, { ...data, mobile: e.target.value })}
+//                             className="input-field flex-1"
+//                             placeholder="Enter mobile number"
+//                             maxLength={10}
+//                         />
+//                         <button
+//                             type="button"
+//                             onClick={handleMobileVerify}
+//                             disabled={loadingStates[`coApp_mobile_${data.id}`] || verificationStatus.mobileStatus === 'VERIFIED'}
+//                             className={`btn-${verificationStatus.mobileStatus === 'VERIFIED' ? 'success' : 'secondary'} whitespace-nowrap min-w-[80px] flex items-center justify-center`}
+//                         >
+//                             {verificationStatus.mobileStatus === 'VERIFIED' ? '✓ Verified' : (loadingStates[`coApp_mobile_${data.id}`] ? <LoadingSpinner size="sm" /> : 'Verify')}
+//                         </button>
+//                     </div>
+//                 </div>
+
+//                 {/* Email */}
+//                 <div>
+//                     <label className="block text-sm font-medium text-gray-700 mb-2">
+//                         Email
+//                     </label>
+//                     <div className="flex space-x-2">
+//                         <input
+//                             type="email"
+//                             value={data.email || ''}
+//                             onChange={(e) => onChange(index, { ...data, email: e.target.value })}
+//                             className="input-field flex-1"
+//                             placeholder="Enter email address"
+//                         />
+//                         <button
+//                             type="button"
+//                             onClick={handleEmailVerify}
+//                             disabled={loadingStates[`coApp_email_${data.id}`] || verificationStatus.emailStatus === 'VERIFIED'}
+//                             className={`btn-${verificationStatus.emailStatus === 'VERIFIED' ? 'success' : 'secondary'} whitespace-nowrap min-w-[80px] flex items-center justify-center`}
+//                         >
+//                             {verificationStatus.emailStatus === 'VERIFIED' ? '✓ Verified' : (loadingStates[`coApp_email_${data.id}`] ? <LoadingSpinner size="sm" /> : 'Verify')}
+//                         </button>
+//                     </div>
+//                 </div>
+
+//                 {/* Gender */}
+//                 <div className="md:col-span-2">
+//                     <label className="block text-sm font-medium text-gray-700 mb-2">
+//                         Gender <span className="text-red-500">*</span>
+//                     </label>
+//                     <div className="flex space-x-6 mt-2">
+//                         {['Male', 'Female', 'Other'].map((gender) => (
+//                             <label key={gender} className="inline-flex items-center cursor-pointer">
+//                                 <input
+//                                     type="radio"
+//                                     name={`gender-${index}`}
+//                                     value={gender}
+//                                     checked={data.gender === gender}
+//                                     onChange={(e) => onChange(index, { ...data, gender: e.target.value })}
+//                                     className="form-radio h-4 w-4 text-primary-600 border-gray-300 focus:ring-primary-500"
+//                                 />
+//                                 <span className="ml-2 text-sm text-gray-700">{gender}</span>
+//                             </label>
+//                         ))}
+//                     </div>
+//                 </div>
+
+//                 {/* PAN Upload */}
+//                 <div>
+//                     <label className="block text-sm font-medium text-gray-700 mb-2">
+//                         PAN Card <span className="text-red-500">*</span>
+//                     </label>
+//                     <div className="flex space-x-2">
+//                         <label className="flex-1 cursor-pointer">
+//                             <input
+//                                 type="file"
+//                                 accept="image/*,.pdf"
+//                                 onChange={handlePanImageUpload}
+//                                 className="hidden"
+//                             />
+//                             <div className="input-field flex items-center justify-center space-x-2 border-dashed">
+//                                 <FiUpload className="h-4 w-4" />
+//                                 <span className="text-sm">
+//                                     {isOcrProcessing ? 'Processing...' : 'Upload PAN'}
+//                                 </span>
+//                             </div>
+//                         </label>
+//                         <button
+//                             type="button"
+//                             onClick={handlePanVerify}
+//                             disabled={loadingStates[`coApp_pan_${data.id}`] || verificationStatus.panStatus === 'VERIFIED' || !kycData.panNumber}
+//                             className={`btn-${verificationStatus.panStatus === 'VERIFIED' ? 'success' : 'secondary'} whitespace-nowrap min-w-[80px] flex items-center justify-center`}
+//                         >
+//                             {verificationStatus.panStatus === 'VERIFIED' ? '✓ Verified' : (loadingStates[`coApp_pan_${data.id}`] ? <LoadingSpinner size="sm" /> : 'Verify')}
+//                         </button>
+//                     </div>
+//                     {kycData.panNumber && (
+//                         <p className="text-xs text-green-600 mt-1">PAN: {kycData.panNumber}</p>
+//                     )}
+//                 </div>
+
+//                 {/* Aadhaar KYC */}
+//                 <div className="md:col-span-2">
+//                     <label className="block text-sm font-medium text-gray-700 mb-2">
+//                         Aadhaar KYC <span className="text-red-500">*</span>
+//                     </label>
+//                     <button
+//                         type="button"
+//                         onClick={handleAadhaarKyc}
+//                         disabled={loadingStates[`coApp_aadhaar_${data.id}`] || verificationStatus.aadhaarStatus === 'VERIFIED'}
+//                         className={`btn-${verificationStatus.aadhaarStatus === 'VERIFIED' ? 'success' : 'primary'} w-full`}
+//                     >
+//                         {verificationStatus.aadhaarStatus === 'VERIFIED' ? '✓ Aadhaar Verified' : (loadingStates[`coApp_aadhaar_${data.id}`] ? 'Processing...' : 'Complete Aadhaar KYC')}
+//                     </button>
+//                 </div>
+//             </div>
+//         </div>
+//     )
+// }
+
+// export default CoApplicantForm
+
+
+
+import { useMemo, useState } from 'react'
 import { FiX, FiUpload } from 'react-icons/fi'
 import kycService from '../services/kycService'
+import LoadingSpinner from './LoadingSpinner'
+
+const MAX_PAN_FILE_MB = 5
+const ALLOWED_PAN_TYPES = [
+  'image/jpeg',
+  'image/png',
+  'image/jpg',
+  'application/pdf',
+]
+
+const normalizePanFromOcr = (data) => {
+  // handle different OCR payload shapes
+  return (
+    data?.panNumber ||
+    data?.pan ||
+    data?.pan_no ||
+    data?.panNo ||
+    ''
+  )
+}
+
+const normalizeNameFromOcr = (data) => {
+  return data?.name || data?.fullName || ''
+}
 
 const CoApplicantForm = ({
-    index,
-    data = {},
-    onChange,
-    onRemove,
-    onPanUpload,
-    kycData = {},
-    errors = {}
+  // NOTE: index is kept for display only (Co-Applicant 1/2/3). Identity must NOT depend on index.
+  index,
+
+  data = {},
+
+  onChange,
+  onRemove,
+
+  // KYC data (should be mapped by stable key in parent: id || localKey)
+  kycData = {},
+
+  // parent validation errors
+  errors = {},
+
+  // required for verification requests
+  customerId,
+
+  // verification handler from parent (kept same signature)
+  onVerify,
+
+  // loading state map from parent
+  loadingStates = {},
+
+  // backend-driven verification status for this co-applicant
+  verificationStatus = {},
+
+  // optional: notify handler (toast/snackbar). Falls back to console.
+  onNotify,
+
+  // optional: called when user edits value after verified so parent can refresh statuses/reset UI
+  onFieldMutate,
 }) => {
-    const [isOcrProcessing, setIsOcrProcessing] = useState(false)
-    const [isVerifying, setIsVerifying] = useState(false)
-    const [verified, setVerified] = useState({
-        pan: false,
-        mobile: false,
-        email: false,
-        aadhaar: false
-    })
+  const [isOcrProcessing, setIsOcrProcessing] = useState(false)
 
-    const handlePanImageUpload = async (e) => {
-        const file = e.target.files[0]
-        if (!file) return
+  // stable identity key for UI + local state mapping
+  const stableKey = useMemo(() => data?.id || data?.localKey, [data?.id, data?.localKey])
 
-        setIsOcrProcessing(true)
-        try {
-            // Call placeholder OCR
-            const result = await kycService.runPanOcr(file)
-            if (result.success) {
-                // Auto-fill PAN number and name
-                onChange(index, {
-                    ...data,
-                    name: result.data.name,
-                })
+  const notify = (type, message) => {
+    if (onNotify) return onNotify(type, message)
+    // fallback (avoid alert in prod)
+    if (type === 'error') console.error(message)
+    else console.log(message)
+  }
 
-                // Store PAN separately (would be saved to backend)
-                if (onPanUpload) {
-                    onPanUpload(index, file, result.data.panNumber)
-                }
+  const mustHaveCaseId = () => {
+    if (!customerId) {
+      notify('error', 'Please verify primary mobile / create the case first (Case ID required).')
+      return false
+    }
+    return true
+  }
 
-                alert(`OCR completed! PAN: ${result.data.panNumber}, Name: ${result.data.name}`)
-            }
-        } catch (error) {
-            alert('OCR failed: ' + error.message)
-        } finally {
-            setIsOcrProcessing(false)
-        }
+  const mustHaveCoApplicantId = () => {
+    // IMPORTANT: Backend needs a DB coApplicantId to store verification statuses
+    if (!data?.id) {
+      notify('error', 'Please "Save as Draft" first to create Co-Applicant ID, then verify.')
+      return false
+    }
+    return true
+  }
+
+  const validatePanFile = (file) => {
+    if (!file) return 'No file selected'
+    if (!ALLOWED_PAN_TYPES.includes(file.type)) return 'Only JPG, PNG, or PDF allowed'
+    const sizeMb = file.size / (1024 * 1024)
+    if (sizeMb > MAX_PAN_FILE_MB) return `File too large. Max ${MAX_PAN_FILE_MB}MB`
+    return null
+  }
+
+  const handlePanImageUpload = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    const fileErr = validatePanFile(file)
+    if (fileErr) {
+      notify('error', fileErr)
+      if (e.target) e.target.value = ''
+      return
     }
 
-    const handlePanVerify = async () => {
-        if (!kycData.panNumber) {
-            alert('Please upload PAN first')
-            return
-        }
+    setIsOcrProcessing(true)
+    try {
+      const result = await kycService.runOcr(file, 'PAN')
 
-        setIsVerifying(true)
-        try {
-            const result = await kycService.verifyPan(kycData.panNumber)
-            if (result.success) {
-                setVerified(prev => ({ ...prev, pan: true }))
-                alert(result.message || 'PAN verified successfully')
-            }
-        } catch (error) {
-            alert('PAN verification failed: ' + error.message)
-        } finally {
-            setIsVerifying(false)
-        }
+      if (!result?.success) {
+        notify('error', result?.message || 'OCR failed')
+        return
+      }
+
+      const pan = normalizePanFromOcr(result.data)
+      const name = normalizeNameFromOcr(result.data)
+
+      if (!pan) {
+        notify('error', 'OCR completed but PAN could not be detected. Please enter PAN manually.')
+      }
+
+      // Update co-applicant name if OCR returned it
+      onChange?.(stableKey, {
+        ...data,
+        name: name || data.name,
+      })
+
+      // Store PAN number in parent mapping (kycData should be set in parent keyed by stableKey)
+      // We pass stableKey + file + pan
+      // Parent should update: coApplicantKyc[stableKey] = { panNumber: pan, panFile: file }
+      // If parent still expects (index, file, pan), update parent in next step.
+      if (typeof onFieldMutate === 'function') onFieldMutate(stableKey, 'panNumber', pan)
+
+      notify('success', `OCR done${pan ? `: ${pan}` : ''}${name ? `, ${name}` : ''}`)
+    } catch (error) {
+      notify('error', 'OCR failed: ' + (error?.message || 'Unknown error'))
+    } finally {
+      setIsOcrProcessing(false)
+      if (e.target) e.target.value = ''
     }
+  }
 
-    const handleMobileVerify = async () => {
-        if (!data.mobile) {
-            alert('Please enter mobile number first')
-            return
-        }
+  const safeVerify = (field, value) => {
+    if (!mustHaveCaseId()) return
+    if (!mustHaveCoApplicantId()) return
 
-        setIsVerifying(true)
-        try {
-            const result = await kycService.verifyMobile(data.mobile)
-            if (result.success) {
-                setVerified(prev => ({ ...prev, mobile: true }))
-                alert(result.message || 'Mobile verified successfully')
-            }
-        } catch (error) {
-            alert('Mobile verification failed: ' + error.message)
-        } finally {
-            setIsVerifying(false)
-        }
+    // prevent reclick while loading
+    const key = `${field}_${data.id}`
+    if (loadingStates[key]) return
+
+    onVerify?.(field, value, data.id)
+  }
+
+  const handleMobileVerify = () => safeVerify('applicantMobile', data.mobile)
+const handleEmailVerify = () => safeVerify('applicantEmail', data.email)
+const handlePanVerify = () => safeVerify('applicantPan', kycData.panNumber)
+const handleAadhaarKyc = () => safeVerify('aadhaar', true)
+
+
+  // Mutations should notify parent so it can refresh/reset verification
+  const handleChange = (patch) => {
+    onChange?.(stableKey, { ...data, ...patch })
+    if (typeof onFieldMutate === 'function') {
+      Object.keys(patch).forEach((k) => onFieldMutate(stableKey, k, patch[k]))
     }
+  }
 
-    const handleEmailVerify = async () => {
-        if (!data.email) {
-            alert('Please enter email first')
-            return
-        }
+  const isSaved = !!data?.id
+  const canVerify = !!customerId && isSaved
 
-        setIsVerifying(true)
-        try {
-            const result = await kycService.verifyEmail(data.email)
-            if (result.success) {
-                setVerified(prev => ({ ...prev, email: true }))
-                alert(result.message || 'Email verified successfully')
-            }
-        } catch (error) {
-            alert('Email verification failed: ' + error.message)
-        } finally {
-            setIsVerifying(false)
-        }
-    }
+  return (
+    <div className="border border-gray-300 rounded-lg p-6 mb-4 bg-gray-50 relative">
+      <button
+        type="button"
+        onClick={() => onRemove?.(stableKey)}
+        className="absolute top-4 right-4 p-2 text-red-600 hover:text-red-700 hover:bg-red-50 rounded"
+        title="Remove Co-Applicant"
+      >
+        <FiX className="h-5 w-5" />
+      </button>
 
-    const handleAadhaarKyc = async () => {
-        setIsVerifying(true)
-        try {
-            const result = await kycService.initiateAadhaarKyc(data.aadhaarNumber || '')
-            if (result.success) {
-                setVerified(prev => ({ ...prev, aadhaar: true }))
-                alert(result.message || 'Aadhaar KYC completed successfully')
-            }
-        } catch (error) {
-            alert('Aadhaar KYC failed: ' + error.message)
-        } finally {
-            setIsVerifying(false)
-        }
-    }
+      <h4 className="text-lg font-semibold text-gray-900 mb-1">
+        Co-Applicant {typeof index === 'number' ? index + 1 : ''}
+      </h4>
 
-    return (
-        <div className="border border-gray-300 rounded-lg p-6 mb-4 bg-gray-50 relative">
-            <button
-                type="button"
-                onClick={() => onRemove(index)}
-                className="absolute top-4 right-4 p-2 text-red-600 hover:text-red-700 hover:bg-red-50 rounded"
-                title="Remove Co-Applicant"
-            >
-                <FiX className="h-5 w-5" />
-            </button>
+      {!isSaved && (
+        <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2 mb-4">
+          Note: Save Draft to generate Co-Applicant ID before verification.
+        </p>
+      )}
 
-            <h4 className="text-lg font-semibold text-gray-900 mb-4">
-                Co-Applicant {index + 1}
-            </h4>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Name */}
-                <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Name <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                        type="text"
-                        value={data.name || ''}
-                        onChange={(e) => onChange(index, { ...data, name: e.target.value })}
-                        className="input-field"
-                        placeholder="Enter co-applicant name"
-                    />
-                    {errors.name && (
-                        <p className="text-red-500 text-xs mt-1">{errors.name}</p>
-                    )}
-                </div>
-
-                {/* Mobile */}
-                <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Mobile Number <span className="text-red-500">*</span>
-                    </label>
-                    <div className="flex space-x-2">
-                        <input
-                            type="tel"
-                            value={data.mobile || ''}
-                            onChange={(e) => onChange(index, { ...data, mobile: e.target.value })}
-                            className="input-field flex-1"
-                            placeholder="Enter mobile number"
-                            maxLength={10}
-                        />
-                        <button
-                            type="button"
-                            onClick={handleMobileVerify}
-                            disabled={isVerifying}
-                            className={`btn-${verified.mobile ? 'success' : 'secondary'} whitespace-nowrap`}
-                        >
-                            {verified.mobile ? '✓ Verified' : (isVerifying ? '...' : 'Verify')}
-                        </button>
-                    </div>
-                </div>
-
-                {/* Email */}
-                <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Email
-                    </label>
-                    <div className="flex space-x-2">
-                        <input
-                            type="email"
-                            value={data.email || ''}
-                            onChange={(e) => onChange(index, { ...data, email: e.target.value })}
-                            className="input-field flex-1"
-                            placeholder="Enter email address"
-                        />
-                        <button
-                            type="button"
-                            onClick={handleEmailVerify}
-                            disabled={isVerifying}
-                            className={`btn-${verified.email ? 'success' : 'secondary'} whitespace-nowrap`}
-                        >
-                            {verified.email ? '✓ Verified' : (isVerifying ? '...' : 'Verify')}
-                        </button>
-                    </div>
-                </div>
-
-                {/* Gender */}
-                <div className="md:col-span-2">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Gender <span className="text-red-500">*</span>
-                    </label>
-                    <div className="flex space-x-6 mt-2">
-                        {['Male', 'Female', 'Other'].map((gender) => (
-                            <label key={gender} className="inline-flex items-center cursor-pointer">
-                                <input
-                                    type="radio"
-                                    name={`gender-${index}`}
-                                    value={gender}
-                                    checked={data.gender === gender}
-                                    onChange={(e) => onChange(index, { ...data, gender: e.target.value })}
-                                    className="form-radio h-4 w-4 text-primary-600 border-gray-300 focus:ring-primary-500"
-                                />
-                                <span className="ml-2 text-sm text-gray-700">{gender}</span>
-                            </label>
-                        ))}
-                    </div>
-                </div>
-
-                {/* PAN Upload */}
-                <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                        PAN Card <span className="text-red-500">*</span>
-                    </label>
-                    <div className="flex space-x-2">
-                        <label className="flex-1 cursor-pointer">
-                            <input
-                                type="file"
-                                accept="image/*,.pdf"
-                                onChange={handlePanImageUpload}
-                                className="hidden"
-                            />
-                            <div className="input-field flex items-center justify-center space-x-2 border-dashed">
-                                <FiUpload className="h-4 w-4" />
-                                <span className="text-sm">
-                                    {isOcrProcessing ? 'Processing...' : 'Upload PAN'}
-                                </span>
-                            </div>
-                        </label>
-                        <button
-                            type="button"
-                            onClick={handlePanVerify}
-                            disabled={isVerifying || !kycData.panNumber}
-                            className={`btn-${verified.pan ? 'success' : 'secondary'} whitespace-nowrap`}
-                        >
-                            {verified.pan ? '✓ Verified' : (isVerifying ? '...' : 'Verify')}
-                        </button>
-                    </div>
-                    {kycData.panNumber && (
-                        <p className="text-xs text-green-600 mt-1">PAN: {kycData.panNumber}</p>
-                    )}
-                </div>
-
-                {/* Aadhaar KYC */}
-                <div className="md:col-span-2">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Aadhaar KYC <span className="text-red-500">*</span>
-                    </label>
-                    <button
-                        type="button"
-                        onClick={handleAadhaarKyc}
-                        className={`btn-${verified.aadhaar ? 'success' : 'primary'} w-full`}
-                    >
-                        {verified.aadhaar ? '✓ Aadhaar Verified' : (isVerifying ? 'Processing...' : 'Complete Aadhaar KYC')}
-                    </button>
-                </div>
-            </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Name */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Name <span className="text-red-500">*</span>
+          </label>
+          <input
+            type="text"
+            value={data.name || ''}
+            onChange={(e) => handleChange({ name: e.target.value })}
+            className="input-field"
+            placeholder="Enter co-applicant name"
+          />
+          {errors.name && <p className="text-red-500 text-xs mt-1">{errors.name}</p>}
         </div>
-    )
+
+        {/* Mobile */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Mobile Number <span className="text-red-500">*</span>
+          </label>
+          <div className="flex space-x-2">
+            <input
+              type="tel"
+              value={data.mobile || ''}
+              onChange={(e) => handleChange({ mobile: e.target.value.replace(/\D/g, '').slice(0, 10) })}
+              className="input-field flex-1"
+              placeholder="Enter mobile number"
+              maxLength={10}
+            />
+            <button
+              type="button"
+              onClick={handleMobileVerify}
+              disabled={
+                !canVerify ||
+                loadingStates[`applicantMobile_${data.id}`] ||
+                verificationStatus.mobileStatus === 'VERIFIED'
+              }
+              className={`btn-${verificationStatus.mobileStatus === 'VERIFIED' ? 'success' : 'secondary'} whitespace-nowrap min-w-[90px] flex items-center justify-center`}
+              title={!canVerify ? 'Save Draft first to verify' : ''}
+            >
+              {verificationStatus.mobileStatus === 'VERIFIED'
+                ? '✓ Verified'
+                : loadingStates[`applicantMobile_${data.id}`]
+                  ? <LoadingSpinner size="sm" />
+                  : 'Verify'}
+            </button>
+          </div>
+          {errors.mobile && <p className="text-red-500 text-xs mt-1">{errors.mobile}</p>}
+        </div>
+
+        {/* Email */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
+          <div className="flex space-x-2">
+            <input
+              type="email"
+              value={data.email || ''}
+              onChange={(e) => handleChange({ email: e.target.value })}
+              className="input-field flex-1"
+              placeholder="Enter email address"
+            />
+            <button
+              type="button"
+              onClick={handleEmailVerify}
+              disabled={
+                !canVerify ||
+                loadingStates[`coApp_email_${data.id}`] ||
+                verificationStatus.emailStatus === 'VERIFIED' ||
+                !data.email
+              }
+              className={`btn-${verificationStatus.emailStatus === 'VERIFIED' ? 'success' : 'secondary'} whitespace-nowrap min-w-[90px] flex items-center justify-center`}
+            >
+              {verificationStatus.emailStatus === 'VERIFIED'
+                ? '✓ Verified'
+                : loadingStates[`coApp_email_${data.id}`]
+                  ? <LoadingSpinner size="sm" />
+                  : 'Verify'}
+            </button>
+          </div>
+          {errors.email && <p className="text-red-500 text-xs mt-1">{errors.email}</p>}
+        </div>
+
+        {/* Gender */}
+        <div className="md:col-span-2">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Gender <span className="text-red-500">*</span>
+          </label>
+          <div className="flex space-x-6 mt-2">
+            {['Male', 'Female', 'Other'].map((gender) => (
+              <label key={gender} className="inline-flex items-center cursor-pointer">
+                <input
+                  type="radio"
+                  name={`gender-${stableKey}`}   // IMPORTANT: stable name, not index
+                  value={gender}
+                  checked={data.gender === gender}
+                  onChange={(e) => handleChange({ gender: e.target.value })}
+                  className="form-radio h-4 w-4 text-primary-600 border-gray-300 focus:ring-primary-500"
+                />
+                <span className="ml-2 text-sm text-gray-700">{gender}</span>
+              </label>
+            ))}
+          </div>
+          {errors.gender && <p className="text-red-500 text-xs mt-1">{errors.gender}</p>}
+        </div>
+
+        {/* PAN Upload */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            PAN Card <span className="text-red-500">*</span>
+          </label>
+
+          <div className="flex space-x-2">
+            <label className="flex-1 cursor-pointer">
+              <input
+  type="file"
+  accept="image/*,.pdf"
+  disabled={verificationStatus.panStatus === 'VERIFIED'}
+  onChange={handlePanImageUpload}
+  className="hidden"
+/>
+
+              <div className="input-field flex items-center justify-center space-x-2 border-dashed">
+                <FiUpload className="h-4 w-4" />
+                <span className="text-sm">
+                  {isOcrProcessing ? 'Processing...' : 'Upload PAN'}
+                </span>
+              </div>
+            </label>
+
+            <button
+              type="button"
+              onClick={handlePanVerify}
+              disabled={
+                !canVerify ||
+                loadingStates[`coApp_pan_${data.id}`] ||
+                verificationStatus.panStatus === 'VERIFIED' ||
+                !kycData.panNumber
+              }
+              className={`btn-${verificationStatus.panStatus === 'VERIFIED' ? 'success' : 'secondary'} whitespace-nowrap min-w-[90px] flex items-center justify-center`}
+            >
+              {verificationStatus.panStatus === 'VERIFIED'
+                ? '✓ Verified'
+                : loadingStates[`coApp_pan_${data.id}`]
+                  ? <LoadingSpinner size="sm" />
+                  : 'Verify'}
+            </button>
+          </div>
+
+          {kycData.panNumber && (
+            <p className="text-xs text-green-600 mt-1">PAN: {kycData.panNumber}</p>
+          )}
+          {errors.pan && <p className="text-red-500 text-xs mt-1">{errors.pan}</p>}
+        </div>
+
+        {/* Aadhaar KYC */}
+        <div className="md:col-span-2">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Aadhaar KYC <span className="text-red-500">*</span>
+          </label>
+
+          <button
+            type="button"
+            onClick={handleAadhaarKyc}
+            disabled={
+              !canVerify ||
+              loadingStates[`coApp_aadhaar_${data.id}`] ||
+              verificationStatus.aadhaarStatus === 'VERIFIED'
+            }
+            className={`btn-${verificationStatus.aadhaarStatus === 'VERIFIED' ? 'success' : 'primary'} w-full`}
+          >
+            {verificationStatus.aadhaarStatus === 'VERIFIED'
+              ? '✓ Aadhaar Verified'
+              : loadingStates[`coApp_aadhaar_${data.id}`]
+                ? 'Processing...'
+                : 'Complete Aadhaar KYC'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 export default CoApplicantForm
+

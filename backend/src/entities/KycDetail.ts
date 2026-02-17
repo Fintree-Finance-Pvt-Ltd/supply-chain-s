@@ -26,7 +26,7 @@ export class KycDetail {
     applicantIndex: number; // 0 for main applicant, 1,2,3... for co-applicants
 
     @Column({ type: 'int', nullable: true })
-    coApplicantId: number;
+    coApplicantId: number | null;
 
     @Column({ type: 'enum', enum: Object.values(KYC_TYPES) })
     kycType: string; // PAN, GST, AADHAAR

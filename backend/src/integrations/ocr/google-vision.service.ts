@@ -27,3 +27,5 @@ export class GoogleVisionService {
       .filter(Boolean);
   }
 }
+
+export const googleVisionService = new GoogleVisionService();

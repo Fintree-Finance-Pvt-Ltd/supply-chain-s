@@ -91,4 +91,15 @@ export const API_ENDPOINTS = {
   // Operations
   OPERATIONS_PENDING: '/operations/pending',
   OPERATIONS_BY_ID: (id) => `/operations/${id}`,
+
+  // Onboarding Integrations
+  ONBOARDING_MOBILE_SEND_OTP: '/onboarding/mobile/send-otp',
+  ONBOARDING_MOBILE_VERIFY_OTP: '/onboarding/mobile/verify-otp',
+  ONBOARDING_EMAIL_SEND_OTP: '/onboarding/email/send-otp',
+  ONBOARDING_EMAIL_VERIFY_OTP: '/onboarding/email/verify-otp',
+  ONBOARDING_KYC_PAN: '/onboarding/kyc/pan',
+  ONBOARDING_KYC_GST: '/onboarding/kyc/gst',
+  ONBOARDING_KYC_AADHAAR: '/onboarding/kyc/aadhaar',
+  ONBOARDING_BUREAU_CHECK: '/onboarding/bureau/check',
+  ONBOARDING_OCR_PROCESS: '/onboarding/ocr/process',
 }

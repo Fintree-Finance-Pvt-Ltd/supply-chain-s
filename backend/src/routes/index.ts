@@ -13,6 +13,8 @@ import workflowRoutes from './workflow.routes';
 import debugRoutes from './debug.routes';
 import migrationRoutes from './migration.routes';
 
+import onboardingRoutes from './onboarding.routes';
+
 const router = Router();
 
 router.use('/auth', authRoutes);
@@ -26,6 +28,7 @@ router.use('/documents', documentRoutes);
 router.use('/operations', operationsRoutes);
 router.use('/co-applicants', coApplicantRoutes);
 router.use('/workflows', workflowRoutes);
+router.use('/onboarding', onboardingRoutes);
 router.use('/debug', debugRoutes);
 router.use('/migration', migrationRoutes);
 

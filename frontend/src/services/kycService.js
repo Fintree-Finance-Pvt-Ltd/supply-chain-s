@@ -1,4 +1,5 @@
 import api from './api'
+import { API_ENDPOINTS } from '../constants/api'
 
 export const kycService = {
     // Create KYC entry
@@ -16,7 +17,7 @@ export const kycService = {
         return response.data
     },
 
-    // Verify KYC (placeholder)
+    // Verify KYC (placeholder - backend has specific integration routes)
     verifyKyc: async (id, kycType) => {
         const response = await api.post(`/kyc/${id}/verify`, { kycType })
         return response.data
@@ -82,93 +83,218 @@ export const kycService = {
         return response.data
     },
 
-    // Placeholder: Run PAN OCR
-    runPanOcr: async (file) => {
-        // This is a placeholder for future OCR integration
-        // In production, this would call an OCR API
-        return new Promise((resolve) => {
-            setTimeout(() => {
-                resolve({
-                    success: true,
-                    data: {
-                        panNumber: 'ABCDE1234F',
-                        name: 'Rohit Joshi',
-                    },
-                    message: 'OCR completed (simulated)',
-                })
-            }, 1000)
-        })
+    // --- Integration Services ---
+
+    // -----------------------------
+// 🔹 OTP - MOBILE
+// -----------------------------
+
+sendMobileOtp: async ({
+  customerId,
+  mobileNumber,
+  ownerType,
+  applicantId,
+  coApplicantId
+}) => {
+  const response = await api.post(
+    API_ENDPOINTS.ONBOARDING_MOBILE_SEND_OTP,
+    {
+      customerId,
+      mobileNumber,
+      ownerType,
+      applicantId,
+      coApplicantId
+    }
+  )
+  return response.data
+},
+
+verifyMobileOtp: async ({
+  customerId,
+  otp,
+  mobileNumber,
+  ownerType,
+  applicantId,
+  coApplicantId,
+  companyInfo
+}) => {
+
+  const payload = {
+    customerId,
+    otp,
+    mobileNumber,
+    ownerType,
+    applicantId,
+    coApplicantId,
+    ...(companyInfo || {})
+  };
+
+  const response = await api.post(
+    API_ENDPOINTS.ONBOARDING_MOBILE_VERIFY_OTP,
+    payload
+  );
+
+  return response.data;
+},
+
+
+// -----------------------------
+// 🔹 OTP - EMAIL
+// -----------------------------
+
+sendEmailOtp: async ({
+  customerId,
+  email,
+  ownerType,
+  applicantId,
+  coApplicantId
+}) => {
+  const response = await api.post(
+    API_ENDPOINTS.ONBOARDING_EMAIL_SEND_OTP,
+    {
+      customerId,
+      email,
+      ownerType,
+      applicantId,
+      coApplicantId
+    }
+  )
+  return response.data
+},
+
+verifyEmailOtp: async ({
+  customerId,
+  otp,
+  ownerType,
+  applicantId,
+  coApplicantId
+}) => {
+  const response = await api.post(
+    API_ENDPOINTS.ONBOARDING_EMAIL_VERIFY_OTP,
+    {
+      customerId,
+      otp,
+      ownerType,
+      applicantId,
+      coApplicantId
+    }
+  )
+  return response.data
+},
+
+// -----------------------------
+// 🔹 PAN
+// -----------------------------
+
+verifyPan: async ({
+  customerId,
+  pan,
+  name,
+  ownerType,
+  applicantId,
+  coApplicantId
+}) => {
+  const response = await api.post(
+    API_ENDPOINTS.ONBOARDING_KYC_PAN,
+    {
+      customerId,
+      pan,
+      name,
+      ownerType,
+      applicantId,
+      coApplicantId
+    }
+  )
+  return response.data
+},
+
+// -----------------------------
+// 🔹 GST
+// -----------------------------
+
+verifyGst: async ({
+  customerId,
+  gstNumber,
+  ownerType,
+  applicantId,
+  coApplicantId
+}) => {
+  const response = await api.post(
+    API_ENDPOINTS.ONBOARDING_KYC_GST,
+    {
+      customerId,
+      gstNumber,
+      ownerType,
+      applicantId,
+      coApplicantId
+    }
+  )
+  return response.data
+},
+
+// -----------------------------
+// 🔹 Aadhaar
+// -----------------------------
+
+initiateAadhaarKyc: async ({
+  customerId,
+  aadhaarNumber,
+  ownerType,
+  applicantId,
+  coApplicantId
+}) => {
+  const response = await api.post(
+    API_ENDPOINTS.ONBOARDING_KYC_AADHAAR,
+    {
+      customerId,
+      aadhaarNumber,
+      ownerType,
+      applicantId,
+      coApplicantId
+    }
+  )
+  return response.data
+},
+
+// -----------------------------
+// 🔹 Bureau
+// -----------------------------
+
+checkBureau: async ({
+  customerId,
+  ownerType,
+  applicantId,
+  coApplicantId
+}) => {
+  const response = await api.post(
+    API_ENDPOINTS.ONBOARDING_BUREAU_CHECK,
+    {
+      customerId,
+      ownerType,
+      applicantId,
+      coApplicantId
+    }
+  )
+  return response.data
+},
+
+
+    // Get all verification statuses for a customer and co-applicants
+    getKycStatuses: async (customerId) => {
+        const response = await api.get(`/onboarding/kyc/status/${customerId}`)
+        return response.data
     },
 
-    // Placeholder: Verify PAN
-    verifyPan: async (panNumber) => {
-        // Placeholder for PAN verification API
-        return new Promise((resolve) => {
-            setTimeout(() => {
-                resolve({
-                    success: true,
-                    verified: true,
-                    message: 'PAN verified successfully (simulated)',
-                })
-            }, 800)
+    // OCR Processing
+    runOcr: async (file, type) => {
+        const formData = new FormData()
+        formData.append('file', file)
+        formData.append('type', type)
+        const response = await api.post(API_ENDPOINTS.ONBOARDING_OCR_PROCESS, formData, {
+            headers: { 'Content-Type': 'multipart/form-data' }
         })
-    },
-
-    // Placeholder: Verify GST
-    verifyGst: async (gstNumber) => {
-        // Placeholder for GST verification API
-        return new Promise((resolve) => {
-            setTimeout(() => {
-                resolve({
-                    success: true,
-                    verified: true,
-                    message: 'GST verified successfully (simulated)',
-                })
-            }, 800)
-        })
-    },
-
-    // Placeholder: Verify Mobile (OTP)
-    verifyMobile: async (mobileNumber) => {
-        // Placeholder for mobile OTP verification
-        return new Promise((resolve) => {
-            setTimeout(() => {
-                resolve({
-                    success: true,
-                    verified: true,
-                    message: 'Mobile verified successfully (simulated)',
-                })
-            }, 800)
-        })
-    },
-
-    // Placeholder: Verify Email (OTP)
-    verifyEmail: async (email) => {
-        // Placeholder for email OTP verification
-        return new Promise((resolve) => {
-            setTimeout(() => {
-                resolve({
-                    success: true,
-                    verified: true,
-                    message: 'Email verified successfully (simulated)',
-                })
-            }, 800)
-        })
-    },
-
-    // Placeholder: Aadhaar KYC
-    initiateAadhaarKyc: async (aadhaarNumber) => {
-        // Placeholder for Aadhaar e-KYC integration
-        return new Promise((resolve) => {
-            setTimeout(() => {
-                resolve({
-                    success: true,
-                    verified: true,
-                    message: 'Aadhaar KYC initiated (simulated)',
-                })
-            }, 1000)
-        })
-    },
+        return response.data
+    }
 }
 
 export default kycService

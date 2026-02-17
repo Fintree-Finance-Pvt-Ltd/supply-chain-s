@@ -1,6 +1,14 @@
 import axios from 'axios';
 import FormData from 'form-data';
-import { ParsedPanResult, ParsedAadhaarResult, PanOcrResult, ChequeOcrResponse } from './ocr.types';
+import fs from 'fs';
+import {
+  ParsedPanResult,
+  ParsedAadhaarResult,
+  PanOcrResult,
+  ChequeOcrResponse,
+} from './ocr.types';
+import { googleVisionService } from './google-vision.service';
+import { parsePanText } from './pan-parser.util';
 
 export class OcrService {
   private panUrl = process.env.OCR_PAN_API_URL!;
@@ -8,31 +16,99 @@ export class OcrService {
   private gridlinesBaseUrl = process.env.GRIDLINES_BASE_URL!;
   private gridlinesApiKey = process.env.GRIDLINES_API_KEY!;
 
+  private finanalyzOcrUrl =
+    process.env.FINANALYZ_PAN_OCR_URL ??
+    'https://aasandbox.finanalyz.com/eKyc/PanOCR';
+  private finanalyzKey = process.env.FINANALYZ_X_API_KEY ?? '';
+
   // ---------------------------------------------------
-  // 🔍 PAN OCR (API)
+  // 🔍 PAN OCR (Google Vision → Finanalyz fallback)
+  // ⚠️ FUNCTION NAME UNCHANGED
   // ---------------------------------------------------
-  async extractPanFromImage(imageBase64: string): Promise<PanOcrResult> {
-    if (!imageBase64) {
-      throw new Error('Image base64 is required');
+  async extractPanFromImage(
+    imageBase64OrFile: string | Express.Multer.File,
+  ): Promise<PanOcrResult> {
+    if (!imageBase64OrFile) {
+      throw new Error('Image input is required');
     }
 
-    const { data } = await axios.post(
-      this.panUrl,
-      { image: imageBase64 },
-      {
-        headers: { 'x-api-key': this.ocrKey },
-        validateStatus: () => true,
+    let imageBuffer: Buffer;
+
+    // 🔁 Support existing base64 usage + new file usage
+    if (typeof imageBase64OrFile === 'string') {
+      imageBuffer = Buffer.from(imageBase64OrFile, 'base64');
+    } else if (imageBase64OrFile.buffer) {
+      imageBuffer = imageBase64OrFile.buffer;
+    } else if (imageBase64OrFile.path) {
+      imageBuffer = await fs.promises.readFile(imageBase64OrFile.path);
+    } else {
+      throw new Error('Invalid image input');
+    }
+
+    // ---------------------------
+    // 1️⃣ Google Vision OCR
+    // ---------------------------
+    try {
+      const lines = await googleVisionService.extractTextFromImage(imageBuffer);
+
+      if (lines?.length) {
+        const fullText = lines.join('\n').toLowerCase();
+        const isPaymentDoc =
+          fullText.includes('payment') ||
+          fullText.includes('paytm') ||
+          fullText.includes('upi');
+
+        const parsed = parsePanText(lines);
+
+        if (parsed.panNumber && !isPaymentDoc) {
+          return {
+            pan: parsed.panNumber,
+            name: parsed.name,
+            raw: {
+              provider: 'GOOGLE_VISION',
+              lines,
+              name: parsed.name,
+              dob: parsed.dob,
+              fatherName: parsed.fatherName,
+            },
+          };
+        }
+      }
+    } catch (_) {
+      // silent fallback
+    }
+
+    // ---------------------------
+    // 2️⃣ Finanalyz fallback
+    // ---------------------------
+    if (!this.finanalyzKey) {
+      throw new Error('Finanalyz OCR not configured');
+    }
+
+    const form = new FormData();
+    form.append('file', imageBuffer, { filename: 'pan.jpg' });
+
+    const { data } = await axios.post(this.finanalyzOcrUrl, form, {
+      headers: {
+        ...form.getHeaders(),
+        accept: '*/*',
+        XApiKey: this.finanalyzKey,
       },
-    );
+      validateStatus: () => true,
+    });
 
     return {
-      pan: data?.panNumber,
-      raw: data,
+      pan: data?.data?.pan_number ?? null,
+      name: data?.data?.name ?? data?.data?.response?.name ?? null,
+      raw: {
+        provider: 'FINANALYZ',
+        data,
+      },
     };
   }
 
   // ---------------------------------------------------
-  // 🔎 PAN TEXT PARSING
+  // 🔎 PAN TEXT PARSING (UNCHANGED)
   // ---------------------------------------------------
   async parsePanFromOcr(text: string): Promise<ParsedPanResult> {
     const panRegex = /[A-Z]{5}\d{4}[A-Z]{1}/;
@@ -51,7 +127,7 @@ export class OcrService {
   }
 
   // ---------------------------------------------------
-  // 🔎 AADHAAR TEXT PARSING
+  // 🔎 AADHAAR TEXT PARSING (UNCHANGED)
   // ---------------------------------------------------
   async parseAadhaarFromOcr(text: string): Promise<ParsedAadhaarResult> {
     const aadhaarRegex = /\b\d{12}\b/;
@@ -70,7 +146,7 @@ export class OcrService {
   }
 
   // ---------------------------------------------------
-  // 🧾 CHEQUE OCR (GRIDLINES)
+  // 🧾 CHEQUE OCR (UNCHANGED)
   // ---------------------------------------------------
   async extractChequeData(
     file: Express.Multer.File,

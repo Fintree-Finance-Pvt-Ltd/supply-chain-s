@@ -7,7 +7,9 @@ import {
   ManyToOne,
   OneToMany,
   JoinColumn,
+  OneToOne,
 } from 'typeorm';
+
 import { User } from './User';
 import { Document } from './Document';
 import { CreditSanction } from './CreditSanction';
@@ -16,17 +18,25 @@ import { OperationsCheck } from './OperationsCheck';
 import { CaseStatusHistory } from './CaseStatusHistory';
 import { KycDetail } from './KycDetail';
 import { CoApplicant } from './CoApplicant';
+import { Applicant } from './Applicant';
 import { Supplier } from './Supplier';
 import { Invoice } from './Invoice';
 import { CaseWorkflow } from './CaseWorkflow';
 import { ContactPerson } from './ContactPerson';
 import { CustomerAddress } from './CustomerAddress';
+import { KycVerificationStatus } from './KycVerificationStatus';
+
 import { CASE_STATUS, COMPANY_TYPES } from '../config/constants';
 
 @Entity('customers')
 export class Customer {
+
   @PrimaryGeneratedColumn('increment')
   id: number;
+
+  // =====================================================
+  // 🔹 OLD PERSONAL FIELDS (DO NOT REMOVE)
+  // =====================================================
 
   @Column({ type: 'varchar', length: 255 })
   name: string;
@@ -37,14 +47,18 @@ export class Customer {
   @Column({ type: 'varchar', length: 255, nullable: true })
   email: string;
 
+  @Column({ type: 'varchar', length: 20, nullable: true })
+  pan: string;
+
+  // =====================================================
+  // 🔹 COMPANY FIELDS
+  // =====================================================
+
   @Column({ type: 'enum', enum: Object.values(COMPANY_TYPES), nullable: true })
   companyType: string;
 
   @Column({ type: 'varchar', length: 255, nullable: true })
   companyName: string;
-
-  @Column({ type: 'varchar', length: 15, nullable: true, unique: true })
-  gstNumber: string;
 
   @Column({ type: 'varchar', length: 20, nullable: true })
   companyMobile: string;
@@ -55,11 +69,12 @@ export class Customer {
   @Column({ type: 'varchar', length: 20, nullable: true })
   companyPan: string;
 
-  @Column({ type: 'varchar', length: 20, nullable: true })
-  pan: string;
+  @Column({ type: 'varchar', length: 15, nullable: true, unique: true })
+  gstNumber: string;
 
-  @Column({ type: 'varchar', length: 100, nullable: true })
-  electricityBillNo: string;
+  // =====================================================
+  // 🔹 CASE / BUSINESS META
+  // =====================================================
 
   @Column({ type: 'enum', enum: Object.values(CASE_STATUS), default: CASE_STATUS.DRAFT })
   status: string;
@@ -83,16 +98,20 @@ export class Customer {
   rejectionReason: string;
 
   @Column({ type: 'text', nullable: true })
-  pushedTo: string; // Comma-separated list of entities (Credit Team, Kite, etc.)
+  pushedTo: string;
 
   @Column({ type: 'boolean', default: false })
   kycVerified: boolean;
 
   @Column({ type: 'int' })
-  rmId: number; // Relationship Manager who created this
+  rmId: number;
 
   @Column({ type: 'text', nullable: true })
   remarks: string;
+
+  // =====================================================
+  // 🔹 BANKING
+  // =====================================================
 
   @Column({ type: 'varchar', length: 255, nullable: true })
   bankAccountNo: string;
@@ -115,13 +134,20 @@ export class Customer {
   @Column({ type: 'enum', enum: ['pending', 'completed'], default: 'pending' })
   eSignStatus: string;
 
+  // =====================================================
+  // 🔹 TIMESTAMPS
+  // =====================================================
+
   @CreateDateColumn()
   createdAt: Date;
 
   @UpdateDateColumn()
   updatedAt: Date;
 
-  // Relations
+  // =====================================================
+  // 🔹 RELATIONS (ALL OLD + NEW SAFE)
+  // =====================================================
+
   @ManyToOne(() => User, (user) => user.customers)
   @JoinColumn({ name: 'rmId' })
   rm: User;
@@ -134,6 +160,12 @@ export class Customer {
 
   @OneToMany(() => CoApplicant, (coApp) => coApp.customer)
   coApplicants: CoApplicant[];
+
+  @OneToOne(() => Applicant, (applicant) => applicant.customer, { cascade: true })
+  applicant: Applicant;
+
+  @OneToMany(() => KycVerificationStatus, (kyc) => kyc.customer)
+  kycStatuses: KycVerificationStatus[];
 
   @OneToMany(() => CreditSanction, (sanction) => sanction.customer)
   creditSanctions: CreditSanction[];
@@ -162,5 +194,3 @@ export class Customer {
   @OneToMany(() => CustomerAddress, (address) => address.customer, { cascade: true })
   addresses: CustomerAddress[];
 }
-
-

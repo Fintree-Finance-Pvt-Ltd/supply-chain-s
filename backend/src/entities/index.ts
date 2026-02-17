@@ -22,6 +22,8 @@ export { CaseWorkflow } from './CaseWorkflow';
 export { SanctionLimitHistory } from './SanctionLimitHistory';
 export { ContactPerson } from './ContactPerson';
 export { CustomerAddress } from './CustomerAddress';
+export { OtpSession } from './OtpSession';
+export { KycVerificationStatus } from './KycVerificationStatus';
 
 
 

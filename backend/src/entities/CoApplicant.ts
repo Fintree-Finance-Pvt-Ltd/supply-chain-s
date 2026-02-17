@@ -30,6 +30,10 @@ export class CoApplicant {
     @Column({ type: 'varchar', length: 255, nullable: true })
     email: string | null;
 
+    @Column({ type: 'varchar', length: 20, nullable: true })
+pan: string;
+
+
     @Column({ type: 'enum', enum: Object.values(GENDERS), nullable: true })
     gender: string;
 
@@ -46,6 +50,8 @@ export class CoApplicant {
 
     @OneToMany(() => KycDetail, (kycDetail) => kycDetail.coApplicant)
     kycDetails: KycDetail[];
+    
+
 
     @OneToMany(() => Document, (document) => document.coApplicant)
     documents: Document[];
