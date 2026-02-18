@@ -69,6 +69,7 @@ const CoApplicantSection = ({
                 onChange={(i, data) => updateCoApplicant(key, data)}
                 onRemove={() => removeCoApplicant(key)}
                 onPanUpload={(index, file, panNumber) => handleCoApplicantPanUpload(key, file, panNumber)}
+                onKycUpdate={(patch) => setCoApplicantKyc(p => ({ ...p, [key]: { ...(p[key] || {}), ...patch } }))}
                 kycData={coApplicantKyc[key] || {}}
                 customerId={customerId}
                 onVerify={onVerify}

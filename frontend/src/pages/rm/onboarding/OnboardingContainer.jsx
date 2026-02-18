@@ -53,61 +53,59 @@ const OnboardingContainer = () => {
   const [verificationStatuses, setVerificationStatuses] = useOtpFlow.useVerificationStatusesState();
 
   const companyStatus = useMemo(
-  () =>
-    verificationStatuses.find(
-      (s) => s.ownerType === "COMPANY"
-    ),
-  [verificationStatuses]
-);
+    () =>
+      verificationStatuses.find(
+        (s) => s.ownerType === "COMPANY"
+      ),
+    [verificationStatuses]
+  );
 
-// const applicantStatus = useMemo(() => {
-//   const rows = verificationStatuses.filter(
-//     (s) => s.ownerType === "APPLICANT"
-//   );
+  // const applicantStatus = useMemo(() => {
+  //   const rows = verificationStatuses.filter(
+  //     (s) => s.ownerType === "APPLICANT"
+  //   );
 
-//   if (!rows.length) return null;
+  //   if (!rows.length) return null;
 
-//   return rows.reduce((acc, curr) => ({
-//     ...acc,
-//     ...curr, // merge all statuses
-//   }), {});
-// }, [verificationStatuses]);
+  //   return rows.reduce((acc, curr) => ({
+  //     ...acc,
+  //     ...curr, // merge all statuses
+  //   }), {});
+  // }, [verificationStatuses]);
 
-const applicantStatus = useMemo(() => {
-  return verificationStatuses.find(
-    (s) =>
-      s.ownerType === "APPLICANT" &&
-      s.applicantId !== null
-  ) || null;
-}, [verificationStatuses]);
+  const applicantStatus = useMemo(() => {
+    return verificationStatuses.find(
+      (s) => s.ownerType === "APPLICANT"
+    ) || null;
+  }, [verificationStatuses]);
 
 
 
-const coApplicantStatusMap = useMemo(() => {
-  const map = {};
-  verificationStatuses
-    .filter(s => s.ownerType === "CO_APPLICANT")
-    .forEach(s => {
-      map[s.coApplicantId] = s;
-    });
-  return map;
-}, [verificationStatuses]);
+  const coApplicantStatusMap = useMemo(() => {
+    const map = {};
+    verificationStatuses
+      .filter(s => s.ownerType === "CO_APPLICANT")
+      .forEach(s => {
+        map[s.coApplicantId] = s;
+      });
+    return map;
+  }, [verificationStatuses]);
 
 
 
   const getCompanyVerified = (kind) => {
-  if (!companyStatus) return false;
+    if (!companyStatus) return false;
 
-  const map = {
-    mobile: "mobileStatus",
-    email: "emailStatus",
-    pan: "panStatus",
-    gst: "gstStatus",
-    aadhaar: "aadhaarStatus",
+    const map = {
+      mobile: "mobileStatus",
+      email: "emailStatus",
+      pan: "panStatus",
+      gst: "gstStatus",
+      aadhaar: "aadhaarStatus",
+    };
+
+    return companyStatus?.[map[kind]] === "VERIFIED";
   };
-
-  return companyStatus?.[map[kind]] === "VERIFIED";
-};
 
 
   // ----- Load case + statuses
@@ -122,17 +120,21 @@ const coApplicantStatusMap = useMemo(() => {
     try {
       const res = await kycService.getKycStatuses(id);
       if (res?.success) {
-  setVerificationStatuses(prev => {
-    const map = new Map();
+        console.log("Fetched KYC Statuses:", res.data); // DEBUG
+        setVerificationStatuses(prev => {
+          const map = new Map();
 
-    [...prev, ...(res.data || [])].forEach(s => {
-      const key = `${s.ownerType}_${s.coApplicantId || "main"}`;
-      map.set(key, { ...map.get(key), ...s });
-    });
+          [...prev, ...(res.data || [])].forEach(s => {
+            const key = `${s.ownerType}_${s.applicantId || s.coApplicantId || "main"}`;
+            map.set(key, { ...map.get(key), ...s });
+          });
 
-    return Array.from(map.values());
-  });
-}
+          return Array.from(map.values());
+        });
+
+        // Debug
+        // console.log("Refreshed statuses:", res.data);
+      }
 
     } catch (e) {
       console.error("Failed to fetch verification statuses:", e);
@@ -228,427 +230,427 @@ const coApplicantStatusMap = useMemo(() => {
   });
 
   // ----- Verify handlers (PAN/GST/OTP send)
-// const handleVerify = async (field, value, coApplicantId = null, localKey = null) => {
-//   if (!value) {
-//     alert(`Please enter value for ${field}`);
-//     return;
-//   }
+  // const handleVerify = async (field, value, coApplicantId = null, localKey = null) => {
+  //   if (!value) {
+  //     alert(`Please enter value for ${field}`);
+  //     return;
+  //   }
 
-//   if (!customerId && field !== "companyMobile") {
-//   alert("Verify company mobile first (customer must exist)");
-//   return;
-// }
-
-
-//   try {
-//     // ----------------------------------
-//     // 🔹 Determine ownerType
-//     // ----------------------------------
-
-//     let ownerType = "COMPANY";
-//     let applicantId = undefined;
-
-//     if (coApplicantId) {
-//       ownerType = "CO_APPLICANT";
-//     } else if (
-//       field === "applicantPan" ||
-//       field === "applicantMobile" ||
-//       field === "applicantEmail"
-//     ) {
-//       ownerType = "APPLICANT";
-//     }
-
-//     // ----------------------------------
-//     // 🔹 MOBILE OTP
-//     // ----------------------------------
-
-//     if (field === "companyMobile" || field === "applicantMobile" || field === "coApplicantMobile") {
-//       if (!validateMobile(value)) {
-//         alert("Enter valid mobile");
-//         return;
-//       }
-
-//       const loadingKey = `${field}_${coApplicantId || "main"}`;
-// setLoading(loadingKey, true);
-
-// const res = await kycService.sendMobileOtp({
-//   customerId,
-//   mobileNumber: value,
-//   ownerType,
-//   applicantId,
-//   coApplicantId
-// });
-
-// if (!coApplicantId && res?.coApplicantId && localKey) {
-//   setCoApplicants(prev =>
-//     prev.map(c =>
-//       c.localKey === localKey
-//         ? { ...c, id: res.coApplicantId }
-//         : c
-//     )
-//   );
-// }
+  //   if (!customerId && field !== "companyMobile") {
+  //   alert("Verify company mobile first (customer must exist)");
+  //   return;
+  // }
 
 
-// setLoading(loadingKey, false);
+  //   try {
+  //     // ----------------------------------
+  //     // 🔹 Determine ownerType
+  //     // ----------------------------------
+
+  //     let ownerType = "COMPANY";
+  //     let applicantId = undefined;
+
+  //     if (coApplicantId) {
+  //       ownerType = "CO_APPLICANT";
+  //     } else if (
+  //       field === "applicantPan" ||
+  //       field === "applicantMobile" ||
+  //       field === "applicantEmail"
+  //     ) {
+  //       ownerType = "APPLICANT";
+  //     }
+
+  //     // ----------------------------------
+  //     // 🔹 MOBILE OTP
+  //     // ----------------------------------
+
+  //     if (field === "companyMobile" || field === "applicantMobile" || field === "coApplicantMobile") {
+  //       if (!validateMobile(value)) {
+  //         alert("Enter valid mobile");
+  //         return;
+  //       }
+
+  //       const loadingKey = `${field}_${coApplicantId || "main"}`;
+  // setLoading(loadingKey, true);
+
+  // const res = await kycService.sendMobileOtp({
+  //   customerId,
+  //   mobileNumber: value,
+  //   ownerType,
+  //   applicantId,
+  //   coApplicantId
+  // });
+
+  // if (!coApplicantId && res?.coApplicantId && localKey) {
+  //   setCoApplicants(prev =>
+  //     prev.map(c =>
+  //       c.localKey === localKey
+  //         ? { ...c, id: res.coApplicantId }
+  //         : c
+  //     )
+  //   );
+  // }
 
 
-//       if (res?.success) {
-//         openOtpFor({
-//           type: "mobile",
-//           target: field,
-//           value,
-//           ownerType,
-//           applicantId,
-//           coApplicantId
-//         });
-//       }
-
-//       return;
-//     }
-
-//     // ----------------------------------
-//     // 🔹 EMAIL OTP
-//     // ----------------------------------
-
-//     if (field === "companyEmail" || field === "applicantEmail" || field === "coApplicantEmail") {
-//   if (!validateEmail(value)) {
-//     alert("Enter valid email");
-//     return;
-//   }
-
-//   const loadingKey = `${field}_${coApplicantId || "main"}`;
-//   setLoading(loadingKey, true);
-
-//   const res = await kycService.sendEmailOtp({
-//     customerId,
-//     email: value,
-//     ownerType,
-//     applicantId,
-//     coApplicantId,
-//   });
-
-// if (!coApplicantId && res?.coApplicantId && localKey) {
-//   setCoApplicants(prev =>
-//     prev.map(c =>
-//       c.localKey === localKey
-//         ? { ...c, id: res.coApplicantId }
-//         : c
-//     )
-//   );
-// }
+  // setLoading(loadingKey, false);
 
 
-//   setLoading(loadingKey, false);
+  //       if (res?.success) {
+  //         openOtpFor({
+  //           type: "mobile",
+  //           target: field,
+  //           value,
+  //           ownerType,
+  //           applicantId,
+  //           coApplicantId
+  //         });
+  //       }
 
-//   if (res?.success) {
-//     openOtpFor({
-//       type: "email",
-//       target: field,
-//       value,
-//       ownerType,
-//       applicantId,
-//       coApplicantId,
-//     });
-//   }
+  //       return;
+  //     }
 
-//       return;
-//     }
+  //     // ----------------------------------
+  //     // 🔹 EMAIL OTP
+  //     // ----------------------------------
 
-//     // ----------------------------------
-// // 🔹 PAN VERIFY (FIXED)
-// // ----------------------------------
+  //     if (field === "companyEmail" || field === "applicantEmail" || field === "coApplicantEmail") {
+  //   if (!validateEmail(value)) {
+  //     alert("Enter valid email");
+  //     return;
+  //   }
 
-// if (
-//   field === "companyPan" ||
-//   field === "applicantPan" ||
-//   field === "coApplicantPan"
-// ) {
-//   const loadingKey = `${field}_${coApplicantId || "main"}`;
-//   setLoading(loadingKey, true);
+  //   const loadingKey = `${field}_${coApplicantId || "main"}`;
+  //   setLoading(loadingKey, true);
 
-//   try {
-//     const name =
-//       ownerType === "COMPANY"
-//         ? formData.companyName
-//         : ownerType === "APPLICANT"
-//         ? formData.applicantName
-//         : coApplicants.find((c) => c.id === coApplicantId)?.name;
+  //   const res = await kycService.sendEmailOtp({
+  //     customerId,
+  //     email: value,
+  //     ownerType,
+  //     applicantId,
+  //     coApplicantId,
+  //   });
 
-//     const res = await kycService.verifyPan({
-//       customerId,
-//       pan: value,
-//       name,
-//       ownerType,
-//       applicantId,
-//       coApplicantId,
-//     });
-
-//     await loadVerificationStatuses(customerId);
-
-//     if (!res?.success || !res?.data?.verified) {
-//       alert("PAN verification failed");
-//     }
-//   } finally {
-//     setLoading(loadingKey, false);
-//   }
-
-//   return;
-// }
+  // if (!coApplicantId && res?.coApplicantId && localKey) {
+  //   setCoApplicants(prev =>
+  //     prev.map(c =>
+  //       c.localKey === localKey
+  //         ? { ...c, id: res.coApplicantId }
+  //         : c
+  //     )
+  //   );
+  // }
 
 
-//   // ----------------------------------
-// // 🔹 GST VERIFY (FIXED)
-// // ----------------------------------
+  //   setLoading(loadingKey, false);
 
-// if (field === "companyGst") {
-//   const loadingKey = "companyGst_main";
-//   setLoading(loadingKey, true);
+  //   if (res?.success) {
+  //     openOtpFor({
+  //       type: "email",
+  //       target: field,
+  //       value,
+  //       ownerType,
+  //       applicantId,
+  //       coApplicantId,
+  //     });
+  //   }
 
-//   try {
-//     const res = await kycService.verifyGst({
-//       customerId,
-//       gstNumber: value,
-//       ownerType: "COMPANY",
-//     });
+  //       return;
+  //     }
 
-//     if (!res?.success) {
-//       alert("GST verification failed");
-//     }
+  //     // ----------------------------------
+  // // 🔹 PAN VERIFY (FIXED)
+  // // ----------------------------------
 
-//     await loadVerificationStatuses(customerId);
-//   } finally {
-//     setLoading(loadingKey, false);
-//   }
+  // if (
+  //   field === "companyPan" ||
+  //   field === "applicantPan" ||
+  //   field === "coApplicantPan"
+  // ) {
+  //   const loadingKey = `${field}_${coApplicantId || "main"}`;
+  //   setLoading(loadingKey, true);
 
-//   return;
-// }
+  //   try {
+  //     const name =
+  //       ownerType === "COMPANY"
+  //         ? formData.companyName
+  //         : ownerType === "APPLICANT"
+  //         ? formData.applicantName
+  //         : coApplicants.find((c) => c.id === coApplicantId)?.name;
+
+  //     const res = await kycService.verifyPan({
+  //       customerId,
+  //       pan: value,
+  //       name,
+  //       ownerType,
+  //       applicantId,
+  //       coApplicantId,
+  //     });
+
+  //     await loadVerificationStatuses(customerId);
+
+  //     if (!res?.success || !res?.data?.verified) {
+  //       alert("PAN verification failed");
+  //     }
+  //   } finally {
+  //     setLoading(loadingKey, false);
+  //   }
+
+  //   return;
+  // }
 
 
-//   } catch (e) {
-//     alert(
-//       `${field} verification failed: ` +
-//         (e?.response?.data?.message || e.message)
-//     );
-//   }
-// };
+  //   // ----------------------------------
+  // // 🔹 GST VERIFY (FIXED)
+  // // ----------------------------------
 
-const handleVerify = async (
-  field,
-  value,
-  coApplicantId = null,
-  localKey = null
-) => {
-  if (!value) {
-    alert(`Please enter value for ${field}`);
-    return;
-  }
+  // if (field === "companyGst") {
+  //   const loadingKey = "companyGst_main";
+  //   setLoading(loadingKey, true);
 
-  if (!customerId && field !== "companyMobile") {
-    alert("Verify company mobile first (customer must exist)");
-    return;
-  }
+  //   try {
+  //     const res = await kycService.verifyGst({
+  //       customerId,
+  //       gstNumber: value,
+  //       ownerType: "COMPANY",
+  //     });
 
-  try {
-    // ----------------------------------
-    // 🔹 Resolve ownerType
-    // ----------------------------------
-    let ownerType = "COMPANY";
-    let applicantId;
+  //     if (!res?.success) {
+  //       alert("GST verification failed");
+  //     }
 
-    if (coApplicantId || localKey) {
-      ownerType = "CO_APPLICANT";
-    } else if (
-      field === "applicantPan" ||
-      field === "applicantMobile" ||
-      field === "applicantEmail"
-    ) {
-      ownerType = "APPLICANT";
-    }
+  //     await loadVerificationStatuses(customerId);
+  //   } finally {
+  //     setLoading(loadingKey, false);
+  //   }
 
-    // ----------------------------------
-    // 🔹 Resolve loading key (CRITICAL FIX)
-    // ----------------------------------
-    const keySuffix = coApplicantId || localKey || "main";
-    const loadingKey = `${field}_${keySuffix}`;
+  //   return;
+  // }
 
-    // prevent double click
-    if (loadingStates[loadingKey]) return;
 
-    // ----------------------------------
-    // 🔹 MOBILE OTP
-    // ----------------------------------
-    if (
-      field === "companyMobile" ||
-      field === "applicantMobile" ||
-      field === "coApplicantMobile"
-    ) {
-      if (!validateMobile(value)) {
-        alert("Enter valid mobile");
-        return;
-      }
+  //   } catch (e) {
+  //     alert(
+  //       `${field} verification failed: ` +
+  //         (e?.response?.data?.message || e.message)
+  //     );
+  //   }
+  // };
 
-      setLoading(loadingKey, true);
-
-      const res = await kycService.sendMobileOtp({
-        customerId,
-        mobileNumber: value,
-        ownerType,
-        applicantId,
-        coApplicantId,
-      });
-
-      // 🔥 bind new coApplicantId to UI
-      if (!coApplicantId && res?.coApplicantId && localKey) {
-        setCoApplicants((prev) =>
-          prev.map((c) =>
-            c.localKey === localKey
-              ? { ...c, id: res.coApplicantId }
-              : c
-          )
-        );
-        coApplicantId = res.coApplicantId;
-      }
-
-      setLoading(loadingKey, false);
-
-      if (res?.success) {
-        openOtpFor({
-          type: "mobile",
-          target: field,
-          value,
-          ownerType,
-          applicantId,
-          coApplicantId,
-        });
-      }
-
+  const handleVerify = async (
+    field,
+    value,
+    coApplicantId = null,
+    localKey = null
+  ) => {
+    if (!value) {
+      alert(`Please enter value for ${field}`);
       return;
     }
 
-    // ----------------------------------
-    // 🔹 EMAIL OTP
-    // ----------------------------------
-    if (
-      field === "companyEmail" ||
-      field === "applicantEmail" ||
-      field === "coApplicantEmail"
-    ) {
-      if (!validateEmail(value)) {
-        alert("Enter valid email");
-        return;
-      }
-
-      setLoading(loadingKey, true);
-
-      const res = await kycService.sendEmailOtp({
-        customerId,
-        email: value,
-        ownerType,
-        applicantId,
-        coApplicantId,
-      });
-
-      // 🔥 bind new coApplicantId to UI
-      if (!coApplicantId && res?.coApplicantId && localKey) {
-        setCoApplicants((prev) =>
-          prev.map((c) =>
-            c.localKey === localKey
-              ? { ...c, id: res.coApplicantId }
-              : c
-          )
-        );
-        coApplicantId = res.coApplicantId;
-      }
-
-      setLoading(loadingKey, false);
-
-      if (res?.success) {
-        openOtpFor({
-          type: "email",
-          target: field,
-          value,
-          ownerType,
-          applicantId,
-          coApplicantId,
-        });
-      }
-
+    if (!customerId && field !== "companyMobile") {
+      alert("Verify company mobile first (customer must exist)");
       return;
     }
 
-    // ----------------------------------
-    // 🔹 PAN VERIFY
-    // ----------------------------------
-    if (
-      field === "companyPan" ||
-      field === "applicantPan" ||
-      field === "coApplicantPan"
-    ) {
-      setLoading(loadingKey, true);
+    try {
+      // ----------------------------------
+      // 🔹 Resolve ownerType
+      // ----------------------------------
+      let ownerType = "COMPANY";
+      let applicantId;
 
-      try {
-        const name =
-          ownerType === "COMPANY"
-            ? formData.companyName
-            : ownerType === "APPLICANT"
-            ? formData.applicantName
-            : coApplicants.find((c) => c.id === coApplicantId)?.name;
+      if (coApplicantId || localKey) {
+        ownerType = "CO_APPLICANT";
+      } else if (
+        field === "applicantPan" ||
+        field === "applicantMobile" ||
+        field === "applicantEmail"
+      ) {
+        ownerType = "APPLICANT";
+      }
 
-        const res = await kycService.verifyPan({
-          customerId,
-          pan: value,
-          name,
-          ownerType,
-          applicantId,
-          coApplicantId,
-        });
+      // ----------------------------------
+      // 🔹 Resolve loading key (CRITICAL FIX)
+      // ----------------------------------
+      const keySuffix = coApplicantId || localKey || "main";
+      const loadingKey = `${field}_${keySuffix}`;
 
-        await loadVerificationStatuses(customerId);
+      // prevent double click
+      if (loadingStates[loadingKey]) return;
 
-        if (!res?.success || !res?.data?.verified) {
-          alert("PAN verification failed");
+      // ----------------------------------
+      // 🔹 MOBILE OTP
+      // ----------------------------------
+      if (
+        field === "companyMobile" ||
+        field === "applicantMobile" ||
+        field === "coApplicantMobile"
+      ) {
+        if (!validateMobile(value)) {
+          alert("Enter valid mobile");
+          return;
         }
-      } finally {
+
+        setLoading(loadingKey, true);
+
+        const res = await kycService.sendMobileOtp({
+          customerId,
+          mobileNumber: value,
+          ownerType,
+          applicantId,
+          coApplicantId,
+        });
+
+        // 🔥 bind new coApplicantId to UI
+        if (!coApplicantId && res?.coApplicantId && localKey) {
+          setCoApplicants((prev) =>
+            prev.map((c) =>
+              c.localKey === localKey
+                ? { ...c, id: res.coApplicantId }
+                : c
+            )
+          );
+          coApplicantId = res.coApplicantId;
+        }
+
         setLoading(loadingKey, false);
-      }
 
-      return;
-    }
-
-    // ----------------------------------
-    // 🔹 GST VERIFY (Company only)
-    // ----------------------------------
-    if (field === "companyGst") {
-      const gstKey = "companyGst_main";
-      setLoading(gstKey, true);
-
-      try {
-        const res = await kycService.verifyGst({
-          customerId,
-          gstNumber: value,
-          ownerType: "COMPANY",
-        });
-
-        if (!res?.success) {
-          alert("GST verification failed");
+        if (res?.success) {
+          openOtpFor({
+            type: "mobile",
+            target: field,
+            value,
+            ownerType,
+            applicantId,
+            coApplicantId,
+          });
         }
 
-        await loadVerificationStatuses(customerId);
-      } finally {
-        setLoading(gstKey, false);
+        return;
       }
 
-      return;
-    }
-  } catch (e) {
-    setLoading(`${field}_${coApplicantId || localKey || "main"}`, false);
-    alert(
-      `${field} verification failed: ` +
+      // ----------------------------------
+      // 🔹 EMAIL OTP
+      // ----------------------------------
+      if (
+        field === "companyEmail" ||
+        field === "applicantEmail" ||
+        field === "coApplicantEmail"
+      ) {
+        if (!validateEmail(value)) {
+          alert("Enter valid email");
+          return;
+        }
+
+        setLoading(loadingKey, true);
+
+        const res = await kycService.sendEmailOtp({
+          customerId,
+          email: value,
+          ownerType,
+          applicantId,
+          coApplicantId,
+        });
+
+        // 🔥 bind new coApplicantId to UI
+        if (!coApplicantId && res?.coApplicantId && localKey) {
+          setCoApplicants((prev) =>
+            prev.map((c) =>
+              c.localKey === localKey
+                ? { ...c, id: res.coApplicantId }
+                : c
+            )
+          );
+          coApplicantId = res.coApplicantId;
+        }
+
+        setLoading(loadingKey, false);
+
+        if (res?.success) {
+          openOtpFor({
+            type: "email",
+            target: field,
+            value,
+            ownerType,
+            applicantId,
+            coApplicantId,
+          });
+        }
+
+        return;
+      }
+
+      // ----------------------------------
+      // 🔹 PAN VERIFY
+      // ----------------------------------
+      if (
+        field === "companyPan" ||
+        field === "applicantPan" ||
+        field === "coApplicantPan"
+      ) {
+        setLoading(loadingKey, true);
+
+        try {
+          const name =
+            ownerType === "COMPANY"
+              ? formData.companyName
+              : ownerType === "APPLICANT"
+                ? formData.applicantName
+                : coApplicants.find((c) => c.id === coApplicantId)?.name;
+
+          const res = await kycService.verifyPan({
+            customerId,
+            pan: value,
+            name,
+            ownerType,
+            applicantId,
+            coApplicantId,
+          });
+
+          await loadVerificationStatuses(customerId);
+
+          if (!res?.success || !res?.data?.verified) {
+            alert("PAN verification failed");
+          }
+        } finally {
+          setLoading(loadingKey, false);
+        }
+
+        return;
+      }
+
+      // ----------------------------------
+      // 🔹 GST VERIFY (Company only)
+      // ----------------------------------
+      if (field === "companyGst") {
+        const gstKey = "companyGst_main";
+        setLoading(gstKey, true);
+
+        try {
+          const res = await kycService.verifyGst({
+            customerId,
+            gstNumber: value,
+            ownerType: "COMPANY",
+          });
+
+          if (!res?.success) {
+            alert("GST verification failed");
+          }
+
+          await loadVerificationStatuses(customerId);
+        } finally {
+          setLoading(gstKey, false);
+        }
+
+        return;
+      }
+    } catch (e) {
+      setLoading(`${field}_${coApplicantId || localKey || "main"}`, false);
+      alert(
+        `${field} verification failed: ` +
         (e?.response?.data?.message || e.message)
-    );
-  }
-};
+      );
+    }
+  };
 
 
 
@@ -657,6 +659,20 @@ const handleVerify = async (
   const handleApplicantPanUpload = async (file) => {
     if (!file) return;
     try {
+      if (customerId) {
+        // Upload to documents
+        try {
+          await documentService.uploadDocument(customerId, file, "pan", "applicant", 0, null, {});
+          // refresh docs
+          const docs = await documentService.getDocumentsByCustomer(customerId);
+          setDocuments(docs.data);
+        } catch (uploadErr) {
+          console.error("Applicant PAN upload failed", uploadErr);
+        }
+      } else {
+        alert("Please verify mobile first (Customer ID required) to save the document.");
+      }
+
       const res = await kycService.runOcr(file, "PAN");
       if (res?.success) {
         setFormData((p) => ({
@@ -673,22 +689,36 @@ const handleVerify = async (
   };
 
   const getApplicantVerified = (kind) => {
-  if (!applicantStatus) return false;
+    if (!applicantStatus) return false;
 
-  const map = {
-    mobile: "mobileStatus",
-    email: "emailStatus",
-    pan: "panStatus",
-    aadhaar: "aadhaarStatus",
+    const map = {
+      mobile: "mobileStatus",
+      email: "emailStatus",
+      pan: "panStatus",
+      aadhaar: "aadhaarStatus",
+    };
+
+    return applicantStatus?.[map[kind]] === "VERIFIED";
   };
-
-  return applicantStatus?.[map[kind]] === "VERIFIED";
-};
 
 
   const handleCompanyPanUpload = async (file) => {
     if (!file) return;
     try {
+      if (customerId) {
+        // Upload to documents
+        try {
+          await documentService.uploadDocument(customerId, file, "company_pan", "company", 0, null, {});
+          // refresh docs
+          const docs = await documentService.getDocumentsByCustomer(customerId);
+          setDocuments(docs.data);
+        } catch (uploadErr) {
+          console.error("Company PAN upload failed", uploadErr);
+        }
+      } else {
+        alert("Please verify mobile first (Customer ID required) to save the document.");
+      }
+
       const res = await kycService.runOcr(file, "PAN");
       if (res?.success) {
         setFormData((p) => ({
@@ -696,6 +726,7 @@ const handleVerify = async (
           companyPan: res.data?.pan || p.companyPan,
           companyName: res.data?.name || p.companyName,
         }));
+        setApplicantKyc((p) => ({ ...p, companyPanFile: file, companyPan: res.data?.pan || p.companyPan }));
         alert("Company PAN OCR done");
       }
     } catch (e) {
@@ -742,7 +773,7 @@ const handleVerify = async (
 
     if (!formData.companyType) newErrors.companyType = "Company type is required";
 
-      if (!formData.companyName?.trim()) newErrors.companyName = "Company name is required";
+    if (!formData.companyName?.trim()) newErrors.companyName = "Company name is required";
 
     // Always validate formats if filled
     if (formData.companyMobile && !validateMobile(formData.companyMobile)) newErrors.companyMobile = "Valid company mobile required";
@@ -761,13 +792,13 @@ const handleVerify = async (
 
       // Mandatory verifications (you said Aadhaar/bureau later, so NOT enforcing them now)
       if (!getCompanyVerified("mobile"))
-  newErrors.companyMobile = "Company mobile verification mandatory";
+        newErrors.companyMobile = "Company mobile verification mandatory";
 
-if (!getCompanyVerified("email"))
-  newErrors.companyEmail = "Company email verification mandatory";
+      if (!getCompanyVerified("email"))
+        newErrors.companyEmail = "Company email verification mandatory";
 
-if (!getApplicantVerified("pan"))
-  newErrors.applicantPan = "Applicant PAN verification mandatory";
+      if (!getApplicantVerified("pan"))
+        newErrors.applicantPan = "Applicant PAN verification mandatory";
 
 
       // female co-app rule (keep if your business wants)
@@ -991,21 +1022,19 @@ if (!getApplicantVerified("pan"))
         <nav className="-mb-px flex space-x-8">
           <button
             onClick={() => setActiveTab("basic-kyc")}
-            className={`py-4 px-1 border-b-2 font-medium text-sm ${
-              activeTab === "basic-kyc"
-                ? "border-primary-600 text-primary-600"
-                : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-            }`}
+            className={`py-4 px-1 border-b-2 font-medium text-sm ${activeTab === "basic-kyc"
+              ? "border-primary-600 text-primary-600"
+              : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+              }`}
           >
             Basic & KYC
           </button>
           <button
             onClick={() => setActiveTab("documents")}
-            className={`py-4 px-1 border-b-2 font-medium text-sm ${
-              activeTab === "documents"
-                ? "border-primary-600 text-primary-600"
-                : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-            }`}
+            className={`py-4 px-1 border-b-2 font-medium text-sm ${activeTab === "documents"
+              ? "border-primary-600 text-primary-600"
+              : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+              }`}
           >
             Documents
           </button>
@@ -1018,6 +1047,7 @@ if (!getApplicantVerified("pan"))
             <BasicKycTab
               formData={formData}
               setFormData={setFormData}
+              applicantKyc={applicantKyc}
               errors={errors}
               loadingStates={loadingStates}
               onVerify={handleVerify}
@@ -1028,16 +1058,16 @@ if (!getApplicantVerified("pan"))
               setCameraTarget={setCameraTarget}
               documents={documents}
               mainVerified={{
-  mobile: getCompanyVerified("mobile"),
-  email: getCompanyVerified("email"),
-  pan: getCompanyVerified("pan"),
-  gst: getCompanyVerified("gst"),
-}}
-applicantVerified={{
-    mobile: getApplicantVerified("mobile"),
-    email: getApplicantVerified("email"),
-    pan: getApplicantVerified("pan"),
-  }}
+                mobile: getCompanyVerified("mobile"),
+                email: getCompanyVerified("email"),
+                pan: getCompanyVerified("pan"),
+                gst: getCompanyVerified("gst"),
+              }}
+              applicantVerified={{
+                mobile: getApplicantVerified("mobile"),
+                email: getApplicantVerified("email"),
+                pan: getApplicantVerified("pan"),
+              }}
 
             />
 

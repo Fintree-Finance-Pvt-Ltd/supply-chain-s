@@ -260,7 +260,7 @@ const ContactPersonForm = ({
           </label>
 
           <div className="flex space-x-6 mt-2">
-            {['Male', 'Female', 'Other'].map((gender) => (
+            {['Male', 'Female'].map((gender) => (
               <label key={gender} className="inline-flex items-center cursor-pointer">
                 <input
                   type="radio"

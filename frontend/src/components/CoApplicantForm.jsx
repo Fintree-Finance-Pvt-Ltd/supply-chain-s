@@ -225,7 +225,7 @@
 
 
 import { useMemo, useState } from 'react'
-import { FiX, FiUpload } from 'react-icons/fi'
+import { FiX } from 'react-icons/fi'
 import kycService from '../services/kycService'
 import LoadingSpinner from './LoadingSpinner'
 
@@ -284,6 +284,8 @@ const CoApplicantForm = ({
 
   // optional: called when user edits value after verified so parent can refresh statuses/reset UI
   onFieldMutate,
+  // NEW: explicitly update KYC data (e.g. editable PAN)
+  onKycUpdate,
 }) => {
   const [isOcrProcessing, setIsOcrProcessing] = useState(false)
 
@@ -359,7 +361,12 @@ const CoApplicantForm = ({
       // We pass stableKey + file + pan
       // Parent should update: coApplicantKyc[stableKey] = { panNumber: pan, panFile: file }
       // If parent still expects (index, file, pan), update parent in next step.
-      if (typeof onFieldMutate === 'function') onFieldMutate(stableKey, 'panNumber', pan)
+      // Update parent KYC state immediately for the input to reflect
+      if (typeof onKycUpdate === 'function') {
+        onKycUpdate({ panNumber: pan })
+      } else if (typeof onFieldMutate === 'function') {
+        onFieldMutate(stableKey, 'panNumber', pan)
+      }
 
       notify('success', `OCR done${pan ? `: ${pan}` : ''}${name ? `, ${name}` : ''}`)
     } catch (error) {
@@ -389,17 +396,17 @@ const CoApplicantForm = ({
     console.log(`button verified ended`)
   }
 
-const handleMobileVerify = () =>
-  safeVerify('coApplicantMobile', data.mobile, data.localKey);
+  const handleMobileVerify = () =>
+    safeVerify('coApplicantMobile', data.mobile, data.localKey);
 
-const handleEmailVerify = () =>
-  safeVerify('coApplicantEmail', data.email, data.localKey);
+  const handleEmailVerify = () =>
+    safeVerify('coApplicantEmail', data.email, data.localKey);
 
-const handlePanVerify = () =>
-  safeVerify('coApplicantPan', kycData.panNumber, data.localKey);
+  const handlePanVerify = () =>
+    safeVerify('coApplicantPan', kycData.panNumber, data.localKey);
 
-const handleAadhaarKyc = () =>
-  safeVerify('coApplicantAadhaar', true, data.localKey);
+  const handleAadhaarKyc = () =>
+    safeVerify('coApplicantAadhaar', true, data.localKey);
 
 
 
@@ -445,10 +452,11 @@ const handleAadhaarKyc = () =>
           </label>
           <input
             type="text"
-            value={data.name || ''}  
+            value={data.name || ''}
             onChange={(e) => handleChange({ name: e.target.value })}
             className="input-field"
             placeholder="Enter co-applicant name"
+            disabled={verificationStatus.mobileStatus === 'VERIFIED' || verificationStatus.emailStatus === 'VERIFIED' || verificationStatus.panStatus === 'VERIFIED'}
           />
           {errors.name && <p className="text-red-500 text-xs mt-1">{errors.name}</p>}
         </div>
@@ -466,6 +474,7 @@ const handleAadhaarKyc = () =>
               className="input-field flex-1"
               placeholder="Enter mobile number"
               maxLength={10}
+              disabled={verificationStatus.mobileStatus === 'VERIFIED'}
             />
             <button
               type="button"
@@ -498,6 +507,7 @@ const handleAadhaarKyc = () =>
               onChange={(e) => handleChange({ email: e.target.value })}
               className="input-field flex-1"
               placeholder="Enter email address"
+              disabled={verificationStatus.emailStatus === 'VERIFIED'}
             />
             <button
               type="button"
@@ -526,7 +536,7 @@ const handleAadhaarKyc = () =>
             Gender <span className="text-red-500">*</span>
           </label>
           <div className="flex space-x-6 mt-2">
-            {['Male', 'Female', 'Other'].map((gender) => (
+            {['Male', 'Female'].map((gender) => (
               <label key={gender} className="inline-flex items-center cursor-pointer">
                 <input
                   type="radio"
@@ -543,78 +553,80 @@ const handleAadhaarKyc = () =>
           {errors.gender && <p className="text-red-500 text-xs mt-1">{errors.gender}</p>}
         </div>
 
-        {/* PAN Upload */}
+        {/* PAN Upload & Input */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
             PAN Card <span className="text-red-500">*</span>
           </label>
 
-          <div className="flex space-x-2">
-            <label className="flex-1 cursor-pointer">
-              <input
-                type="file"
-                accept="image/*,.pdf"
-                disabled={verificationStatus.panStatus === 'VERIFIED'}
-                onChange={handlePanImageUpload}
-                className="hidden"
-              />
-
-              <div className="input-field flex items-center justify-center space-x-2 border-dashed">
-                <FiUpload className="h-4 w-4" />
-                <span className="text-sm">
-                  {isOcrProcessing ? 'Processing...' : 'Upload PAN'}
-                </span>
-              </div>
-            </label>
-
-            <button
-              type="button"
-              onClick={handlePanVerify}
-              disabled={
-                !canVerify ||
-                loadingStates[`coApplicantPan_${data.id || data.localKey}`] ||
-                verificationStatus.panStatus === 'VERIFIED' ||
-                !kycData.panNumber
-              }
-              className={`btn-${verificationStatus.panStatus === 'VERIFIED' ? 'success' : 'secondary'} whitespace-nowrap min-w-[90px] flex items-center justify-center`}
-            >
-              {verificationStatus.panStatus === 'VERIFIED'
-                ? '✓ Verified'
-                : loadingStates[`coApplicantPan_${data.id || data.localKey}`]
-                  ? <LoadingSpinner size="sm" />
-                  : 'Verify'}
-            </button>
+          <div className="flex items-center space-x-2">
+            <input
+              type="file"
+              accept="image/*,.pdf"
+              onChange={(e) => handlePanImageUpload(e)}
+              disabled={verificationStatus.panStatus === 'VERIFIED'}
+              className={`input-field flex-1 ${verificationStatus.panStatus === 'VERIFIED' ? "opacity-60 cursor-not-allowed" : ""}`}
+            />
+            <span className="text-sm truncate max-w-[150px] text-gray-600">
+              {kycData.panFile?.name || "No file"}
+            </span>
           </div>
 
-          {kycData.panNumber && (
-            <p className="text-xs text-green-600 mt-1">PAN: {kycData.panNumber}</p>
-          )}
-          {errors.pan && <p className="text-red-500 text-xs mt-1">{errors.pan}</p>}
-        </div>
-
-        {/* Aadhaar KYC */}
-        <div className="md:col-span-2">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Aadhaar KYC <span className="text-red-500">*</span>
-          </label>
+          <div className="mt-2">
+            <input
+              type="text"
+              value={kycData.panNumber || ''}
+              onChange={(e) => onKycUpdate?.({ panNumber: e.target.value.toUpperCase() })}
+              className="input-field"
+              placeholder="Enter PAN Number"
+              disabled={verificationStatus.panStatus === 'VERIFIED'}
+            />
+          </div>
 
           <button
             type="button"
-            onClick={handleAadhaarKyc}
+            onClick={handlePanVerify}
             disabled={
               !canVerify ||
-              loadingStates[`coApplicantAadhaar_${data.id || data.localKey}`] ||
-              verificationStatus.aadhaarStatus === 'VERIFIED'
+              loadingStates[`coApplicantPan_${data.id || data.localKey}`] ||
+              verificationStatus.panStatus === 'VERIFIED' ||
+              !kycData.panNumber
             }
-            className={`btn-${verificationStatus.aadhaarStatus === 'VERIFIED' ? 'success' : 'primary'} w-full`}
+            className={`mt-2 btn-${verificationStatus.panStatus === 'VERIFIED' ? 'success' : 'secondary'} w-full flex items-center justify-center`}
           >
-            {verificationStatus.aadhaarStatus === 'VERIFIED'
-              ? '✓ Aadhaar Verified'
-              : loadingStates[`coApplicantAadhaar_${data.id || data.localKey}`]
-                ? 'Processing...'
-                : 'Complete Aadhaar KYC'}
+            {verificationStatus.panStatus === 'VERIFIED'
+              ? '✓ PAN Verified'
+              : loadingStates[`coApplicantPan_${data.id || data.localKey}`]
+                ? <LoadingSpinner size="sm" />
+                : 'Verify PAN'}
           </button>
+
+          {errors.pan && <p className="text-red-500 text-xs mt-1">{errors.pan}</p>}
         </div>
+      </div>
+
+      {/* Aadhaar KYC */}
+      <div className="md:col-span-2">
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          Aadhaar KYC <span className="text-red-500">*</span>
+        </label>
+
+        <button
+          type="button"
+          onClick={handleAadhaarKyc}
+          disabled={
+            !canVerify ||
+            loadingStates[`coApplicantAadhaar_${data.id || data.localKey}`] ||
+            verificationStatus.aadhaarStatus === 'VERIFIED'
+          }
+          className={`btn-${verificationStatus.aadhaarStatus === 'VERIFIED' ? 'success' : 'primary'} w-full`}
+        >
+          {verificationStatus.aadhaarStatus === 'VERIFIED'
+            ? '✓ Aadhaar Verified'
+            : loadingStates[`coApplicantAadhaar_${data.id || data.localKey}`]
+              ? 'Processing...'
+              : 'Complete Aadhaar KYC'}
+        </button>
       </div>
     </div>
   )

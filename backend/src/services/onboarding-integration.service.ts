@@ -743,6 +743,13 @@ async verifyPan(
     const customerRepo = manager.getRepository(Customer);
 
 
+    if (ownerType === KycOwnerType.APPLICANT && !applicantId) {
+      const applicant = await applicantRepo.findOne({ where: { customerId } });
+      if (applicant) {
+        applicantId = applicant.id;
+      }
+    }
+
     if (ownerType === KycOwnerType.CO_APPLICANT && !coApplicantId) {
 
   const coApplicant = await coApplicantRepo.save(
@@ -844,6 +851,14 @@ async verifyGst(
 
     const kycRepo = manager.getRepository(KycVerificationStatus);
     const customerRepo = manager.getRepository(Customer);
+    const applicantRepo = manager.getRepository(Applicant);
+
+    if (ownerType === KycOwnerType.APPLICANT && !applicantId) {
+      const applicant = await applicantRepo.findOne({ where: { customerId } });
+      if (applicant) {
+        applicantId = applicant.id;
+      }
+    }
 
     const kycStatus = await this.getOrCreateKycStatus(
       customerId,
@@ -905,6 +920,15 @@ async verifyGst(
   coApplicantId?: number
 ): Promise<any>
  {
+        const applicantRepo = AppDataSource.getRepository(Applicant);
+
+        if (ownerType === KycOwnerType.APPLICANT && !applicantId) {
+          const applicant = await applicantRepo.findOne({ where: { customerId } });
+          if (applicant) {
+            applicantId = applicant.id;
+          }
+        }
+
         const kycStatus = await this.getOrCreateKycStatus(
   customerId,
   ownerType,
@@ -950,6 +974,15 @@ async verifyGst(
   applicantId?: number,
   coApplicantId?: number
 ): Promise<any> {
+
+  const applicantRepo = AppDataSource.getRepository(Applicant);
+
+  if (ownerType === KycOwnerType.APPLICANT && !applicantId) {
+    const applicant = await applicantRepo.findOne({ where: { customerId } });
+    if (applicant) {
+      applicantId = applicant.id;
+    }
+  }
 
   const kycStatus = await this.getOrCreateKycStatus(
     customerId,

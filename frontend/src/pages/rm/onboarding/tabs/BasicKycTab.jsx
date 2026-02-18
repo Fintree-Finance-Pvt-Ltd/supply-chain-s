@@ -16,6 +16,7 @@ const BasicKycTab = ({
   documents,
   mainVerified,
   applicantVerified,
+  applicantKyc, // NEW
 }) => {
   return (
     <div className="space-y-8">
@@ -41,18 +42,19 @@ const BasicKycTab = ({
             {errors.companyType && <p className="text-red-500 text-xs mt-1">{errors.companyType}</p>}
           </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Company Name <span className="text-red-500">*</span>
-              </label>
-              <input
-                value={formData.companyName}
-                onChange={(e) => setFormData((p) => ({ ...p, companyName: e.target.value }))}
-                className="input-field"
-                placeholder="Enter company name"
-              />
-              {errors.companyName && <p className="text-red-500 text-xs mt-1">{errors.companyName}</p>}
-            </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Company Name <span className="text-red-500">*</span>
+            </label>
+            <input
+              value={formData.companyName}
+              onChange={(e) => setFormData((p) => ({ ...p, companyName: e.target.value }))}
+              className="input-field"
+              placeholder="Enter company name"
+              disabled={mainVerified.pan || mainVerified.gst} // assuming name is verified via PAN/GST
+            />
+            {errors.companyName && <p className="text-red-500 text-xs mt-1">{errors.companyName}</p>}
+          </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -68,6 +70,7 @@ const BasicKycTab = ({
                 className="input-field flex-1"
                 maxLength={10}
                 placeholder="10-digit mobile"
+                disabled={mainVerified.mobile}
               />
               <button
                 type="button"
@@ -76,8 +79,8 @@ const BasicKycTab = ({
                 className={`btn-${mainVerified.mobile ? "success" : "secondary"} min-w-[110px]`}
               >
                 {loadingStates["companyMobile_main"]
-  ? <LoadingSpinner size="sm" />
-  : mainVerified.mobile ? "✓ Verified" : "Verify"}
+                  ? <LoadingSpinner size="sm" />
+                  : mainVerified.mobile ? "✓ Verified" : "Verify"}
               </button>
             </div>
             {errors.companyMobile && <p className="text-red-500 text-xs mt-1">{errors.companyMobile}</p>}
@@ -92,6 +95,7 @@ const BasicKycTab = ({
                 onChange={(e) => setFormData((p) => ({ ...p, companyEmail: e.target.value }))}
                 className="input-field flex-1"
                 placeholder="email"
+                disabled={mainVerified.email}
               />
               <button
                 type="button"
@@ -100,8 +104,8 @@ const BasicKycTab = ({
                 className={`btn-${mainVerified.email ? "success" : "secondary"} min-w-[110px]`}
               >
                 {loadingStates["companyEmail_main"]
-  ? <LoadingSpinner size="sm" />
-  : mainVerified.email ? "✓ Verified" : "Verify"}
+                  ? <LoadingSpinner size="sm" />
+                  : mainVerified.email ? "✓ Verified" : "Verify"}
               </button>
             </div>
             {errors.companyEmail && <p className="text-red-500 text-xs mt-1">{errors.companyEmail}</p>}
@@ -118,21 +122,35 @@ const BasicKycTab = ({
                 type="file"
                 accept="image/*,.pdf"
                 onChange={(e) => onCompanyPanUpload(e.target.files?.[0])}
-                className="input-field flex-1"
+                disabled={mainVerified.pan}
+                className={`input-field flex-1 ${mainVerified.pan ? "opacity-60 cursor-not-allowed" : ""
+                  }`}
               />
-              <button
-                type="button"
-                onClick={() => onVerify("companyPan", formData.companyPan)}
-                disabled={loadingStates["companyPan_main"] || mainVerified.pan}
-                className={`btn-${mainVerified.pan ? "success" : "secondary"} min-w-[110px]`}
-              >
-                {loadingStates["companyPan_main"]
-  ? <LoadingSpinner size="sm" />
-  : mainVerified.pan ? "✓ Verified" : "Verify"}
-
-              </button>
+              <span className="text-sm truncate max-w-[150px] text-gray-600">
+                {applicantKyc?.companyPanFile?.name || "No file"}
+              </span>
             </div>
-            {formData.companyPan && <p className="text-xs text-blue-600 mt-1">PAN: {formData.companyPan}</p>}
+
+            <div className="mt-2">
+              <input
+                value={formData.companyPan || ''}
+                onChange={(e) => setFormData((p) => ({ ...p, companyPan: e.target.value.toUpperCase() }))}
+                className="input-field"
+                placeholder="Enter Company PAN"
+                disabled={mainVerified.pan}
+              />
+            </div>
+
+            <button
+              type="button"
+              onClick={() => onVerify("companyPan", formData.companyPan)}
+              disabled={loadingStates["companyPan_main"] || mainVerified.pan || !formData.companyPan}
+              className={`mt-2 btn-${mainVerified.pan ? "success" : "secondary"} w-full`}
+            >
+              {loadingStates["companyPan_main"]
+                ? <LoadingSpinner size="sm" />
+                : mainVerified.pan ? "✓ PAN Verified" : "Verify PAN"}
+            </button>
           </div>
 
           {/* GST */}
@@ -141,25 +159,26 @@ const BasicKycTab = ({
             <input
               value={formData.companyGst}
               onChange={(e) => setFormData((p) => ({ ...p, companyGst: e.target.value.toUpperCase() }))}
-              className="input-field"
               placeholder="Enter GST"
+              disabled={mainVerified.gst}
+              className="input-field"
             />
             <button
-  type="button"
-  onClick={() => onVerify("companyGst", formData.companyGst)}
-  disabled={
-    loadingStates["companyGst_main"] ||
-    mainVerified.gst ||
-    !formData.companyGst
-  }
-  className={`mt-2 btn-${mainVerified.gst ? "success" : "secondary"} w-full`}
->
-  {loadingStates["companyGst_main"]
-    ? <LoadingSpinner size="sm" />
-    : mainVerified.gst
-      ? "✓ Verified"
-      : "Verify GST"}
-</button>
+              type="button"
+              onClick={() => onVerify("companyGst", formData.companyGst)}
+              disabled={
+                loadingStates["companyGst_main"] ||
+                mainVerified.gst ||
+                !formData.companyGst
+              }
+              className={`mt-2 btn-${mainVerified.gst ? "success" : "secondary"} w-full`}
+            >
+              {loadingStates["companyGst_main"]
+                ? <LoadingSpinner size="sm" />
+                : mainVerified.gst
+                  ? "✓ Verified"
+                  : "Verify GST"}
+            </button>
 
           </div>
         </div>
@@ -177,6 +196,7 @@ const BasicKycTab = ({
               onChange={(e) => setFormData((p) => ({ ...p, applicantName: e.target.value }))}
               className="input-field"
               placeholder="Applicant name"
+              disabled={applicantVerified.pan}
             />
             {errors.applicantName && <p className="text-red-500 text-xs mt-1">{errors.applicantName}</p>}
           </div>
@@ -184,30 +204,31 @@ const BasicKycTab = ({
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Applicant Mobile</label>
             <div className="flex space-x-2">
-  <input
-    value={formData.applicantMobile}
-    onChange={(e) => setFormData((p) => ({ ...p, applicantMobile: e.target.value }))}
-    className="input-field flex-1"
-    maxLength={10}
-    placeholder="Mobile"
-  />
-  <button
-  type="button"
-  onClick={() => onVerify("applicantMobile", formData.applicantMobile)}
-  disabled={
-    loadingStates["applicantMobile_main"] ||
-    applicantVerified.mobile
-  }
-  className={`btn-${applicantVerified.mobile ? "success" : "secondary"} min-w-[110px]`}
->
-  {loadingStates["applicantMobile_main"]
-    ? <LoadingSpinner size="sm" />
-    : applicantVerified.mobile
-      ? "✓ Verified"
-      : "Verify"}
-</button>
+              <input
+                value={formData.applicantMobile}
+                onChange={(e) => setFormData((p) => ({ ...p, applicantMobile: e.target.value }))}
+                className="input-field flex-1"
+                maxLength={10}
+                placeholder="Mobile"
+                disabled={applicantVerified.mobile}
+              />
+              <button
+                type="button"
+                onClick={() => onVerify("applicantMobile", formData.applicantMobile)}
+                disabled={
+                  loadingStates["applicantMobile_main"] ||
+                  applicantVerified.mobile
+                }
+                className={`btn-${applicantVerified.mobile ? "success" : "secondary"} min-w-[110px]`}
+              >
+                {loadingStates["applicantMobile_main"]
+                  ? <LoadingSpinner size="sm" />
+                  : applicantVerified.mobile
+                    ? "✓ Verified"
+                    : "Verify"}
+              </button>
 
-</div>
+            </div>
 
             {errors.applicantMobile && <p className="text-red-500 text-xs mt-1">{errors.applicantMobile}</p>}
           </div>
@@ -221,22 +242,23 @@ const BasicKycTab = ({
               onChange={(e) => setFormData((p) => ({ ...p, applicantEmail: e.target.value }))}
               className="input-field"
               placeholder="Email"
+              disabled={applicantVerified.email}
             />
             <button
-  type="button"
-  onClick={() => onVerify("applicantEmail", formData.applicantEmail)}
-  disabled={
-    loadingStates["applicantEmail_main"] ||
-    applicantVerified.email
-  }
-  className={`btn-${applicantVerified.email ? "success" : "secondary"} min-w-[110px]`}
->
-  {loadingStates["applicantEmail_main"]
-    ? <LoadingSpinner size="sm" />
-    : applicantVerified.email
-      ? "✓ Verified"
-      : "Verify"}
-</button>
+              type="button"
+              onClick={() => onVerify("applicantEmail", formData.applicantEmail)}
+              disabled={
+                loadingStates["applicantEmail_main"] ||
+                applicantVerified.email
+              }
+              className={`btn-${applicantVerified.email ? "success" : "secondary"} min-w-[110px]`}
+            >
+              {loadingStates["applicantEmail_main"]
+                ? <LoadingSpinner size="sm" />
+                : applicantVerified.email
+                  ? "✓ Verified"
+                  : "Verify"}
+            </button>
 
             {errors.applicantEmail && <p className="text-red-500 text-xs mt-1">{errors.applicantEmail}</p>}
           </div>
@@ -245,14 +267,16 @@ const BasicKycTab = ({
             <label className="block text-sm font-medium text-gray-700 mb-2">Applicant PAN Upload</label>
             <div className="flex items-center space-x-2">
               <input
-  type="file"
-  accept="image/*,.pdf"
-  disabled={applicantVerified.pan}
-  onChange={(e) => onApplicantPanUpload(e.target.files?.[0])}
-  className={`input-field flex-1 ${
-    applicantVerified.pan ? "opacity-60 cursor-not-allowed" : ""
-  }`}
-/>
+                type="file"
+                accept="image/*,.pdf"
+                disabled={applicantVerified.pan}
+                onChange={(e) => onApplicantPanUpload(e.target.files?.[0])}
+                className={`input-field flex-1 ${applicantVerified.pan ? "opacity-60 cursor-not-allowed" : ""
+                  }`}
+              />
+              <span className="text-sm truncate max-w-[150px]">
+                {applicantKyc?.panFile?.name}
+              </span>
 
               <button
                 type="button"
@@ -268,22 +292,31 @@ const BasicKycTab = ({
 
             {/* PAN verify uses same main pan status in backend currently */}
             <button
-  type="button"
-  onClick={() => onVerify("applicantPan", formData.applicantPan)}
-  disabled={
-  loadingStates["applicantPan_main"] ||
-  applicantVerified.pan ||
-  !formData.applicantPan
-}
+              type="button"
+              onClick={() => onVerify("applicantPan", formData.applicantPan)}
+              disabled={
+                loadingStates["applicantPan_main"] ||
+                applicantVerified.pan ||
+                !formData.applicantPan
+              }
+              className={`mt-2 btn-${applicantVerified.pan ? "success" : "secondary"} w-full flex items-center justify-center`}
+            >
+              {applicantVerified.pan
+                ? "✓ PAN Verified"
+                : loadingStates["applicantPan_main"]
+                  ? <LoadingSpinner size="sm" />
+                  : "Verify PAN"}
+            </button>
 
-  className={`mt-2 btn-${applicantVerified.pan ? "success" : "secondary"} w-full`}
->
-  {applicantVerified.pan ? "✓ PAN Verified" : "Verify PAN"}
-</button>
-
-
-
-            {formData.applicantPan && <p className="text-xs text-blue-600 mt-1">PAN: {formData.applicantPan}</p>}
+            <div className="mt-2">
+              <input
+                value={formData.applicantPan || ''}
+                onChange={(e) => setFormData((p) => ({ ...p, applicantPan: e.target.value.toUpperCase() }))}
+                className="input-field"
+                placeholder="Enter Applicant PAN"
+                disabled={applicantVerified.pan}
+              />
+            </div>
             {errors.applicantPan && <p className="text-red-500 text-xs mt-1">{errors.applicantPan}</p>}
           </div>
         </div>
