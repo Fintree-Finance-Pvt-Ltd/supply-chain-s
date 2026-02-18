@@ -1,5 +1,6 @@
 import { FiPlus } from "react-icons/fi";
 import CoApplicantForm from "../../../../components/CoApplicantForm";
+import { documentService } from "../../../../services/documentService";
 
 const CoApplicantSection = ({
   customerId,
@@ -37,6 +38,26 @@ const CoApplicantSection = ({
       ...p,
       [key]: { ...(p[key] || {}), panFile: file, panNumber },
     }));
+
+    // If we already have a saved co-applicant and customerId, upload immediately
+    try {
+      const coApp = coApplicants.find((c) => (c.id || c.localKey) === key);
+      const coAppId = coApp?.id;
+
+      if (customerId && coAppId && file) {
+        // upload document to server for this co-applicant
+        documentService.uploadDocument(customerId, file, 'pan', 'co-applicant', 1, coAppId)
+          .then(() => {
+            // optional: you may refresh documents in parent if needed
+            console.log('Co-applicant PAN uploaded for coApplicantId', coAppId);
+          })
+          .catch((err) => {
+            console.error('Co-applicant PAN upload failed', err);
+          });
+      }
+    } catch (e) {
+      console.error('Co-applicant immediate upload error', e);
+    }
   };
 
   return (

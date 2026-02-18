@@ -363,7 +363,7 @@ const CoApplicantForm = ({
       // If parent still expects (index, file, pan), update parent in next step.
       // Update parent KYC state immediately for the input to reflect
       if (typeof onKycUpdate === 'function') {
-        onKycUpdate({ panNumber: pan })
+        onKycUpdate({ panNumber: pan, panFile: file })
       } else if (typeof onFieldMutate === 'function') {
         onFieldMutate(stableKey, 'panNumber', pan)
       }
@@ -570,6 +570,22 @@ const CoApplicantForm = ({
             <span className="text-sm truncate max-w-[150px] text-gray-600">
               {kycData.panFile?.name || "No file"}
             </span>
+            {kycData.panFile && (
+              <button
+                type="button"
+                onClick={() => {
+                  try {
+                    const url = URL.createObjectURL(kycData.panFile);
+                    window.open(url, '_blank');
+                  } catch (e) {
+                    console.error('Preview failed', e);
+                  }
+                }}
+                className="ml-2 text-xs text-primary-600 hover:underline"
+              >
+                Preview
+              </button>
+            )}
           </div>
 
           <div className="mt-2">

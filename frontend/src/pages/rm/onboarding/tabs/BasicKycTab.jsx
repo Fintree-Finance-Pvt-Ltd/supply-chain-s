@@ -123,12 +123,27 @@ const BasicKycTab = ({
                 accept="image/*,.pdf"
                 onChange={(e) => onCompanyPanUpload(e.target.files?.[0])}
                 disabled={mainVerified.pan}
-                className={`input-field flex-1 ${mainVerified.pan ? "opacity-60 cursor-not-allowed" : ""
-                  }`}
+                className={`input-field flex-1 ${mainVerified.pan ? "opacity-60 cursor-not-allowed" : ""}`}
               />
               <span className="text-sm truncate max-w-[150px] text-gray-600">
                 {applicantKyc?.companyPanFile?.name || "No file"}
               </span>
+              {applicantKyc?.companyPanFile && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    try {
+                      const url = URL.createObjectURL(applicantKyc.companyPanFile);
+                      window.open(url, '_blank');
+                    } catch (e) {
+                      console.error('Preview failed', e);
+                    }
+                  }}
+                  className="ml-2 text-xs text-primary-600 hover:underline"
+                >
+                  Preview
+                </button>
+              )}
             </div>
 
             <div className="mt-2">
@@ -271,12 +286,28 @@ const BasicKycTab = ({
                 accept="image/*,.pdf"
                 disabled={applicantVerified.pan}
                 onChange={(e) => onApplicantPanUpload(e.target.files?.[0])}
-                className={`input-field flex-1 ${applicantVerified.pan ? "opacity-60 cursor-not-allowed" : ""
-                  }`}
+                className={`input-field flex-1 ${applicantVerified.pan ? "opacity-60 cursor-not-allowed" : ""}`}
               />
               <span className="text-sm truncate max-w-[150px]">
-                {applicantKyc?.panFile?.name}
+                {applicantKyc?.panFile?.name || 'No file'}
               </span>
+
+              {applicantKyc?.panFile && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    try {
+                      const url = URL.createObjectURL(applicantKyc.panFile);
+                      window.open(url, '_blank');
+                    } catch (e) {
+                      console.error('Preview failed', e);
+                    }
+                  }}
+                  className="ml-2 text-xs text-primary-600 hover:underline"
+                >
+                  Preview
+                </button>
+              )}
 
               <button
                 type="button"

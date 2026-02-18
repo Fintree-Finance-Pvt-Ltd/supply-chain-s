@@ -16,6 +16,7 @@ export class DocumentService {
     documentType: string;
     applicantType?: string;
     applicantIndex?: number;
+    applicantId?: number;
     coApplicantId?: number;
     fileName: string;
     filePath: string;
@@ -36,8 +37,13 @@ export class DocumentService {
       throw new Error('Customer not found');
     }
 
-    const document = this.documentRepository.create(data);
-    return await this.documentRepository.save(document);
+    const payload: any = { ...data };
+    // ensure explicit nulls for optional ids if undefined
+    if (payload.applicantId === undefined) payload.applicantId = null;
+    if (payload.coApplicantId === undefined) payload.coApplicantId = null;
+
+    const document = this.documentRepository.create(payload);
+    return (await this.documentRepository.save(document)) as unknown as Document;
   }
 
   async getDocumentsByCustomer(customerId: number): Promise<Document[]> {

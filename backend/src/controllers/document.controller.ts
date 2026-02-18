@@ -1,5 +1,8 @@
 import { Request, Response } from 'express';
 import { DocumentService } from '../services/document.service';
+import { AppDataSource } from '../config/database';
+import { Applicant } from '../entities/Applicant';
+import { CoApplicant } from '../entities/CoApplicant';
 
 export class DocumentController {
   private documentService: DocumentService;
@@ -32,6 +35,35 @@ export class DocumentController {
 
       const { customerId, documentType, applicantType, applicantIndex, coApplicantId, issueDate, expiryDate, remarks, rmRemarks } = req.body;
 
+      // Resolve applicantId when applicantType is 'applicant'
+      let resolvedApplicantId: number | undefined = undefined;
+      let resolvedCoApplicantId: number | undefined = undefined;
+      let effectiveDocumentType = documentType;
+
+      try {
+        if (applicantType === 'applicant') {
+          const applicantRepo = AppDataSource.getRepository(Applicant);
+          const applicant = await applicantRepo.findOne({ where: { customerId: Number(customerId) } });
+          if (applicant) resolvedApplicantId = applicant.id;
+
+          // normalize documentType for applicant
+          if (documentType === 'pan') effectiveDocumentType = 'applicant_pan';
+          else if (documentType === 'gst_certificate') effectiveDocumentType = 'applicant_gst';
+        }
+
+        if (coApplicantId) {
+          const coApplicantRepo = AppDataSource.getRepository(CoApplicant);
+          const coApp = await coApplicantRepo.findOne({ where: { id: Number(coApplicantId), customerId: Number(customerId) } });
+          if (coApp) resolvedCoApplicantId = coApp.id;
+
+          // normalize documentType for co-applicant
+          if (documentType === 'pan') effectiveDocumentType = 'coapplicant_pan';
+        }
+      } catch (e) {
+        // if resolution fails, proceed without applicant/co-applicant linkage
+        console.error('Applicant/co-applicant resolution failed', e);
+      }
+
       // Robust parsing
       const parsedIssueDate = (issueDate && typeof issueDate === 'string' && issueDate.trim() !== '') ? new Date(issueDate) : undefined;
       const parsedExpiryDate = (expiryDate && typeof expiryDate === 'string' && expiryDate.trim() !== '') ? new Date(expiryDate) : undefined;
@@ -48,10 +80,11 @@ export class DocumentController {
 
       const document = await this.documentService.uploadDocument({
         customerId: Number(customerId),
-        documentType,
+        documentType: effectiveDocumentType,
         applicantType: applicantType || 'applicant',
         applicantIndex: applicantIndex !== undefined ? Number(applicantIndex) : 0,
-        coApplicantId: coApplicantId ? Number(coApplicantId) : undefined,
+        coApplicantId: resolvedCoApplicantId ?? (coApplicantId ? Number(coApplicantId) : undefined),
+        applicantId: resolvedApplicantId,
         fileName: req.file.originalname,
         filePath: req.file.path,
         mimeType: req.file.mimetype,
