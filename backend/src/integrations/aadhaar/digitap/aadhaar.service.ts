@@ -65,6 +65,8 @@ export class AadhaarService {
       redirectionUrl: params.redirectionUrl,
     };
 
+    console.log('Requesting Aadhaar KYC Link with payload:', payload);  
+
     const { data } = await axios.post(url, payload, {
       headers: this.buildHeaders(),
       validateStatus: () => true,

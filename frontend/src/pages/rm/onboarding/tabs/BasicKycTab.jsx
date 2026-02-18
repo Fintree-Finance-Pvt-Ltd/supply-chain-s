@@ -1,5 +1,7 @@
 import { FiCamera } from "react-icons/fi";
+import { useState } from "react";
 import LoadingSpinner from "../../../../components/LoadingSpinner";
+import kycService from "../../../../services/kycService";
 import { COMPANY_TYPES } from "../../../../config/documentChecklists";
 
 const BasicKycTab = ({
@@ -16,8 +18,28 @@ const BasicKycTab = ({
   documents,
   mainVerified,
   applicantVerified,
-  applicantKyc, // NEW
+  applicantKyc,
+  customerId,
+  applicantStatus,
+  onLoadVerificationStatuses,
 }) => {
+  const [isRefreshingAadhaar, setIsRefreshingAadhaar] = useState(false);
+  const [aadhaarRefreshStatus, setAadhaarRefreshStatus] = useState({});
+
+  const handleAadhaarRefresh = async () => {
+    if (!customerId) return;
+    setIsRefreshingAadhaar(true);
+    try {
+      // Call parent to reload verification statuses from backend
+      if (onLoadVerificationStatuses) {
+        await onLoadVerificationStatuses(customerId);
+      }
+    } catch (error) {
+      console.error('Failed to refresh Aadhaar status:', error);
+    } finally {
+      setIsRefreshingAadhaar(false);
+    }
+  };
   return (
     <div className="space-y-8">
       {/* Company */}
@@ -351,6 +373,52 @@ const BasicKycTab = ({
             {errors.applicantPan && <p className="text-red-500 text-xs mt-1">{errors.applicantPan}</p>}
           </div>
         </div>
+
+        {/* Applicant Aadhaar KYC (shown after PAN verified) */}
+        {applicantVerified.pan && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Applicant Aadhaar KYC <span className="text-red-500">*</span>
+            </label>
+
+            {/* Show info message if Aadhaar is initiated but not verified */}
+            {applicantStatus?.aadhaarStatus === 'INITIATED' && (
+              <div className="mb-2 p-3 bg-blue-50 border border-blue-200 rounded text-sm text-blue-700">
+                ℹ️ KYC link sent to your mobile. Complete Aadhaar verification and click "Refresh Status" to update.
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={() => onVerify("applicantAadhaar", null)}
+              disabled={
+                loadingStates["applicantAadhaar_main"] ||
+                !applicantVerified.pan ||
+                applicantStatus?.aadhaarStatus === 'VERIFIED' ||
+                applicantStatus?.aadhaarStatus === 'INITIATED'
+              }
+              className={`btn-${applicantStatus?.aadhaarStatus === 'VERIFIED' ? "success" : "secondary"} w-full flex items-center justify-center`}
+            >
+              {applicantStatus?.aadhaarStatus === 'VERIFIED'
+                ? '✓ Aadhaar Verified'
+                : loadingStates["applicantAadhaar_main"]
+                  ? <LoadingSpinner size="sm" />
+                  : 'Verify Aadhaar'}
+            </button>
+
+            {/* Show Refresh Status button if Aadhaar is initiated but not verified */}
+            {applicantStatus?.aadhaarStatus === 'INITIATED' && (
+              <button
+                type="button"
+                onClick={handleAadhaarRefresh}
+                disabled={isRefreshingAadhaar}
+                className="mt-2 btn-secondary w-full flex items-center justify-center"
+              >
+                {isRefreshingAadhaar ? <LoadingSpinner size="sm" /> : 'Refresh Status'}
+              </button>
+            )}
+          </div>
+        )}
 
         {/* Live Photo optional */}
         <div>

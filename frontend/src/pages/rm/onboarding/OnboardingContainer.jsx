@@ -441,7 +441,10 @@ const OnboardingContainer = () => {
     coApplicantId = null,
     localKey = null
   ) => {
-    if (!value) {
+    // Aadhaar doesn't require a value (just sends link via SMS)
+    const isAadhaar = field === "applicantAadhaar" || field === "coApplicantAadhaar";
+    
+    if (!value && !isAadhaar) {
       alert(`Please enter value for ${field}`);
       return;
     }
@@ -453,7 +456,7 @@ const OnboardingContainer = () => {
 
     try {
       // ----------------------------------
-      // 🔹 Resolve ownerType
+      // 🔹 Resolve ownerType and applicantId
       // ----------------------------------
       let ownerType = "COMPANY";
       let applicantId;
@@ -463,9 +466,12 @@ const OnboardingContainer = () => {
       } else if (
         field === "applicantPan" ||
         field === "applicantMobile" ||
-        field === "applicantEmail"
+        field === "applicantEmail" ||
+        field === "applicantAadhaar"
       ) {
         ownerType = "APPLICANT";
+        // Resolve applicantId from backend status if available
+        applicantId = applicantStatus?.applicantId || null;
       }
 
       // ----------------------------------
@@ -639,6 +645,44 @@ const OnboardingContainer = () => {
           await loadVerificationStatuses(customerId);
         } finally {
           setLoading(gstKey, false);
+        }
+
+        return;
+      }
+
+      // ----------------------------------
+      // 🔹 AADHAAR VERIFY (Applicant & Co-applicant)
+      // ----------------------------------
+      if (field === "applicantAadhaar" || field === "coApplicantAadhaar") {
+        if (field === "applicantAadhaar") {
+          ownerType = "APPLICANT";
+        } else {
+          ownerType = "CO_APPLICANT";
+        }
+
+        setLoading(loadingKey, true);
+
+        try {
+          const res = await kycService.initiateAadhaarKyc({
+            customerId,
+            ownerType,
+            applicantId,
+            coApplicantId,
+          });
+
+          if (res?.success) {
+            // Trigger SMS via backend (third-party API call)
+            alert("Aadhaar KYC link sent to your mobile. Complete verification and click 'Refresh Status'.");
+            
+            // Load updated verification statuses
+            await loadVerificationStatuses(customerId);
+          } else {
+            alert("Failed to initiate Aadhaar verification: " + (res?.message || "Unknown error"));
+          }
+        } catch (err) {
+          alert("Aadhaar verification error: " + (err?.response?.data?.message || err.message));
+        } finally {
+          setLoading(loadingKey, false);
         }
 
         return;
@@ -1057,6 +1101,7 @@ const OnboardingContainer = () => {
               setShowCamera={setShowCamera}
               setCameraTarget={setCameraTarget}
               documents={documents}
+              customerId={customerId}
               mainVerified={{
                 mobile: getCompanyVerified("mobile"),
                 email: getCompanyVerified("email"),
@@ -1067,7 +1112,10 @@ const OnboardingContainer = () => {
                 mobile: getApplicantVerified("mobile"),
                 email: getApplicantVerified("email"),
                 pan: getApplicantVerified("pan"),
+                aadhaar: getApplicantVerified("aadhaar"),
               }}
+              applicantStatus={applicantStatus}
+              onLoadVerificationStatuses={loadVerificationStatuses}
 
             />
 
@@ -1081,6 +1129,7 @@ const OnboardingContainer = () => {
               verificationStatuses={coApplicantStatusMap}
               loadingStates={loadingStates}
               errors={errors}
+              onLoadVerificationStatuses={loadVerificationStatuses}
             />
 
             <ContactPersonSection

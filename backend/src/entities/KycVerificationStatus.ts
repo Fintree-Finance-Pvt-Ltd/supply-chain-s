@@ -88,6 +88,18 @@ export class KycVerificationStatus {
   aadhaarAddress: string;
 
   // -------------------------
+  // PAN Name Fields (from PAN API response)
+  // -------------------------
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  firstName: string | null;
+
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  middleName: string | null;
+
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  lastName: string | null;
+
+  // -------------------------
   // API Audit Fields (KEEP ALL)
   // -------------------------
   @Column({ type: 'json', nullable: true })

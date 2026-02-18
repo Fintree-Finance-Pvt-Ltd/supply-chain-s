@@ -286,8 +286,12 @@ const CoApplicantForm = ({
   onFieldMutate,
   // NEW: explicitly update KYC data (e.g. editable PAN)
   onKycUpdate,
+  // NEW: refresh verification statuses from backend
+  onLoadVerificationStatuses,
 }) => {
   const [isOcrProcessing, setIsOcrProcessing] = useState(false)
+  const [isRefreshingAadhaar, setIsRefreshingAadhaar] = useState(false)
+  const [aadhaarRefreshStatus, setAadhaarRefreshStatus] = useState({})
 
   // stable identity key for UI + local state mapping
   const stableKey = useMemo(() => data?.id || data?.localKey, [data?.id, data?.localKey])
@@ -297,6 +301,21 @@ const CoApplicantForm = ({
     // fallback (avoid alert in prod)
     if (type === 'error') console.error(message)
     else console.log(message)
+  }
+
+  const handleAadhaarRefresh = async () => {
+    if (!customerId) return
+    setIsRefreshingAadhaar(true)
+    try {
+      // Call parent to reload verification statuses from backend
+      if (onLoadVerificationStatuses) {
+        await onLoadVerificationStatuses(customerId)
+      }
+    } catch (error) {
+      console.error('Failed to refresh Aadhaar status:', error)
+    } finally {
+      setIsRefreshingAadhaar(false)
+    }
   }
 
   const mustHaveCaseId = () => {
@@ -406,7 +425,7 @@ const CoApplicantForm = ({
     safeVerify('coApplicantPan', kycData.panNumber, data.localKey);
 
   const handleAadhaarKyc = () =>
-    safeVerify('coApplicantAadhaar', true, data.localKey);
+    safeVerify('coApplicantAadhaar', null, data.localKey);
 
 
 
@@ -619,34 +638,55 @@ const CoApplicantForm = ({
 
           {errors.pan && <p className="text-red-500 text-xs mt-1">{errors.pan}</p>}
         </div>
-      </div>
 
-      {/* Aadhaar KYC */}
-      <div className="md:col-span-2">
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          Aadhaar KYC <span className="text-red-500">*</span>
-        </label>
+        {/* Aadhaar KYC (shown after PAN verified) */}
+        {verificationStatus.panStatus === 'VERIFIED' && (
+          <div className="md:col-span-2">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Aadhaar KYC <span className="text-red-500">*</span>
+            </label>
 
-        <button
-          type="button"
-          onClick={handleAadhaarKyc}
-          disabled={
-            !canVerify ||
-            loadingStates[`coApplicantAadhaar_${data.id || data.localKey}`] ||
-            verificationStatus.aadhaarStatus === 'VERIFIED'
-          }
-          className={`btn-${verificationStatus.aadhaarStatus === 'VERIFIED' ? 'success' : 'primary'} w-full`}
-        >
-          {verificationStatus.aadhaarStatus === 'VERIFIED'
-            ? '✓ Aadhaar Verified'
-            : loadingStates[`coApplicantAadhaar_${data.id || data.localKey}`]
-              ? 'Processing...'
-              : 'Complete Aadhaar KYC'}
-        </button>
+            {/* Show info message if Aadhaar is initiated but not verified */}
+            {verificationStatus.aadhaarStatus === 'INITIATED' && (
+              <div className="mb-2 p-3 bg-blue-50 border border-blue-200 rounded text-sm text-blue-700">
+                ℹ️ KYC link sent to your mobile. Complete Aadhaar verification and click "Refresh Status" to update.
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={handleAadhaarKyc}
+              disabled={
+                !canVerify ||
+                loadingStates[`coApplicantAadhaar_${data.id || data.localKey}`] ||
+                verificationStatus.aadhaarStatus === 'VERIFIED' ||
+                verificationStatus.aadhaarStatus === 'INITIATED'
+              }
+              className={`btn-${verificationStatus.aadhaarStatus === 'VERIFIED' ? 'success' : 'primary'} w-full`}
+            >
+              {verificationStatus.aadhaarStatus === 'VERIFIED'
+                ? '✓ Aadhaar Verified'
+                : loadingStates[`coApplicantAadhaar_${data.id || data.localKey}`]
+                  ? 'Processing...'
+                  : 'Verify Aadhaar'}
+            </button>
+
+            {/* Show Refresh Status button if Aadhaar is initiated but not verified */}
+            {verificationStatus.aadhaarStatus === 'INITIATED' && (
+              <button
+                type="button"
+                onClick={handleAadhaarRefresh}
+                disabled={isRefreshingAadhaar}
+                className="mt-2 btn-secondary w-full flex items-center justify-center"
+              >
+                {isRefreshingAadhaar ? <LoadingSpinner size="sm" /> : 'Refresh Status'}
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </div>
   )
 }
 
 export default CoApplicantForm
-

@@ -238,7 +238,6 @@ verifyGst: async ({
 
 initiateAadhaarKyc: async ({
   customerId,
-  aadhaarNumber,
   ownerType,
   applicantId,
   coApplicantId
@@ -247,7 +246,6 @@ initiateAadhaarKyc: async ({
     API_ENDPOINTS.ONBOARDING_KYC_AADHAAR,
     {
       customerId,
-      aadhaarNumber,
       ownerType,
       applicantId,
       coApplicantId

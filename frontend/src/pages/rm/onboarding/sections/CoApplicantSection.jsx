@@ -12,6 +12,7 @@ const CoApplicantSection = ({
   verificationStatuses,
   loadingStates,
   errors,
+  onLoadVerificationStatuses,
 }) => {
   const addCoApplicant = () => {
     const localKey = Date.now();
@@ -94,8 +95,9 @@ const CoApplicantSection = ({
                 kycData={coApplicantKyc[key] || {}}
                 customerId={customerId}
                 onVerify={onVerify}
-                loadingStates={loadingStates} // optional: extend if you want per-field loading
+                loadingStates={loadingStates}
                 verificationStatus={vs}
+                onLoadVerificationStatuses={onLoadVerificationStatuses}
               />
             );
           })}

@@ -13,6 +13,7 @@ import { OcrService } from '../integrations/ocr/ocr.service';
 import { IsNull, MoreThan } from 'typeorm';
 import { CASE_STATUS } from '../config/constants';
 import { Applicant } from '../entities/Applicant';
+import { randomUUID } from 'crypto';
 
 export class OnboardingIntegrationService {
     private customerRepository = AppDataSource.getRepository(Customer);
@@ -786,32 +787,39 @@ async verifyPan(
 
       kycStatus.panApiResponse = result;
 
+      // Extract name fields from PAN API response
+      if (result?.details) {
+        kycStatus.firstName = result.details.firstName || null;
+        kycStatus.middleName = result.details.middleName || null;
+        kycStatus.lastName = result.details.lastName || null;
+      }
+
       if (result.success && result.verified) {
 
         kycStatus.panStatus = KycStatus.VERIFIED;
 
         // ---------------------------------------------------
-        // 🔥 Save PAN to Correct Table
+        // 🔥 Save PAN and Name to Correct Table
         // ---------------------------------------------------
 
         if (ownerType === KycOwnerType.COMPANY) {
           await customerRepo.update(
             { id: customerId },
-            { companyPan: pan }
+            { companyPan: pan, companyName: name }
           );
         }
 
         if (ownerType === KycOwnerType.APPLICANT) {
           await applicantRepo.update(
             { id: applicantId },
-            { pan }
+            { pan, name }
           );
         }
 
         if (ownerType === KycOwnerType.CO_APPLICANT) {
           await coApplicantRepo.update(
             { id: coApplicantId },
-            { pan }
+            { pan, name }
           );
         }
 
@@ -912,58 +920,107 @@ async verifyGst(
     // ---------------------------------------------------
     // 🔍 Aadhaar Verification
     // ---------------------------------------------------
-    async verifyAadhaar(
+async verifyAadhaar(
   customerId: number,
-  aadhaarNumber: string,
   ownerType: KycOwnerType,
   applicantId?: number,
   coApplicantId?: number
-): Promise<any>
- {
-        const applicantRepo = AppDataSource.getRepository(Applicant);
+): Promise<any> {
 
-        if (ownerType === KycOwnerType.APPLICANT && !applicantId) {
-          const applicant = await applicantRepo.findOne({ where: { customerId } });
-          if (applicant) {
-            applicantId = applicant.id;
-          }
-        }
+  const applicantRepo = AppDataSource.getRepository(Applicant);
 
-        const kycStatus = await this.getOrCreateKycStatus(
-  customerId,
-  ownerType,
-  applicantId,
-  coApplicantId
-);
-
-        kycStatus.aadhaarStatus = KycStatus.INITIATED;
-        kycStatus.aadhaarApiRequest = { aadhaarNumber };
-        await this.kycStatusRepository.save(kycStatus);
-
-        try {
-            const customer = await this.customerRepository.findOne({ where: { id: customerId } });
-            if (!customer) throw new Error('Customer not found');
-
-            const result = await this.aadhaarService.generateKycLink({
-                firstName: customer.name || customer.companyName || '',
-                lastName: '',
-                uid: aadhaarNumber,
-                mobile: customer.mobile || customer.companyMobile || '',
-                emailId: customer.email,
-                redirectionUrl: `${process.env.FRONTEND_URL}/onboarding/callback`
-            });
-
-            kycStatus.aadhaarApiResponse = result;
-            // For Aadhaar, "INITIATED" is correct until callback is received
-            await this.kycStatusRepository.save(kycStatus);
-            return result;
-        } catch (error: any) {
-            kycStatus.aadhaarStatus = KycStatus.FAILED;
-            kycStatus.aadhaarApiResponse = { error: error.message };
-            await this.kycStatusRepository.save(kycStatus);
-            throw error;
-        }
+  // Resolve applicantId automatically if APPLICANT
+  if (ownerType === KycOwnerType.APPLICANT && !applicantId) {
+    const applicant = await applicantRepo.findOne({ where: { customerId } });
+    if (!applicant) {
+      throw new Error('Applicant not found for customer');
     }
+    applicantId = applicant.id;
+  }
+
+  // Get or create KYC row (ONE row per person)
+  const kycStatus = await this.getOrCreateKycStatus(
+    customerId,
+    ownerType,
+    applicantId,
+    coApplicantId
+  );
+
+  // Name MUST exist before Aadhaar
+  if (!kycStatus.firstName) {
+    throw new Error('First name is required before Aadhaar KYC');
+  }
+
+  // Generate internal referenceId (used as Digitap uid)
+  const referenceId = `AADHAAR_${customerId}_${ownerType}_${applicantId || coApplicantId || 'MAIN'}_${randomUUID()}`;
+
+  // Mark initiated
+  kycStatus.aadhaarStatus = KycStatus.INITIATED;
+  kycStatus.aadhaarApiRequest = {
+    referenceId,
+    ownerType,
+    applicantId,
+    coApplicantId
+  };
+
+  await this.kycStatusRepository.save(kycStatus);
+
+  try {
+    // Resolve contact details based on ownerType
+    const customer = await this.customerRepository.findOne({ where: { id: customerId } });
+    if (!customer) throw new Error('Customer not found');
+
+    let mobileNumber = '';
+    let emailAddress = '';
+
+    if (ownerType === KycOwnerType.APPLICANT) {
+      // Get applicant's mobile number
+      const applicant = await AppDataSource.getRepository(Applicant).findOne({ 
+        where: { id: applicantId } 
+      });
+      if (applicant) {
+        mobileNumber = applicant.mobile || '';
+        emailAddress = applicant.email || '';
+      }
+    } else if (ownerType === KycOwnerType.CO_APPLICANT) {
+      // Get co-applicant's mobile number
+      const coApplicant = await AppDataSource.getRepository(CoApplicant).findOne({ 
+        where: { id: coApplicantId } 
+      });
+      if (coApplicant) {
+        mobileNumber = coApplicant.mobile || '';
+        emailAddress = coApplicant.email || '';
+      }
+    } else {
+      // COMPANY - use customer mobile
+      mobileNumber = customer.mobile || customer.companyMobile || '';
+      emailAddress = customer.email || '';
+    }
+
+    const result = await this.aadhaarService.generateKycLink({
+      uid: referenceId,                               // ✅ NOT Aadhaar number
+      firstName: kycStatus.firstName,                // ✅ from kyc_verification_status
+      lastName: kycStatus.lastName || '',
+      mobile: mobileNumber,                           // ✅ Specific person's mobile
+      emailId: emailAddress,                          // ✅ Specific person's email
+      redirectionUrl: `https://fintreelms.com/onboarding/aadhaar/callback`
+    });
+
+    // Store transaction details
+    kycStatus.aadhaarTransactionId = result.transactionId;
+    kycStatus.aadhaarApiResponse = result;
+
+    await this.kycStatusRepository.save(kycStatus);
+    return result;
+
+  } catch (error: any) {
+    kycStatus.aadhaarStatus = KycStatus.FAILED;
+    kycStatus.aadhaarApiResponse = { error: error.message };
+    await this.kycStatusRepository.save(kycStatus);
+    throw error;
+  }
+}
+
 
     // ---------------------------------------------------
     // 🏦 Bureau Check

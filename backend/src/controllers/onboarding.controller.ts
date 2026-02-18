@@ -204,27 +204,38 @@ verifyMobileOtp = async (req: Request, res: Response): Promise<void> => {
     // ---------------------------------------------------
     // 🔍 Aadhaar Verification
     // ---------------------------------------------------
-    verifyAadhaar = async (req: Request, res: Response): Promise<void> => {
+verifyAadhaar = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { customerId, aadhaarNumber, ownerType, applicantId, coApplicantId } = req.body;
+    const { customerId, ownerType, applicantId, coApplicantId } = req.body;
 
-    if (!customerId || !aadhaarNumber || !ownerType) {
+    if (!customerId || !ownerType) {
       res.status(400).json({
         success: false,
-        message: 'customerId, aadhaarNumber and ownerType are required'
+        message: 'customerId and ownerType are required'
+      });
+      return;
+    }
+
+    // Basic ownerType safety
+    if (!['APPLICANT', 'CO_APPLICANT', 'COMPANY'].includes(ownerType)) {
+      res.status(400).json({
+        success: false,
+        message: 'Invalid ownerType'
       });
       return;
     }
 
     const result = await this.onboardingService.verifyAadhaar(
       Number(customerId),
-      aadhaarNumber,
       ownerType,
       applicantId ? Number(applicantId) : undefined,
       coApplicantId ? Number(coApplicantId) : undefined
     );
 
-    res.json({ success: true, data: result });
+    res.status(200).json({
+      success: true,
+      data: result
+    });
 
   } catch (error: any) {
     res.status(400).json({
@@ -233,6 +244,7 @@ verifyMobileOtp = async (req: Request, res: Response): Promise<void> => {
     });
   }
 };
+
 
 
     // ---------------------------------------------------
