@@ -109,7 +109,7 @@ const authSlice = createSlice({
         }
         state.user = user
         state.token = action.payload.token
-        state.isAuthenticated = 
+        state.isAuthenticated = true
         state.isLoading = false
       })
       .addCase(checkAuth.rejected, (state) => {

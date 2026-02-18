@@ -445,7 +445,7 @@ const handleAadhaarKyc = () =>
           </label>
           <input
             type="text"
-            value={data.name || ''}
+            value={data.name || ''}  
             onChange={(e) => handleChange({ name: e.target.value })}
             className="input-field"
             placeholder="Enter co-applicant name"
