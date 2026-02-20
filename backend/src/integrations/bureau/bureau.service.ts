@@ -100,31 +100,77 @@ export class BureauService {
 <XMLPassword>${this.experianPassword}</XMLPassword>
 </Identification>
 <Application>
+<FTReferenceNumber></FTReferenceNumber>
+        <CustomerReferenceID></CustomerReferenceID>
 <EnquiryReason>13</EnquiryReason>
 <FinancePurpose>99</FinancePurpose>
 <AmountFinanced>1</AmountFinanced>
 <DurationOfAgreement>3</DurationOfAgreement>
 <ScoreFlag>1</ScoreFlag>
+        <PSVFlag></PSVFlag>
 </Application>
 <Applicant>
 <Surname>${lastName}</Surname>
 <FirstName>${firstName}</FirstName>
+<MiddleName1></MiddleName1>
+        <MiddleName2></MiddleName2>
+        <MiddleName3></MiddleName3>
 <GenderCode>${genderCode}</GenderCode>
 <IncomeTaxPAN>${pan}</IncomeTaxPAN>
+<PANIssueDate></PANIssueDate>
+        <PANExpirationDate></PANExpirationDate>
+        <PassportNumber></PassportNumber>
+        <PassportIssueDate></PassportIssueDate>
+        <PassportExpirationDate></PassportExpirationDate>
+        <VoterIdentityCard></VoterIdentityCard>
+        <VoterIDIssueDate></VoterIDIssueDate>
+        <VoterIDExpirationDate></VoterIDExpirationDate>
+        <DriverLicenseNumber></DriverLicenseNumber>
+        <DriverLicenseIssueDate></DriverLicenseIssueDate>
+        <DriverLicenseExpirationDate></DriverLicenseExpirationDate>
+        <RationCardNumber></RationCardNumber>
+        <RationCardIssueDate></RationCardIssueDate>
+        <RationCardExpirationDate></RationCardExpirationDate>
+        <UniversalIDNumber></UniversalIDNumber>
+        <UniversalIDIssueDate></UniversalIDIssueDate>
+        <UniversalIDExpirationDate></UniversalIDExpirationDate>
 <DateOfBirth>${dobFormatted}</DateOfBirth>
+<STDPhoneNumber></STDPhoneNumber>
 <PhoneNumber>${data.mobile_number}</PhoneNumber>
+<TelephoneExtension></TelephoneExtension>
+        <TelephoneType></TelephoneType>
+        <MobilePhone></MobilePhone>
+        <EMailId></EMailId>
 </Applicant>
 <Address>
 <FlatNoPlotNoHouseNo>${data.current_address}</FlatNoPlotNoHouseNo>
+<BldgNoSocietyName></BldgNoSocietyName>
+        <RoadNoNameAreaLocality></RoadNoNameAreaLocality>
 <City>${city}</City>
+<Landmark></Landmark>
 <State>${stateCode}</State>
 <PinCode>${data.current_pincode}</PinCode>
 </Address>
+<AdditionalAddressFlag>
+        <Flag>N</Flag>
+    </AdditionalAddressFlag>
+    <AdditionalAddress>
+        <FlatNoPlotNoHouseNo></FlatNoPlotNoHouseNo>
+        <BldgNoSocietyName></BldgNoSocietyName>
+        <RoadNoNameAreaLocality></RoadNoNameAreaLocality>
+        <City></City>
+        <Landmark></Landmark>
+        <State></State>
+        <PinCode></PinCode>
+    </AdditionalAddress>
 </INProfileRequest>
 </urn:in>
 </urn:process>
 </soapenv:Body>
 </soapenv:Envelope>`;
+
+console.log("Experian request", soapBody);
+
 
       const { data: xmlResponse } = await axios.post(
         this.experianUrl,
