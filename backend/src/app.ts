@@ -7,6 +7,7 @@ import path from 'path';
 import routes from './routes';
 import aadhaarWebhookRoutes from './routes/aadhaarWebhook.routes';
 import { errorHandler, notFoundHandler } from './middlewares/error.middleware';
+import { startBureauPdfCron } from './cron/bureauPdf.cron';
 
 dotenv.config();
 
@@ -48,7 +49,7 @@ if (process.env.NODE_ENV === 'development') {
 app.use(express.json({ limit: '20mb' }));
 app.use(express.urlencoded({ extended: true, limit: '20mb' }));
 
-
+startBureauPdfCron();
 
 // Aadhaar Webhook route (must be public, before auth)
 app.use('/api', aadhaarWebhookRoutes);

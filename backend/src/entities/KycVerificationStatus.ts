@@ -124,11 +124,14 @@ export class KycVerificationStatus {
   aadhaarWebhookResponse: any;
 
 
-  @Column({ type: 'json', nullable: true })
+  @Column({ type: 'longtext', nullable: true })
   bureauApiRequest: any;
 
-  @Column({ type: 'json', nullable: true })
+  @Column({ type: 'longtext', nullable: true })
   bureauApiResponse: any;
+
+  @Column({ type: 'boolean', default: false })
+is_pdf_generated: boolean;
 
   @UpdateDateColumn({
     type: 'datetime',
