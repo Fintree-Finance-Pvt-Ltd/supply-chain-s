@@ -35,6 +35,7 @@ export class BureauService {
   // 🏦 Run Experian Bureau
   // ---------------------------------------------------
   async runBureau(data: any): Promise<BureauResult> {
+    console.log('🚀 Experian runBureau called');
     try {
       const dobFormatted = this.formatDob(data.dob);
       const genderCode = this.toUpper(data.gender) === 'F' ? 2 : 1;
@@ -214,7 +215,7 @@ console.log("Experian request", soapBody);
         success: false,
         score: null,
         requestXml: null,
-        response: null,
+        response: err?.response?.data ?? null,
         error: err.message,
       };
     }

@@ -84,6 +84,10 @@ export class CustomerOnboardingService {
 
 
   async runAllBureausForCustomer(customerId: number) {
+
+    console.log('🔥 runbureaufor customer started', {
+  customerId
+});
   // Applicant
   await this.onboardingService.checkBureau(
     customerId,

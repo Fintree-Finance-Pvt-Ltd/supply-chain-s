@@ -1032,6 +1032,13 @@ export class OnboardingIntegrationService {
     coApplicantId?: number
   ): Promise<any> {
 
+    console.log('🔥 checkBureau started', {
+  customerId,
+  ownerType,
+  applicantId,
+  coApplicantId,
+});
+
     const applicantRepo = AppDataSource.getRepository(Applicant);
 
     // Resolve applicantId if missing
@@ -1163,13 +1170,14 @@ const gender =
     ------------------------------------ */
 
     kycStatus.bureauStatus = KycStatus.INITIATED;
-    kycStatus.bureauApiRequest = requestPayload;
+    // kycStatus.bureauApiRequest = requestPayload;
     await this.kycStatusRepository.save(kycStatus);
 
     try {
       const result = await this.bureauService.runBureau(requestPayload);
 
-      kycStatus.bureauApiResponse = result;
+      kycStatus.bureauApiRequest = result.requestXml || result;
+      kycStatus.bureauApiResponse = result.response;
       kycStatus.bureauStatus = result.success
         ? KycStatus.VERIFIED
         : KycStatus.FAILED;
