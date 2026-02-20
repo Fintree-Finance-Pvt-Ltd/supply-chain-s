@@ -29,11 +29,13 @@ export function startBureauPdfCron() {
           fileName,
         );
 
+        const prefix = kyc.applicantId ? 'applicant_' : (kyc.coApplicantId ? 'coapplicant_' : 'company_');
+
         await docRepo.save({
           customerId: kyc.customerId,
           applicantId: kyc.applicantId,
           coApplicantId: kyc.coApplicantId,
-          documentType: 'BUREAU_REPORT',
+          documentType: `${prefix}bureau_report`,
           fileName,
           filePath,
           mimeType: 'application/pdf',

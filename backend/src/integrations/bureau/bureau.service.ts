@@ -102,8 +102,8 @@ export class BureauService {
 <Application>
 <EnquiryReason>13</EnquiryReason>
 <FinancePurpose>99</FinancePurpose>
-<AmountFinanced>${data.loan_amount}</AmountFinanced>
-<DurationOfAgreement>${data.loan_tenure}</DurationOfAgreement>
+<AmountFinanced>1</AmountFinanced>
+<DurationOfAgreement>3</DurationOfAgreement>
 <ScoreFlag>1</ScoreFlag>
 </Application>
 <Applicant>

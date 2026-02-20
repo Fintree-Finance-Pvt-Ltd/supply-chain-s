@@ -183,11 +183,12 @@ export async function processAadhaarWebhook(payload: any) {
         await manager.save(kyc);
 
         if (pdfPath) {
+            const prefix = kyc.applicantId ? 'applicant_' : (kyc.coApplicantId ? 'coapplicant_' : 'company_');
             await manager.save(Document, {
                 customerId: kyc.customerId,
                 applicantId: kyc.applicantId,
                 coApplicantId: kyc.coApplicantId,
-                documentType: 'AADHAAR_PDF',
+                documentType: `${prefix}aadhaar_pdf`,
                 fileName: 'aadhaar.pdf',
                 filePath: pdfPath,
                 mimeType: 'application/pdf',
@@ -198,11 +199,12 @@ export async function processAadhaarWebhook(payload: any) {
         }
 
         if (xmlPath) {
+            const prefix = kyc.applicantId ? 'applicant_' : (kyc.coApplicantId ? 'coapplicant_' : 'company_');
             await manager.save(Document, {
                 customerId: kyc.customerId,
                 applicantId: kyc.applicantId,
                 coApplicantId: kyc.coApplicantId,
-                documentType: 'AADHAAR_XML',
+                documentType: `${prefix}aadhaar_xml`,
                 fileName: 'aadhaar.xml',
                 filePath: xmlPath,
                 mimeType: 'application/xml',
