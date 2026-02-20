@@ -5,6 +5,7 @@ import morgan from 'morgan';
 import * as dotenv from 'dotenv';
 import path from 'path';
 import routes from './routes';
+import aadhaarWebhookRoutes from './routes/aadhaarWebhook.routes';
 import { errorHandler, notFoundHandler } from './middlewares/error.middleware';
 
 dotenv.config();
@@ -41,8 +42,16 @@ if (process.env.NODE_ENV === 'development') {
 }
 
 // Body parsing
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// app.use(express.json());
+// app.use(express.urlencoded({ extended: true }));
+
+app.use(express.json({ limit: '20mb' }));
+app.use(express.urlencoded({ extended: true, limit: '20mb' }));
+
+
+
+// Aadhaar Webhook route (must be public, before auth)
+app.use('/api', aadhaarWebhookRoutes);
 
 // Serve uploaded files
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));

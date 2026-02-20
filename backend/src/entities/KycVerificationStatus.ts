@@ -121,6 +121,10 @@ export class KycVerificationStatus {
   aadhaarApiResponse: any;
 
   @Column({ type: 'json', nullable: true })
+  aadhaarWebhookResponse: any;
+
+
+  @Column({ type: 'json', nullable: true })
   bureauApiRequest: any;
 
   @Column({ type: 'json', nullable: true })

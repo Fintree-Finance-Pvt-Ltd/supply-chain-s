@@ -89,6 +89,7 @@ export class CustomerService {
         'addresses',
         'statusHistory',
         'statusHistory.changedByUser',
+        'applicant', // <-- include applicant relation
       ],
     });
   }

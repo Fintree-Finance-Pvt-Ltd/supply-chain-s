@@ -5,6 +5,9 @@ import { CaseWorkflow } from '../entities/CaseWorkflow';
 import { CaseStatusHistory } from '../entities/CaseStatusHistory';
 import { CreditSanction } from '../entities/CreditSanction';
 import { SanctionLimitHistory } from '../entities/SanctionLimitHistory';
+import { KycOwnerType } from '../entities/KycVerificationStatus';
+import { CoApplicant } from '../entities/CoApplicant';
+import { OnboardingIntegrationService } from './onboarding-integration.service';
 
 export class CustomerOnboardingService {
   private customerRepository = AppDataSource.getRepository(Customer);
@@ -12,6 +15,13 @@ export class CustomerOnboardingService {
   private historyRepository = AppDataSource.getRepository(CaseStatusHistory);
   private sanctionRepository = AppDataSource.getRepository(CreditSanction);
   private sanctionHistoryRepository = AppDataSource.getRepository(SanctionLimitHistory);
+  private coApplicantRepository = AppDataSource.getRepository(CoApplicant);
+
+  private onboardingService: OnboardingIntegrationService;
+
+  constructor() {
+    this.onboardingService = new OnboardingIntegrationService();
+  }
 
   private async getOrCreateWorkflow(customerId: number, workflowType: string = 'CUSTOMER_ONBOARDING'): Promise<CaseWorkflow> {
     let workflow = await this.workflowRepository.findOne({
@@ -72,6 +82,30 @@ export class CustomerOnboardingService {
     return await this.historyRepository.save(history);
   }
 
+
+  async runAllBureausForCustomer(customerId: number) {
+  // Applicant
+  await this.onboardingService.checkBureau(
+    customerId,
+    KycOwnerType.APPLICANT
+  );
+
+  // Co-applicants
+  const coApplicants = await this.coApplicantRepository.find({
+    where: { customerId },
+  });
+
+  for (const coApp of coApplicants) {
+    await this.onboardingService.checkBureau(
+      customerId,
+      KycOwnerType.CO_APPLICANT,
+      undefined,
+      coApp.id
+    );
+  }
+}
+
+
   async createCustomer(data: any, rmId: number) {
     // Clean up empty strings for unique/nullable fields to prevent duplicate entry error
     const cleanedData = { ...data };
@@ -114,6 +148,17 @@ export class CustomerOnboardingService {
 
     const workflow = await this.getOrCreateWorkflow(customerId);
     if (workflow.currentStatus !== 'draft') throw new Error('Can only submit from draft status');
+
+    /* ----------------------------------------
+     🔁 SILENT BUREAU (NON-BLOCKING)
+  ---------------------------------------- */
+  this.runAllBureausForCustomer(customerId)
+    .catch(err => {
+      console.error(
+        `❌ Bureau failed silently for customer=${customerId}`,
+        err,
+      );
+    });
 
     const previousStatus = workflow.currentStatus;
     workflow.currentStatus = 'submitted';

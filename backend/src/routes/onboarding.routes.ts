@@ -23,6 +23,8 @@ router.post('/kyc/gst', onboardingController.verifyGst);
 router.post('/kyc/aadhaar', onboardingController.verifyAadhaar);
 router.get('/kyc/status/:customerId', onboardingController.getVerificationStatuses);
 
+
+
 // Bureau
 router.post('/bureau/check', onboardingController.checkBureau);
 

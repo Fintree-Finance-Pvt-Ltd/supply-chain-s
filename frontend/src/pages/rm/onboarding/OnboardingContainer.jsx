@@ -153,10 +153,10 @@ const OnboardingContainer = () => {
       companyEmail: currentCase.companyEmail || "",
       companyPan: currentCase.companyPan || "",
       companyGst: currentCase.gstNumber || "",
-      applicantName: currentCase.name || "",
-      applicantMobile: currentCase.mobile || "",
-      applicantEmail: currentCase.email || "",
-      applicantPan: currentCase.pan || "",
+      applicantName: currentCase.applicant?.name || "",
+      applicantMobile: currentCase.applicant?.mobile || "",
+      applicantEmail: currentCase.applicant?.email || "",
+      applicantPan: currentCase.applicant?.pan || "",
       remarks: currentCase.remarks || "",
     }));
 
@@ -706,8 +706,12 @@ const OnboardingContainer = () => {
       if (customerId) {
         // Upload to documents
         try {
-          await documentService.uploadDocument(customerId, file, "pan", "applicant", 0, null, {});
-          // refresh docs
+          const uploadRes = await documentService.uploadDocument(customerId, file, "pan", "applicant", 0, null, {});
+          // Add to UI immediately
+          if (uploadRes?.data) {
+            handleDocumentUploaded(uploadRes.data);
+          }
+          // refresh docs (in case backend logic changes)
           const docs = await documentService.getDocumentsByCustomer(customerId);
           setDocuments(docs.data);
         } catch (uploadErr) {
