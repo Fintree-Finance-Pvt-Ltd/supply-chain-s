@@ -15,14 +15,12 @@ export const workflowService = {
     approveOpsHead: (id, remarks) => api.post(API_ENDPOINTS.WORKFLOW_CUSTOMER_OPS_HEAD(id), { remarks }),
     updateBankDetails: (id, data) => api.patch(API_ENDPOINTS.WORKFLOW_CUSTOMER_BANK_DETAILS(id), data),
     updateDocumentMetadata: (id, data) => api.patch(API_ENDPOINTS.WORKFLOW_DOCUMENT_UPDATE(id), data),
-    getSanctionedCustomers: () => api.get('/workflows/customers/sanctioned'),
 
     // Supplier Onboarding
     createSupplier: (data) => api.post(API_ENDPOINTS.WORKFLOW_SUPPLIER_CREATE, data),
-    getSupplierById: (id) => api.get(`/workflows/suppliers/${id}`),
     submitSupplier: (id, remarks) => api.post(API_ENDPOINTS.WORKFLOW_SUPPLIER_SUBMIT(id), { remarks }),
     approveSupplierOpsL1: (id, approved, remarks) => api.post(API_ENDPOINTS.WORKFLOW_SUPPLIER_OPS_L1(id), { approved, remarks }),
-    approveSupplierOpsHead: (id, approved, remarks) => api.post(API_ENDPOINTS.WORKFLOW_SUPPLIER_OPS_HEAD(id), { approved, remarks }),
+    approveSupplierOpsHead: (id, remarks) => api.post(API_ENDPOINTS.WORKFLOW_SUPPLIER_OPS_HEAD(id), { remarks }),
 
     // Invoice Discounting
     createInvoice: (data) => api.post(API_ENDPOINTS.WORKFLOW_INVOICE_CREATE, data),
@@ -45,5 +43,4 @@ export const workflowService = {
     getCreditDashboard: (level) => api.get(API_ENDPOINTS.DASHBOARD_CREDIT_PENDING(level)),
     getExecutiveDashboard: () => api.get(API_ENDPOINTS.DASHBOARD_EXECUTIVE_PENDING),
     getOperationsDashboard: () => api.get(API_ENDPOINTS.DASHBOARD_OPERATIONS_PENDING),
-    getSupplierOperationsDashboard: () => api.get('/workflows/suppliers/dashboard/operations'),
 }

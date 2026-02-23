@@ -10,7 +10,7 @@ export class BureauService {
 
   constructor() {
     if (!this.experianUrl || !this.experianUser || !this.experianPassword) {
-      console.warn('[BureauService] Warning: Missing Experian config in .env — bureau checks will be unavailable');
+      throw new Error('Missing Experian config in .env');
     }
   }
 
@@ -170,7 +170,7 @@ export class BureauService {
 </soapenv:Body>
 </soapenv:Envelope>`;
 
-      console.log("Experian request", soapBody);
+console.log("Experian request", soapBody);
 
 
       const { data: xmlResponse } = await axios.post(
@@ -190,7 +190,7 @@ export class BureauService {
 
       const encoded =
         parsed['SOAP-ENV:Envelope']?.['SOAP-ENV:Body']?.[
-        'ns2:processResponse'
+          'ns2:processResponse'
         ]?.['ns2:out'];
 
       if (!encoded) {

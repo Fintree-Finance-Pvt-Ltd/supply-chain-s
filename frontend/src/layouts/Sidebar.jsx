@@ -45,20 +45,11 @@ const Sidebar = () => {
         ]
 
       case ROLES.OPERATIONS_TEAM_L1:
-        return [
-          { path: '/operations/dashboard', label: 'Ops Dashboard', icon: FiHome },
-          { path: '/operations/supplier/onboard', label: 'Onboard Supplier', icon: FiUserPlus },
-          { path: '/operations/pending', label: 'Pending Checks', icon: FiCheckCircle },
-        ]
       case ROLES.OPERATIONS_TEAM_L2:
-        return [
-          { path: '/operations/dashboard', label: 'Ops Dashboard', icon: FiHome },
-          { path: '/operations/pending', label: 'Pending Checks', icon: FiCheckCircle },
-        ]
       case ROLES.OPERATIONS_HEAD:
         return [
           { path: '/operations/dashboard', label: 'Ops Dashboard', icon: FiHome },
-          { path: '/operations/pending', label: 'Customer Checks', icon: FiCheckCircle },
+          { path: '/operations/pending', label: 'Pending Checks', icon: FiCheckCircle },
         ]
 
       case ROLES.CEO:

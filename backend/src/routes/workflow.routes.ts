@@ -526,82 +526,51 @@ router.get('/customers/dashboard/operations', checkRole(['operations_team_l1', '
   }
 });
 
-/**
- * GET /api/workflows/customers/sanctioned
- * Get customers who are sanctioned/approved and eligible for supplier onboarding
- */
-router.get('/customers/sanctioned', async (req: Request, res: Response) => {
-  try {
-    const customers = await supplierOnboardingService.getSanctionedCustomers();
-    res.json({
-      success: true,
-      data: customers,
-    });
-  } catch (error: any) {
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
-  }
-});
-
 // ==================== SUPPLIER ONBOARDING ROUTES ====================
 
 /**
  * POST /api/workflows/suppliers/create
- * Operations L1 creates and onboards a new supplier
+ * RM creates a new supplier for an approved customer
  */
-router.post('/suppliers/create', checkRole(['operations_team_l1', 'relationship_manager']), async (req: Request, res: Response) => {
+router.post('/suppliers/create', checkRole(['relationship_manager']), async (req: Request, res: Response) => {
   try {
     const {
       customerId,
       supplierName,
       supplierCode,
       email,
-      mobileNumber,
       contactNumber,
       address,
       gstNumber,
       panNumber,
-      bankAccountNumber,
-      ifscCode,
-      bankName,
-      accountHolderName,
-      cancelledChequeUrl
     } = req.body;
     const user = (req as any).user;
 
-    if (!customerId || !supplierName) {
+    if (!customerId || !supplierName || !supplierCode) {
       return res.status(400).json({
         success: false,
-        message: 'Missing required fields: customerId and supplierName are mandatory',
+        message: 'Missing required fields',
       });
     }
 
-    const result = await supplierOnboardingService.createSupplier(
+    const supplier = await supplierOnboardingService.createSupplier(
       {
         customerId,
         supplierName,
-        supplierCode: supplierCode || `SUP-${Date.now()}`,
+        supplierCode,
         email,
-        mobileNumber: mobileNumber || contactNumber,
+        contactNumber,
         address,
         gstNumber,
         panNumber,
-        bankAccountNumber,
-        ifscCode,
-        bankName,
-        accountHolderName,
-        cancelledChequeUrl
       },
       user.id,
     );
 
     res.status(201).json({
       success: true,
-      message: 'Supplier onboarded successfully and moved to Operations Head',
-      data: result.supplier,
-      workflow: result.workflow
+      message: 'Supplier created successfully',
+      data: supplier,
     });
   } catch (error: any) {
     res.status(400).json({
@@ -672,24 +641,30 @@ router.post('/suppliers/:supplierId/ops-l1', checkRole(['operations_team_l1']), 
 
 /**
  * POST /api/workflows/suppliers/:supplierId/ops-head
- * Operations Head finalizes (approve or reject) supplier onboarding
+ * Operations Head reviews and finalizes supplier onboarding
  */
 router.post('/suppliers/:supplierId/ops-head', checkRole(['operations_head']), async (req: Request, res: Response) => {
   try {
     const { supplierId } = req.params;
-    const { remarks, approved } = req.body;
+    const { remarks } = req.body;
     const user = (req as any).user;
 
-    let workflow;
-    if (approved !== false) {
-      workflow = await supplierOnboardingService.opsHeadApprove(parseInt(supplierId), user.id, remarks || '');
-      return res.json({ success: true, message: 'Supplier successfully onboarded!', data: workflow });
-    } else {
-      workflow = await supplierOnboardingService.opsHeadReject(parseInt(supplierId), user.id, remarks || '');
-      return res.json({ success: true, message: 'Supplier rejected by Operations Head', data: workflow });
-    }
+    const workflow = await supplierOnboardingService.opsHeadApprove(
+      parseInt(supplierId),
+      user.id,
+      remarks || '',
+    );
+
+    res.json({
+      success: true,
+      message: 'Supplier onboarding completed by Operations Head',
+      data: workflow,
+    });
   } catch (error: any) {
-    res.status(400).json({ success: false, message: error.message });
+    res.status(400).json({
+      success: false,
+      message: error.message,
+    });
   }
 });
 
@@ -754,23 +729,6 @@ router.get('/suppliers/customer/:customerId/all', async (req: Request, res: Resp
       success: false,
       message: error.message,
     });
-  }
-});
-
-/**
- * GET /api/workflows/suppliers/:supplierId
- * Get a single supplier by ID
- */
-router.get('/suppliers/:supplierId', checkRole(['operations_team_l1', 'operations_head']), async (req: Request, res: Response) => {
-  try {
-    const { supplierId } = req.params;
-    const supplier = await supplierOnboardingService.getSupplierById(parseInt(supplierId));
-    if (!supplier) {
-      return res.status(404).json({ success: false, message: 'Supplier not found' });
-    }
-    res.json({ success: true, data: supplier });
-  } catch (error: any) {
-    res.status(400).json({ success: false, message: error.message });
   }
 });
 

@@ -39,29 +39,13 @@ export class Supplier {
   @Column({ type: 'varchar', length: 100, nullable: true })
   gstNumber: string;
 
-  @Column({ type: 'varchar', length: 20, nullable: true })
+  @Column({ type: 'varchar', length: 50, nullable: true })
   panNumber: string;
 
-  // Banking Details
-  @Column({ type: 'varchar', length: 255, nullable: true })
-  bankAccountNumber: string;
-
-  @Column({ type: 'varchar', length: 50, nullable: true })
-  ifscCode: string;
-
-  @Column({ type: 'varchar', length: 255, nullable: true })
-  bankName: string;
-
-  @Column({ type: 'varchar', length: 255, nullable: true })
-  accountHolderName: string;
-
-  @Column({ type: 'varchar', length: 500, nullable: true })
-  cancelledChequeUrl: string;
-
-  @Column({
-    type: 'enum',
-    enum: ['DRAFT', 'SUBMITTED', 'OPS_L1_APPROVED', 'OPS_HEAD_APPROVED', 'COMPLETED', 'REJECTED'],
-    default: 'DRAFT'
+  @Column({ 
+    type: 'enum', 
+    enum: ['DRAFT', 'SUBMITTED', 'OPS_L1_APPROVED', 'OPS_HEAD_APPROVED', 'COMPLETED', 'REJECTED'], 
+    default: 'DRAFT' 
   })
   status: string;
 
