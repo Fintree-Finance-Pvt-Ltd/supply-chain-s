@@ -9,21 +9,26 @@ import { formatDate } from '../../utils/format'
 const OperationsDashboard = () => {
   const navigate = useNavigate()
   const [cases, setCases] = useState([])
+  const [suppliers, setSuppliers] = useState([])
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    const loadCases = async () => {
+    const loadData = async () => {
       try {
         setIsLoading(true)
-        const response = await workflowService.getOperationsDashboard()
-        setCases(response.data?.data || [])
+        const [customerRes, supplierRes] = await Promise.all([
+          workflowService.getOperationsDashboard(),
+          workflowService.getSupplierOperationsDashboard()
+        ])
+        setCases(customerRes.data?.data || [])
+        setSuppliers(supplierRes.data?.data || [])
       } catch (error) {
-        console.error('Error loading operations cases:', error)
+        console.error('Error loading operations data:', error)
       } finally {
         setIsLoading(false)
       }
     }
-    loadCases()
+    loadData()
   }, [])
 
   const columns = [
@@ -61,7 +66,7 @@ const OperationsDashboard = () => {
       </div>
 
       <div className="card">
-        <h2 className="text-xl font-bold text-gray-800 mb-4">Pending Review</h2>
+        <h2 className="text-xl font-bold text-gray-800 mb-4">Pending Customers Review</h2>
         {isLoading ? (
           <LoadingSpinner />
         ) : (
@@ -73,8 +78,41 @@ const OperationsDashboard = () => {
         )}
       </div>
 
-      <div className="card border-t-4 border-gray-300">
-        <h2 className="text-xl font-bold text-gray-500 mb-4">Previously Handled (Read-Only)</h2>
+      <div className="card border-t-4 border-primary-500">
+        <h2 className="text-xl font-bold text-gray-800 mb-4">Pending Suppliers Review</h2>
+        {isLoading ? (
+          <LoadingSpinner />
+        ) : (
+          <DataTable
+            data={suppliers || []}
+            columns={[
+              {
+                key: 'supplierName',
+                label: 'Supplier Name',
+              },
+              {
+                key: 'customer',
+                label: 'Linked Customer',
+                render: (customer) => customer?.customerName || 'N/A'
+              },
+              {
+                key: 'status',
+                label: 'Stage',
+                render: (value) => <StatusBadge status={value} label={value.replace(/_/g, ' ').toUpperCase()} />,
+              },
+              {
+                key: 'updatedAt',
+                label: 'Received Date',
+                render: (value) => formatDate(value),
+              },
+            ]}
+            onRowClick={(row) => navigate(`/operations/supplier/${row.id}`)}
+          />
+        )}
+      </div>
+
+      <div className="card border-t-4 border-gray-300 opacity-75">
+        <h2 className="text-xl font-bold text-gray-500 mb-4">Handled Customers (Read-Only)</h2>
         {isLoading ? (
           <LoadingSpinner />
         ) : (

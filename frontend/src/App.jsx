@@ -36,6 +36,8 @@ import ApprovalScreen from './pages/management/ApprovalScreen'
 // Operations Pages
 import OperationsDashboard from './pages/operations/OperationsDashboard'
 import OperationsCaseScreen from './pages/operations/OperationsCaseScreen'
+import SupplierOnboarding from './pages/operations/SupplierOnboarding'
+import SupplierApprovalScreen from './pages/operations/SupplierApprovalScreen'
 
 // Common
 import Unauthorized from './pages/common/Unauthorized'
@@ -225,6 +227,31 @@ function App() {
                 ]}
               >
                 <OperationsCaseScreen />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="operations/supplier/onboard"
+            element={
+              <ProtectedRoute
+                allowedRoles={[
+                  ROLES.OPERATIONS_TEAM_L1,
+                ]}
+              >
+                <SupplierOnboarding />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="operations/supplier/:id"
+            element={
+              <ProtectedRoute
+                allowedRoles={[
+                  ROLES.OPERATIONS_HEAD,
+                  ROLES.OPERATIONS_TEAM_L1,
+                ]}
+              >
+                <SupplierApprovalScreen />
               </ProtectedRoute>
             }
           />

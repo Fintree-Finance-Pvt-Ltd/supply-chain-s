@@ -20,7 +20,7 @@ export class SupplierOnboardingService {
       const supplier = await this.supplierRepository.findOne({ where: { id: supplierId } });
       if (!supplier) throw new Error('Supplier not found');
 
-      const status = (supplier.status || 'draft').toLowerCase();
+      const status = supplier.status || 'DRAFT';
       workflow = this.workflowRepository.create({
         workflowType: workflowType as any,
         supplierId: supplier.id,
@@ -35,12 +35,14 @@ export class SupplierOnboardingService {
   }
 
   private getApproverForStatus(status: string): string {
-    switch (status) {
-      case 'draft': return 'RM';
-      case 'submitted': return 'OPERATIONS_L1';
-      case 'ops_l1_approved': return 'OPERATIONS_HEAD';
-      case 'completed': return 'None';
-      default: return 'RM';
+    switch ((status || '').toUpperCase()) {
+      case 'DRAFT': return 'OPERATIONS_L1';
+      case 'SUBMITTED': return 'OPERATIONS_HEAD';
+      case 'OPS_L1_APPROVED': return 'OPERATIONS_HEAD';
+      case 'OPS_HEAD_APPROVED': return 'None';
+      case 'COMPLETED': return 'None';
+      case 'REJECTED': return 'None';
+      default: return 'OPERATIONS_L1';
     }
   }
 
@@ -67,7 +69,7 @@ export class SupplierOnboardingService {
   MAX_SUPPLIERS_PER_LAN = 20;
   MIN_SUPPLIERS_PER_LAN = 10;
 
-  async createSupplier(data: any, rmId: number) {
+  async createSupplier(data: any, userId: number) {
     const customer = await this.customerRepository.findOne({
       where: { id: data.customerId },
     });
@@ -78,14 +80,11 @@ export class SupplierOnboardingService {
       throw new Error(`Maximum ${this.MAX_SUPPLIERS_PER_LAN} suppliers already added to this LAN`);
     }
 
-    // Clean up empty strings for unique fields
-    const cleanedData = { ...data };
-    if (cleanedData.supplierCode === '') cleanedData.supplierCode = undefined;
-
     const supplier = this.supplierRepository.create({
-      ...cleanedData,
-      createdByUserId: rmId,
-      status: 'draft',
+      ...data,
+      contactNumber: data.mobileNumber || data.contactNumber,
+      createdByUserId: userId,
+      status: 'OPS_L1_APPROVED', // Created by Ops L1, immediately pending at Ops Head
     });
     const savedSupplier = (await this.supplierRepository.save(supplier)) as unknown as Supplier;
 
@@ -93,8 +92,8 @@ export class SupplierOnboardingService {
       workflowType: 'SUPPLIER_ONBOARDING',
       supplierId: savedSupplier.id,
       customerId: data.customerId,
-      currentStatus: 'draft',
-      currentApproverRoleName: 'RM',
+      currentStatus: 'OPS_L1_APPROVED',
+      currentApproverRoleName: 'OPERATIONS_HEAD',
     });
     const savedWorkflow = await this.workflowRepository.save(workflow);
 
@@ -102,10 +101,10 @@ export class SupplierOnboardingService {
       customerId: data.customerId,
       supplierId: savedSupplier.id,
       caseWorkflowId: savedWorkflow.id,
-      status: 'draft',
-      previousStatus: 'None',
-      changedBy: rmId,
-      remarks: 'Supplier created in Draft state',
+      status: 'OPS_L1_APPROVED',
+      previousStatus: 'DRAFT',
+      changedBy: userId,
+      remarks: 'Supplier onboarded by Operations L1',
     });
 
     return { supplier: savedSupplier, workflow: savedWorkflow };
@@ -119,10 +118,10 @@ export class SupplierOnboardingService {
     if (workflow.currentStatus !== 'draft') throw new Error('Can only submit from Draft status');
 
     const previousStatus = workflow.currentStatus;
-    supplier.status = 'submitted';
+    supplier.status = 'SUBMITTED';
     await this.supplierRepository.save(supplier);
 
-    workflow.currentStatus = 'submitted';
+    workflow.currentStatus = 'SUBMITTED';
     workflow.currentApproverRoleName = 'OPERATIONS_L1';
     workflow.remarks = remarks;
     await this.workflowRepository.save(workflow);
@@ -131,7 +130,7 @@ export class SupplierOnboardingService {
       customerId: supplier.customerId,
       supplierId: supplier.id,
       caseWorkflowId: workflow.id,
-      status: 'submitted',
+      status: 'SUBMITTED',
       previousStatus,
       changedBy: userId,
       remarks,
@@ -145,13 +144,13 @@ export class SupplierOnboardingService {
     if (!supplier) throw new Error('Supplier not found');
 
     const workflow = await this.getOrCreateWorkflow(supplierId);
-    if (workflow.currentStatus !== 'submitted') throw new Error('Cannot approve: Pending at Operations L1');
+    if (workflow.currentStatus !== 'SUBMITTED') throw new Error('Cannot approve: Pending at Operations L1');
 
     const previousStatus = workflow.currentStatus;
-    supplier.status = approved ? 'ops_l1_approved' : 'rejected';
+    supplier.status = approved ? 'OPS_L1_APPROVED' : 'REJECTED';
     await this.supplierRepository.save(supplier);
 
-    workflow.currentStatus = approved ? 'ops_l1_approved' : 'rejected';
+    workflow.currentStatus = approved ? 'OPS_L1_APPROVED' : 'REJECTED';
     workflow.currentApproverRoleName = approved ? 'OPERATIONS_HEAD' : 'RM';
     if (!approved) workflow.isRejected = true;
     workflow.remarks = remarks;
@@ -175,13 +174,13 @@ export class SupplierOnboardingService {
     if (!supplier) throw new Error('Supplier not found');
 
     const workflow = await this.getOrCreateWorkflow(supplierId);
-    if (workflow.currentStatus !== 'ops_l1_approved') throw new Error('Cannot approve: Pending at Operations Head');
+    if (workflow.currentStatus !== 'OPS_L1_APPROVED') throw new Error('Cannot approve: Supplier is not pending at Operations Head');
 
     const previousStatus = workflow.currentStatus;
-    supplier.status = 'completed';
+    supplier.status = 'COMPLETED';
     await this.supplierRepository.save(supplier);
 
-    workflow.currentStatus = 'completed';
+    workflow.currentStatus = 'COMPLETED';
     workflow.currentApproverRoleName = 'None';
     workflow.isCompleted = true;
     workflow.completedDate = new Date();
@@ -192,7 +191,38 @@ export class SupplierOnboardingService {
       customerId: supplier.customerId,
       supplierId: supplier.id,
       caseWorkflowId: workflow.id,
-      status: 'completed',
+      status: 'COMPLETED',
+      previousStatus,
+      changedBy: userId,
+      remarks,
+    });
+
+    return workflow;
+  }
+
+  async opsHeadReject(supplierId: number, userId: number, remarks: string) {
+    const supplier = await this.supplierRepository.findOne({ where: { id: supplierId } });
+    if (!supplier) throw new Error('Supplier not found');
+
+    const workflow = await this.getOrCreateWorkflow(supplierId);
+    if (workflow.currentStatus !== 'OPS_L1_APPROVED') throw new Error('Cannot reject: Supplier is not pending at Operations Head');
+
+    const previousStatus = workflow.currentStatus;
+    supplier.status = 'REJECTED';
+    supplier.rejectionReason = remarks;
+    await this.supplierRepository.save(supplier);
+
+    workflow.currentStatus = 'REJECTED';
+    workflow.currentApproverRoleName = 'None';
+    workflow.isRejected = true;
+    workflow.remarks = remarks;
+    await this.workflowRepository.save(workflow);
+
+    await this.logHistory({
+      customerId: supplier.customerId,
+      supplierId: supplier.id,
+      caseWorkflowId: workflow.id,
+      status: 'REJECTED',
       previousStatus,
       changedBy: userId,
       remarks,
@@ -232,7 +262,8 @@ export class SupplierOnboardingService {
   }
 
   async getOperationsPending(role: string) {
-    const statusFilter = role === 'OPERATIONS_HEAD' ? 'ops_l1_approved' : 'submitted';
+    const roleUpper = (role || '').toUpperCase().replace(/-/g, '_');
+    const statusFilter = roleUpper.includes('OPERATIONS_HEAD') ? 'OPS_L1_APPROVED' : 'SUBMITTED';
     const suppliers = await this.supplierRepository.find({
       where: { status: statusFilter as any },
       relations: ['customer'],
@@ -254,6 +285,13 @@ export class SupplierOnboardingService {
     });
   }
 
+  async getSupplierById(supplierId: number) {
+    return this.supplierRepository.findOne({
+      where: { id: supplierId },
+      relations: ['customer', 'statusHistory'],
+    });
+  }
+
   async getSupplierCountForLan(customerId: number) {
     return this.supplierRepository.count({ where: { customerId } });
   }
@@ -261,5 +299,16 @@ export class SupplierOnboardingService {
   async canAddMoreSuppliers(customerId: number) {
     const count = await this.getSupplierCountForLan(customerId);
     return count < this.MAX_SUPPLIERS_PER_LAN;
+  }
+
+  async getSanctionedCustomers() {
+    return this.customerRepository.find({
+      where: [
+        { status: 'completed' as any },
+        { status: 'ops_head_approved' as any },
+        { status: 'disbursed' as any }
+      ],
+      order: { customerName: 'ASC' }
+    });
   }
 }
