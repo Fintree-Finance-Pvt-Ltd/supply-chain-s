@@ -73,17 +73,7 @@ export class SupplierOnboardingService {
     const customer = await this.customerRepository.findOne({
       where: { id: data.customerId },
     });
-
-    // Log customer details for debugging
-    console.log('Customer Data:', customer);
-
-    if (!customer || !customer.lanId) {
-      console.error('Customer validation failed:', {
-        customerId: data.customerId,
-        customer,
-      });
-      throw new Error('Customer must be approved with LAN ID');
-    }
+    if (!customer || !customer.lanId) throw new Error('Customer must be approved with LAN ID');
 
     const count = await this.getSupplierCountForLan(data.customerId);
     if ((count || 0) >= this.MAX_SUPPLIERS_PER_LAN) {
