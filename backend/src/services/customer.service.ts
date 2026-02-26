@@ -7,6 +7,7 @@ import { hashPassword, comparePassword } from '../utils/password';
 import { generateOtp } from '../integrations/otp/generators';
 import { IdentifierType, OtpSessionStatus } from '../entities/OtpSession';
 import { generateCustomerToken, generateTokenPair, refreshAccessToken, invalidateRefreshToken } from '../utils/jwt';
+import { param } from 'express-validator';
 
 // DTO for simplified customer response
 export interface CustomerBasicInfo {
@@ -1139,93 +1140,62 @@ async getForeclosurePreview(lan: string) {
   }
 }
 
+
   /**
-   * Get transaction list - FROM LMS using partner_loan_id
+   * Get transactions by LAN - from supply_chain_repayments table
+   * Returns collection_date, collection_amount, collection_utr, status (default SUCCESS)
+   * Ordered by collection_date DESC
    */
-async getTransactionList(
-  partnerLoanId: string,
-  page: number = 1,
-  limit: number = 10,
-  startDate?: string,
-  endDate?: string,
-  lan?: string
-): Promise<any> {
-
-  const offset = (page - 1) * limit;
-
-  try {
-
-    let whereClause = `
-      WHERE r.lan IN (
-        SELECT lan 
-        FROM supply_chain_sanctions 
-        WHERE partner_loan_id = ?
-      )
-    `;
-
-    const params: any[] = [partnerLoanId];
-
-    if (lan) {
-      whereClause += ` AND r.lan = ?`;
-      params.push(lan);
-    }
-
-    if (startDate) {
-      whereClause += ` AND r.collection_date >= ?`;
-      params.push(startDate);
-    }
-
-    if (endDate) {
-      whereClause += ` AND r.collection_date <= ?`;
-      params.push(endDate);
-    }
-
-    const data = await LMSDataSource.query(
-      `
-      SELECT 
-        r.id,
-        r.lan,
-        r.collection_date,
-        r.collection_utr,
-        r.collection_amount,
-        r.created_at
-      FROM supply_chain_repayments r
-      ${whereClause}
-      ORDER BY r.created_at DESC
-      LIMIT ? OFFSET ?
-      `,
-      [...params, limit, offset]
-    );
-
-    const countResult = await LMSDataSource.query(
-      `
-      SELECT COUNT(*) as total
-      FROM supply_chain_repayments r
-      ${whereClause}
-      `,
-      params
-    );
-
-    const total = countResult[0]?.total || 0;
-
-    return {
-      success: true,
-      data,
-      meta: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit)
+  async getTransactionsByLan(lan: string): Promise<{
+    success: boolean;
+    data: Array<{
+      collection_date: string | null;
+      collection_amount: number | null;
+      collection_utr: string | null;
+    }>;
+  }> {
+    try {
+      if (!lan) {
+        return {
+          success: false,
+          data: []
+        };
       }
-    };
 
-  } catch (error: any) {
-    return {
-      success: false,
-      message: error.message
-    };
+      const results = await LMSDataSource.query(
+        `
+        SELECT 
+          r.lan,
+          r.collection_date,
+          r.collection_amount,
+          r.collection_utr
+        FROM supply_chain_repayments r
+        WHERE r.lan = ?
+        ORDER BY r.collection_date DESC
+        `,
+        [lan]
+      );
+
+      // Return empty list if no transactions found (as per requirements)
+      const transactions = Array.isArray(results) ? results.map((row: any) => ({
+        lan: row.lan || lan,
+        collection_date: row.collection_date || null,
+        collection_amount: row.collection_amount ? parseFloat(row.collection_amount) : null,
+        collection_utr: row.collection_utr || null,
+      })) : [];
+      console.log("transactions by lan", transactions);
+      return {
+        success: true,
+        data: transactions
+      };
+    } catch (error: any) {
+      console.error('Error fetching transactions by LAN:', error);
+      return {
+        success: false,
+        data: []
+      };
+    }
   }
-}
 
   /**
    * Get transaction receipt - FROM LMS
@@ -1266,6 +1236,123 @@ async getTransactionList(
     if (!transaction) throw new Error('Transaction not found');
     return transaction;
   }
+
+  /**
+   * Get transaction detail by LAN and UTR from supply_chain_allocation table
+   * Returns allocation details with invoice-wise breakdown
+   */
+async getTransactionDetail(lan: string, utr: string): Promise<{
+  success: boolean;
+  data?: {
+    lan: string;
+    collection_utr: string;
+    total_collected: number;
+    allocation_breakup: {
+      allocated_principal: number;
+      allocated_interest: number;
+      allocated_penal_interest: number;
+      excess_payment: number;
+    };
+    invoice_wise_allocation: Array<{
+      invoice_number: string;
+      allocated_principal: number;
+      allocated_interest: number;
+      allocated_penal_interest?: number;
+    }>;
+  };
+  message?: string;
+}> {
+  try {
+    if (!lan || !utr) {
+      return {
+        success: false,
+        message: 'LAN and UTR are required',
+      };
+    }
+
+    const results = await LMSDataSource.query(
+      `
+      SELECT 
+        lan,
+        collection_utr,
+        total_collected,
+        allocated_principal,
+        allocated_interest,
+        allocated_penal_interest,
+        excess_payment,
+        invoice_number
+      FROM supply_chain_allocation
+      WHERE lan = ? AND collection_utr = ?
+      `,
+      [lan, utr]
+    );
+
+    if (!results || results.length === 0) {
+      return {
+        success: true,
+        data: {
+          lan,
+          collection_utr: utr,
+          total_collected: 0,
+          allocation_breakup: {
+            allocated_principal: 0,
+            allocated_interest: 0,
+            allocated_penal_interest: 0,
+            excess_payment: 0,
+          },
+          invoice_wise_allocation: [],
+        },
+      };
+    }
+
+    const firstRecord = results[0];
+
+    const invoice_wise_allocation = results.map((row: any) => ({
+      invoice_number: row.invoice_number || '',
+      allocated_principal: row.allocated_principal
+        ? parseFloat(row.allocated_principal)
+        : 0,
+      allocated_interest: row.allocated_interest
+        ? parseFloat(row.allocated_interest)
+        : 0,
+      allocated_penal_interest: row.allocated_penal_interest
+        ? parseFloat(row.allocated_penal_interest)
+        : 0,
+    }));
+
+    return {
+      success: true,
+      data: {
+        lan: firstRecord.lan,
+        collection_utr: firstRecord.collection_utr,
+        total_collected: firstRecord.total_collected
+          ? parseFloat(firstRecord.total_collected)
+          : 0,
+        allocation_breakup: {
+          allocated_principal: firstRecord.allocated_principal
+            ? parseFloat(firstRecord.allocated_principal)
+            : 0,
+          allocated_interest: firstRecord.allocated_interest
+            ? parseFloat(firstRecord.allocated_interest)
+            : 0,
+          allocated_penal_interest: firstRecord.allocated_penal_interest
+            ? parseFloat(firstRecord.allocated_penal_interest)
+            : 0,
+          excess_payment: firstRecord.excess_payment
+            ? parseFloat(firstRecord.excess_payment)
+            : 0,
+        },
+        invoice_wise_allocation,
+      },
+    };
+  } catch (error: any) {
+    console.error('Error fetching transaction detail:', error);
+    return {
+      success: false,
+      message: error.message || 'Failed to fetch transaction detail',
+    };
+  }
+}
 
   /**
    * Get notification list
@@ -1682,7 +1769,82 @@ async getLoanScheduleByLan(lan: string): Promise<any> {
     const total = countResult[0]?.total || 0;
     return { data, total, page, limit };
   }
-}
 
+  // =====================================================
+  // 🔹 LAN RETRIEVAL FROM LMS DATABASE
+  // =====================================================
+
+  /**
+   * Get LAN from LMS database by customer ID
+   */
+  async getLanByCustomerId(customerId: number): Promise<{ lan: string | null; customerId: number }> {
+    const result = await LMSDataSource.query(
+      `SELECT lan_id FROM customers WHERE id = ? LIMIT 1`,
+      [customerId]
+    );
+    return {
+      lan: result[0]?.lan_id || null,
+      customerId,
+    };
+  }
+
+  /**
+   * Get LAN from LMS database by mobile number
+   */
+  async getLanByMobile(mobile: string): Promise<{ lan: string | null; mobile: string }> {
+    const result = await LMSDataSource.query(
+      `SELECT lan_id FROM customers WHERE mobile = ? LIMIT 1`,
+      [mobile]
+    );
+    return {
+      lan: result[0]?.lan_id || null,
+      mobile,
+    };
+  }
+
+  /**
+   * Get LAN from LMS database by partner loan ID
+   */
+  async getLanByPartnerLoanId(partnerLoanId: string): Promise<{ lan: string | null; partnerLoanId: string }> {
+    const result = await LMSDataSource.query(
+      `SELECT lan_id FROM customers WHERE partner_loan_id = ? LIMIT 1`,
+      [partnerLoanId]
+    );
+    return {
+      lan: result[0]?.lan_id || null,
+      partnerLoanId,
+    };
+  }
+
+  /**
+   * Get LAN from LMS database by loan number
+   */
+  async getLanByLoanNumber(loanNumber: string): Promise<{ lan: string | null; loanNumber: string }> {
+    const result = await LMSDataSource.query(
+      `SELECT c.lan_id FROM customers c 
+       INNER JOIN loans l ON c.id = l.customer_id 
+       WHERE l.loan_number = ? LIMIT 1`,
+      [loanNumber]
+    );
+    return {
+      lan: result[0]?.lan_id || null,
+      loanNumber,
+    };
+  }
+
+  /**
+   * Get all LANs from LMS database with optional filters
+   */
+async getAllLans(partnerId: any) {
+  const query = `
+    SELECT DISTINCT lender
+    FROM supply_chain_sanctions
+    WHERE partner_loan_id = ?
+  `;
+
+  const results = await LMSDataSource.query(query, [partnerId]);
+  return results.map((row: any) => row.lender);
+}
+}
 
 

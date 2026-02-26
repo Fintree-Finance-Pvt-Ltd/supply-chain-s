@@ -679,46 +679,7 @@ async getLoanSchedule(req: Request, res: Response) {
     }
   };
 
-  /**
-   * GET /api/transactions
-   * Get transaction list
-   */
-getTransactionList = async (req: Request, res: Response): Promise<void> => {
-  try {
-    const partnerLoanId = (req as any).partnerLoanId;
 
-    if (!partnerLoanId) {
-      res.status(401).json({
-        success: false,
-        message: 'Authentication required'
-      });
-      return;
-    }
-
-    const page = parseInt((req.query.page as string) || '1', 10);
-    const limit = parseInt((req.query.limit as string) || '10', 10);
-    const startDate = req.query.startDate as string | undefined;
-    const endDate = req.query.endDate as string | undefined;
-    const lan = req.query.lan as string | undefined;
-
-    const result = await this.customerService.getTransactionList(
-      partnerLoanId,
-      page,
-      limit,
-      startDate,
-      endDate,
-      lan
-    );
-
-    res.json(result);
-
-  } catch (error: any) {
-    res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to fetch transactions'
-    });
-  }
-};
 
   /**
    * GET /api/transactions/:id/receipt
@@ -734,6 +695,82 @@ getTransactionList = async (req: Request, res: Response): Promise<void> => {
       res.json({ success: true, data: transaction });
     } catch (error: any) {
       res.status(500).json({ success: false, message: error.message || 'Failed to fetch receipt' });
+    }
+  };
+
+  /**
+   * GET /api/customer/transactions?lan={LAN}
+   * Get transactions by LAN from supply_chain_repayments table
+   * Returns collection_date, collection_amount, collection_utr, status (default SUCCESS)
+   * Ordered by collection_date DESC
+   */
+  getTransactionsByLan = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const lan = req.query.lan as string;
+
+      // Basic validation: lan is required
+      if (!lan) {
+        res.status(400).json({
+          success: false,
+          message: 'LAN is required'
+        });
+        return;
+      }
+
+      const result = await this.customerService.getTransactionsByLan(lan);
+
+      if (!result) {
+        res.status(500).json({
+          success: false,
+          message: 'Failed to fetch transactions'
+        });
+        return;
+      }
+
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({
+        success: false,
+        message: error.message || 'Failed to fetch transactions'
+      });
+    }
+  };
+
+  /**
+   * GET /api/customer/transaction-detail?lan={lan}&utr={utr}
+   * Get transaction detail by LAN and UTR from supply_chain_allocation table
+   * Returns allocation details with invoice-wise breakdown
+   */
+  getTransactionDetail = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const lan = req.query.lan as string;
+      const utr = req.query.utr as string;
+
+      // Validate both lan and utr are required
+      if (!lan) {
+        res.status(400).json({
+          success: false,
+          message: 'LAN is required'
+        });
+        return;
+      }
+
+      if (!utr) {
+        res.status(400).json({
+          success: false,
+          message: 'UTR is required'
+        });
+        return;
+      }
+
+      const result = await this.customerService.getTransactionDetail(lan, utr);
+
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({
+        success: false,
+        message: error.message || 'Failed to fetch transaction detail'
+      });
     }
   };
 
@@ -811,7 +848,42 @@ getTransactionList = async (req: Request, res: Response): Promise<void> => {
       res.status(500).json({ success: false, message: error.message || 'Failed to fetch bank details' });
     }
   };
-}
 
+  // =====================================================
+  // 🔹 LAN RETRIEVAL FROM LMS DATABASE
+  // =====================================================
+
+  /**
+   * GET /api/customers/lan
+   * Get LAN from LMS database by various identifiers
+   * Query params: customerId, mobile, partnerLoanId, loanNumber
+   * Or get all LANs with optional filters
+   */
+getLan = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const partnerLoanId  = req.partnerLoanId; // or req.params / req.body
+
+    if (!partnerLoanId) {
+      res.status(400).json({
+        success: false,
+        message: 'partnerLoanId is required',
+      });
+      return;
+    }
+
+    const result = await this.customerService.getAllLans(partnerLoanId);
+
+    res.status(200).json({
+      success: true,
+      data: result,
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to fetch lenders from LMS',
+    });
+  }
+};
+}
 
 

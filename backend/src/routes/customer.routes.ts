@@ -129,14 +129,41 @@ router.get('/loans/statement', (req: Request, res: Response) => customerControll
 router.get('/loans/foreclosure-preview', (req: Request, res: Response) => customerController.getForeclosurePreview(req, res));
 
 // =====================================================
-// 🔹 TRANSACTION ROUTES
+// 🔹 LAN RETRIEVAL FROM LMS DATABASE
 // =====================================================
 
 /**
- * GET /api/transactions
- * Get transaction list with pagination
+ * GET /api/customers/lan
+ * Get LAN from LMS database
+ * Query params:
+ *   - customerId: Get LAN by customer ID
+ *   - mobile: Get LAN by mobile number
+ *   - partnerLoanId: Get LAN by partner loan ID
+ *   - loanNumber: Get LAN by loan number
+ *   - limit: Limit number of results (for list)
+ *   - offset: Offset for pagination
+ * 
+ * Examples:
+ *   GET /api/customers/lan?customerId=123
+ *   GET /api/customers/lan?mobile=9876543210
+ *   GET /api/customers/lan?partnerLoanId=PL-001
+ *   GET /api/customers/lan?loanNumber=LN-001
+ *   GET /api/customers/lan (returns all LANs)
  */
-router.get('/transactions', sanitizeQueryParams, (req: Request, res: Response) => customerController.getTransactionList(req, res));
+router.get('/lan', customerController.getLan);
+
+// =====================================================
+// 🔹 TRANSACTION ROUTES
+// =====================================================
+
+router.get('/transactions/getRepayments', (req: Request, res: Response) => customerController.getTransactionsByLan(req, res));
+
+/**
+ * GET /api/customer/transaction-detail?lan={lan}&utr={utr}
+ * Get transaction detail by LAN and UTR from supply_chain_allocation table
+ */
+router.get('/transaction-detail', (req: Request, res: Response) => customerController.getTransactionDetail(req, res));
+
 
 /**
  * GET /api/transactions/:id/receipt
