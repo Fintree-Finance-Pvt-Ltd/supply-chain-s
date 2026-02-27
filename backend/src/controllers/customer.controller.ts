@@ -166,8 +166,8 @@ export class CustomerController {
    */
   getCustomerBasicById = async (req: Request, res: Response): Promise<void> => {
     try {
-      const { id } = req.params;
-      const customer = await this.customerService.getCustomerBasicInfo(Number(id));
+      const partnerLoanId = req.partnerLoanId;
+      const customer = await this.customerService.getCustomerBasicInfo(partnerLoanId as any);
 
       if (!customer) {
         res.status(404).json({
@@ -408,8 +408,7 @@ export class CustomerController {
    */
   getCustomerDetails = async (req: Request, res: Response): Promise<void> => {
     try {
-      const customerId = (req as any).customerId;
-      const requestedId = parseInt(req.params.id, 10);
+      const customerId = (req as any).partnerLoanId;
 
       if (!customerId) {
         res.status(401).json({
@@ -419,7 +418,7 @@ export class CustomerController {
         return;
       }
 
-      const customer = await this.customerService.getCustomerDetailsById(customerId, requestedId);
+      const customer = await this.customerService.getCustomerDetailsById(customerId);
 
       res.json({
         success: true,
@@ -441,7 +440,7 @@ export class CustomerController {
   getDashboard = async (req: Request, res: Response): Promise<void> => {
     try {
       const partnerLoanId = (req as any).partnerLoanId;
-
+      console.log("partnerLoanId---->", partnerLoanId);
       if (!partnerLoanId) {
         res.status(401).json({
           success: false,

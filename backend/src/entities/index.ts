@@ -26,5 +26,10 @@ export { OtpSession } from './OtpSession';
 export { KycVerificationStatus } from './KycVerificationStatus';
 export { SupplierBankDetail } from './SupplierBankDetail';
 export { SupplierDocument } from './SupplierDocument';
+export { Loan, LoanSchedule, LoanTransaction } from './Loan';
+export { Drawdown } from './Drawdown';
+export { Notification } from './Notification';
+export { RefreshToken } from './RefreshToken';
+export { Applicant } from './Applicant';
 
 

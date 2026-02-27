@@ -255,15 +255,17 @@ export class CustomerService {
   // 🔹 SIMPLIFIED CUSTOMER BASIC INFO API (FROM LMS)
   // =====================================================
 
-  async getCustomerBasicInfo(customerId: number): Promise<CustomerBasicInfo | null> {
+  async getCustomerBasicInfo(partnerId: any): Promise<CustomerBasicInfo | null> {
     try {
       // Fetch from LMS database
-      const lmsCustomer = await this.findCustomerById(customerId);
+      const lmsCustomer = await this.findCustomerById(partnerId);
       
       if (!lmsCustomer) {
         // Fallback to local DB
+
+        console.log("fallback to get from customer in supply chain")
         const customer = await this.customerRepository.findOne({
-          where: { id: customerId },
+          where: { id: partnerId },
           relations: ['addresses'],
         });
         
@@ -358,49 +360,29 @@ export class CustomerService {
 
   /**
    * Login with mobile number and password
-   * 1. Find customer by mobile from LMS database
-   * 2. Save/create customer in internal DB if not exists
-   * 3. Validate password
-   * 4. Return JWT token with partnerLanId (lanId from customer table)
+   * READ ONLY from LMS supply_chain_loans table
+   * 1. Find customer by applicant_mobile from LMS
+   * 2. Validate password from internal DB if customer exists in LMS
+   * 3. Return JWT token
    */
   async loginWithPassword(mobile: string, password: string): Promise<CustomerLoginResponse> {
     try {
-      // Step 1: Try to find customer in internal DB first
+      // Step 1: Find customer in LMS supply_chain_loans by applicant_mobile
+      const lmsCustomer = await this.findCustomerByMobile(mobile);
+      
+      if (!lmsCustomer) {
+        return { success: false, message: 'Customer not found with this mobile number' };
+      }
+
+      // Step 2: Try to find in internal DB for password validation
       let customer = await this.customerRepository.findOne({
         where: { mobile },
         relations: ['addresses'],
       });
 
-      // Step 2: If not found in internal DB, find in LMS and save
+      // If customer doesn't exist in internal DB, they can't login with password
       if (!customer) {
-        const lmsCustomer = await this.findCustomerByMobile(mobile);
-        
-        if (!lmsCustomer) {
-          return { success: false, message: 'Customer not found with this mobile number' };
-        }
-
-        // Create customer in internal DB from LMS data
-        customer = this.customerRepository.create({
-          name: lmsCustomer.name || lmsCustomer.company_name || '',
-          mobile: lmsCustomer.mobile,
-          email: lmsCustomer.email || '',
-          pan: lmsCustomer.pan || '',
-          companyName: lmsCustomer.company_name || '',
-          companyEmail: lmsCustomer.company_email || '',
-          companyMobile: lmsCustomer.company_mobile || '',
-          companyPan: lmsCustomer.company_pan || '',
-          gstNumber: lmsCustomer.gst_number || '',
-          lanId: lmsCustomer.lan_id || '',
-          bankAccountNo: lmsCustomer.bank_account_no || '',
-          bankIfscCode: lmsCustomer.bank_ifsc_code || '',
-          bankName: lmsCustomer.bank_name || '',
-          bankBranch: lmsCustomer.bank_branch || '',
-          bankType: lmsCustomer.bank_account_type || '',
-          rmId: 1, // Default RM - can be updated later
-          status: 'draft',
-        });
-
-        customer = await this.customerRepository.save(customer);
+        return { success: false, message: 'Customer not found. Please use OTP login.' };
       }
 
       // Step 3: Check if password is set
@@ -414,15 +396,20 @@ export class CustomerService {
         return { success: false, message: 'Invalid password' };
       }
 
-      // Step 5: Generate JWT token with partnerLanId (lanId from customer table)
-      const partnerLanId = customer.lanId || '';
-      const token = generateCustomerToken(customer.id, partnerLanId);
+      // Step 5: Generate JWT token with partnerLoanId from LMS
+      const partnerLoanId = lmsCustomer.partner_loan_id || '';
+      const token = generateCustomerToken(lmsCustomer.id, partnerLoanId);
 
       return {
         success: true,
         token,
-        customer: this.mapToLoginInfo(customer),
-        partnerLanId: partnerLanId,
+        customer: {
+          id: lmsCustomer.id,
+          name: lmsCustomer.applicant_name || lmsCustomer.company_name || '',
+          companyName: lmsCustomer.company_name || '',
+          mobile: lmsCustomer.applicant_mobile,
+        },
+        partnerLoanId: partnerLoanId,
       };
     } catch (error: any) {
       console.error('Login error:', error);
@@ -432,18 +419,27 @@ export class CustomerService {
 
   /**
    * Request OTP for login
+   * READ ONLY from LMS supply_chain_loans table
    */
   async requestLoginOtp(mobile: string): Promise<{
     success: boolean;
     message?: string;
     expiresAt?: Date;
   }> {
+    // Check if customer exists in LMS supply_chain_loans by applicant_mobile
+    const lmsCustomer = await this.findCustomerByMobile(mobile);
+    console.log("lmsCustomer",lmsCustomer)
+    if (!lmsCustomer) {
+      return { success: false, message: 'Customer not found with this mobile number' };
+    }
+
+    // Try to find customer in internal DB for OTP session
     const customer = await this.customerRepository.findOne({
       where: { mobile },
     });
 
     if (!customer) {
-      return { success: false, message: 'Customer not found with this mobile number' };
+      return { success: false, message: 'Customer not found. Please contact support.' };
     }
 
     // Check for existing valid OTP session
@@ -456,7 +452,7 @@ export class CustomerService {
       },
       order: { createdAt: 'DESC' },
     });
-
+     console.log("existingSession",existingSession)
     if (existingSession) {
       // Check if we can resend (5 minutes cooldown)
       const timeSinceLastSent = Date.now() - existingSession.createdAt.getTime();
@@ -497,15 +493,24 @@ export class CustomerService {
 
   /**
    * Verify OTP and login
+   * READ ONLY from LMS supply_chain_loans table
    */
   async verifyLoginOtp(mobile: string, otp: string): Promise<CustomerLoginResponse> {
+    // Check if customer exists in LMS supply_chain_loans by applicant_mobile
+    const lmsCustomer = await this.findCustomerByMobile(mobile);
+    console.log(lmsCustomer)
+    if (!lmsCustomer) {
+      return { success: false, message: 'Customer not found with this mobile number' };
+    }
+
+    // Find customer in internal DB for OTP session
     const customer = await this.customerRepository.findOne({
       where: { mobile },
       relations: ['addresses'],
     });
 
     if (!customer) {
-      return { success: false, message: 'Customer not found with this mobile number' };
+      return { success: false, message: 'Customer not found. Please contact support.' };
     }
 
     // Find valid OTP session
@@ -549,33 +554,47 @@ export class CustomerService {
     otpSession.status = OtpSessionStatus.VERIFIED;
     await this.otpSessionRepository.save(otpSession);
 
-    // Get lanId from local customer record
-    const partnerLoanId = customer.lanId || '';
-
+    // Get partnerLoanId from LMS
+    const partnerLoanId = lmsCustomer.partner_loan_id || '';
+   console.log(lmsCustomer)
     // Generate JWT token
-    const token = generateCustomerToken(customer.id, partnerLoanId);
+    const token = generateCustomerToken(lmsCustomer.id, partnerLoanId);
 
     return {
       success: true,
       token,
-      customer: this.mapToLoginInfo(customer),
+      customer: {
+        id: lmsCustomer.id,
+        name: lmsCustomer.applicant_name || lmsCustomer.company_name || '',
+        companyName: lmsCustomer.company_name || '',
+        mobile: lmsCustomer.applicant_mobile,
+      },
       partnerLoanId,
     };
   }
 
   /**
    * Set or update customer password
+   * READ ONLY from LMS supply_chain_loans table - customer must exist in LMS
    */
   async setPassword(mobile: string, password: string): Promise<{
     success: boolean;
     message?: string;
   }> {
+    // First check if customer exists in LMS supply_chain_loans
+    const lmsCustomer = await this.findCustomerByMobile(mobile);
+    
+    if (!lmsCustomer) {
+      return { success: false, message: 'Customer not found with this mobile number' };
+    }
+
+    // Then check if customer exists in internal DB
     const customer = await this.customerRepository.findOne({
       where: { mobile },
     });
 
     if (!customer) {
-      return { success: false, message: 'Customer not found with this mobile number' };
+      return { success: false, message: 'Customer not found. Please contact support.' };
     }
 
     const hashedPassword = await hashPassword(password);
@@ -630,46 +649,26 @@ export class CustomerService {
 
   /**
    * Login with mobile and password (with refresh token)
-   * This method finds customer, validates password, and returns token + refresh token
+   * READ ONLY from LMS supply_chain_loans table
    */
   async loginWithPasswordFull(mobile: string, password: string): Promise<{ success: boolean; token?: string; refreshToken?: string; customer?: any; message?: string }> {
     try {
-      // Find customer in internal DB
+      // Find customer in LMS supply_chain_loans by applicant_mobile
+      const lmsCustomer = await this.findCustomerByMobile(mobile);
+      
+      if (!lmsCustomer) {
+        return { success: false, message: 'Customer not found with this mobile number' };
+      }
+
+      // Try to find in internal DB for password validation
       let customer = await this.customerRepository.findOne({
         where: { mobile },
         relations: ['addresses'],
       });
 
-      // If not found in internal DB, find in LMS and save
+      // If customer doesn't exist in internal DB, they can't login with password
       if (!customer) {
-        const lmsCustomer = await this.findCustomerByMobile(mobile);
-        
-        if (!lmsCustomer) {
-          return { success: false, message: 'Customer not found with this mobile number' };
-        }
-
-        // Create customer in internal DB from LMS data
-        customer = this.customerRepository.create({
-          name: lmsCustomer.name || lmsCustomer.company_name || '',
-          mobile: lmsCustomer.mobile,
-          email: lmsCustomer.email || '',
-          pan: lmsCustomer.pan || '',
-          companyName: lmsCustomer.company_name || '',
-          companyEmail: lmsCustomer.company_email || '',
-          companyMobile: lmsCustomer.company_mobile || '',
-          companyPan: lmsCustomer.company_pan || '',
-          gstNumber: lmsCustomer.gst_number || '',
-          lanId: lmsCustomer.lan_id || '',
-          bankAccountNo: lmsCustomer.bank_account_no || '',
-          bankIfscCode: lmsCustomer.bank_ifsc_code || '',
-          bankName: lmsCustomer.bank_name || '',
-          bankBranch: lmsCustomer.bank_branch || '',
-          bankType: lmsCustomer.bank_account_type || '',
-          rmId: 1,
-          status: 'draft',
-        });
-
-        customer = await this.customerRepository.save(customer);
+        return { success: false, message: 'Customer not found. Please use OTP login.' };
       }
 
       // Check if password is set
@@ -683,18 +682,23 @@ export class CustomerService {
         return { success: false, message: 'Invalid password' };
       }
 
-      // Generate JWT token with partnerLanId
-      const partnerLanId = customer.lanId || '';
-      const token = generateCustomerToken(customer.id, partnerLanId);
+      // Generate JWT token with partnerLoanId from LMS
+      const partnerLoanId = lmsCustomer.partner_loan_id || '';
+      const token = generateCustomerToken(lmsCustomer.id, partnerLoanId);
 
       // Generate refresh token
-      const tokens = await generateTokenPair(customer.id, partnerLanId);
+      const tokens = await generateTokenPair(lmsCustomer.id, partnerLoanId);
 
       return {
         success: true,
         token,
         refreshToken: tokens.refreshToken,
-        customer: this.mapToLoginInfo(customer),
+        customer: {
+          id: lmsCustomer.id,
+          name: lmsCustomer.applicant_name || lmsCustomer.company_name || '',
+          companyName: lmsCustomer.company_name || '',
+          mobile: lmsCustomer.applicant_mobile,
+        },
       };
     } catch (error: any) {
       console.error('Login error:', error);
@@ -704,15 +708,24 @@ export class CustomerService {
 
   /**
    * Verify OTP and login (with refresh token)
+   * READ ONLY from LMS supply_chain_loans table
    */
   async verifyLoginOtpFull(mobile: string, otp: string): Promise<{ success: boolean; token?: string; refreshToken?: string; customer?: any; message?: string }> {
+    // Check if customer exists in LMS supply_chain_loans by applicant_mobile
+    const lmsCustomer = await this.findCustomerByMobile(mobile);
+
+    if (!lmsCustomer) {
+      return { success: false, message: 'Customer not found with this mobile number' };
+    }
+
+    // Find customer in internal DB for OTP session
     const customer = await this.customerRepository.findOne({
       where: { mobile },
       relations: ['addresses'],
     });
 
     if (!customer) {
-      return { success: false, message: 'Customer not found with this mobile number' };
+      return { success: false, message: 'Customer not found. Please contact support.' };
     }
 
     const otpSession = await this.otpSessionRepository.findOne({
@@ -750,17 +763,21 @@ export class CustomerService {
     otpSession.status = OtpSessionStatus.VERIFIED;
     await this.otpSessionRepository.save(otpSession);
 
-    // Get lanId from local customer record
-    const partnerLoanId = customer.lanId || '';
+    // Get partnerLoanId from LMS
+    const partnerLoanId = lmsCustomer.partner_loan_id || '';
 
-    const tokens = await generateTokenPair(customer.id, partnerLoanId);
-    const customerInfo = this.mapToLoginInfo(customer);
+    const tokens = await generateTokenPair(lmsCustomer.id, partnerLoanId);
 
     return {
       success: true,
       token: tokens.accessToken,
       refreshToken: tokens.refreshToken,
-      customer: customerInfo,
+      customer: {
+        id: lmsCustomer.id,
+        name: lmsCustomer.applicant_name || lmsCustomer.company_name || '',
+        companyName: lmsCustomer.company_name || '',
+        mobile: lmsCustomer.applicant_mobile,
+      },
     };
   }
 
@@ -797,34 +814,46 @@ export class CustomerService {
    * Get customer details by ID (with ownership validation) - FROM INTERNAL DB ONLY
    * Note: This API does NOT fetch from LMS as per requirement
    */
-  async getCustomerDetailsById(customerId: number, requestedId: number): Promise<any> {
-    if (customerId !== requestedId) {
-      throw new Error('You can only access your own profile');
-    }
+  async getCustomerDetailsById(customerId: any): Promise<any> {
+  
 
-    // Fetch from internal DB only (NOT from LMS)
-    const customer = await this.customerRepository.findOne({
-      where: { id: requestedId },
-      relations: ['addresses', 'applicant', 'coApplicants', 'kycDetails'],
-    });
+    // Fetch from LMS supply_chain_loans table only (READ ONLY)
+    const lmsCustomer = await this.findCustomerById(customerId);
 
-    if (!customer) {
+    if (!lmsCustomer) {
       throw new Error('Customer not found');
     }
 
+    // Map LMS supply_chain_loans fields to response format
     return {
-      id: customer.id,
-      customerCode: customer.customerCode,
-      name: customer.name,
-      companyName: customer.companyName,
-      email: customer.email,
-      mobile: customer.mobile,
-      pan: customer.pan,
-      gstNumber: customer.gstNumber,
-      lanId: customer.lanId,
-      status: customer.status,
-      addresses: customer.addresses,
-      isLmsData: false,
+      id: lmsCustomer.id,
+      customerCode: lmsCustomer.partner_loan_id || '',
+      name: lmsCustomer.applicant_name || '',
+      companyName: lmsCustomer.company_name || '',
+      email: '',
+      mobile: lmsCustomer.applicant_mobile || '',
+      pan: lmsCustomer.applicant_pan || '',
+      gstNumber: lmsCustomer.gst_number || '',
+      lanId: lmsCustomer.partner_loan_id || '',
+      status: lmsCustomer.status || '',
+      addresses: [],
+      // Include all LMS fields
+      applicant_name: lmsCustomer.applicant_name,
+      applicant_mobile: lmsCustomer.applicant_mobile,
+      applicant_pan: lmsCustomer.applicant_pan,
+      applicant_aadhaar: lmsCustomer.applicant_aadhaar,
+      applicant_address: lmsCustomer.applicant_address,
+      co_applicant_name: lmsCustomer.co_applicant_name,
+      co_applicant_pan: lmsCustomer.co_applicant_pan,
+      co_applicant_aadhaar: lmsCustomer.co_applicant_aadhaar,
+      co_applicant_mobile: lmsCustomer.co_applicant_mobile,
+      co_applicant_address: lmsCustomer.co_applicant_address,
+      company_name: lmsCustomer.company_name,
+      company_pan: lmsCustomer.company_pan,
+      company_address: lmsCustomer.company_address,
+      roi_percentage: lmsCustomer.roi_percentage,
+      created_at: lmsCustomer.created_at,
+      isLmsData: true,
     };
   }
 
@@ -1485,22 +1514,22 @@ async getTransactionDetail(lan: string, utr: string): Promise<{
   }
 
   /**
-   * Find customer by mobile number
+   * Find customer by mobile number from LMS supply_chain_loans table
    */
   async findCustomerByMobile(mobile: string): Promise<any> {
     const result = await LMSDataSource.query(
-      `SELECT * FROM customers WHERE mobile = ? LIMIT 1`,
+      `SELECT * FROM supply_chain_loans WHERE applicant_mobile = ? LIMIT 1`,
       [mobile]
     );
     return result[0] || null;
   }
 
   /**
-   * Find customer by ID
+   * Find customer by ID from LMS supply_chain_loans table
    */
-  async findCustomerById(id: number): Promise<any> {
+  async findCustomerById(id: any): Promise<any> {
     const result = await LMSDataSource.query(
-      `SELECT * FROM customers WHERE id = ? LIMIT 1`,
+      `SELECT * FROM supply_chain_loans WHERE partner_loan_id = ? LIMIT 1`,
       [id]
     );
     return result[0] || null;
@@ -1633,6 +1662,7 @@ async getTransactionDetail(lan: string, utr: string): Promise<{
    */
 async getCustomerDashboard(partnerLoanId: string): Promise<any> {
   try {
+    console.log(partnerLoanId)
 
     // 1️⃣ Sanction Summary
     const [sanction] = await LMSDataSource.query(

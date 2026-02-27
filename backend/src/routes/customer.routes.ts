@@ -247,7 +247,7 @@ router.get('/basic', customerController.getAllCustomersBasic);
  * GET /api/customers/:id/basic
  * Get single customer basic info by ID
  */
-router.get('/:id/customerDetails', customerController.getCustomerBasicById);
+// router.get('/customerDetails', customerController.getCustomerBasicById);
 
 // Get single customer by ID (must be AFTER /basic routes)
 router.get('/:id', customerController.getCustomerById);
