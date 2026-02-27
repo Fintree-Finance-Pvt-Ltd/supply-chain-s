@@ -8,6 +8,7 @@ import { generateOtp } from '../integrations/otp/generators';
 import { IdentifierType, OtpSessionStatus } from '../entities/OtpSession';
 import { generateCustomerToken, generateTokenPair, refreshAccessToken, invalidateRefreshToken } from '../utils/jwt';
 import { param } from 'express-validator';
+import { AlotSmsProvider } from '../integrations/notifications/sms/alot.provider';
 
 // DTO for simplified customer response
 export interface CustomerBasicInfo {
@@ -59,6 +60,7 @@ export class CustomerService {
   private drawdownRepository: Repository<Drawdown>;
   private notificationRepository: Repository<Notification>;
   private refreshTokenRepository: Repository<RefreshToken>;
+  private smsProvider: AlotSmsProvider;
 
   constructor() {
     this.customerRepository = AppDataSource.getRepository(Customer);
@@ -70,6 +72,31 @@ export class CustomerService {
     this.drawdownRepository = AppDataSource.getRepository(Drawdown);
     this.notificationRepository = AppDataSource.getRepository(Notification);
     this.refreshTokenRepository = AppDataSource.getRepository(RefreshToken);
+
+    // Initialize ALOT SMS Provider
+    this.smsProvider = new AlotSmsProvider({
+      apiUrl: process.env.ALOT_API_URL || 'https://alotsolutions.in/api/mt/SendSMS',
+      user: process.env.ALOT_USER || 'Fintree',
+      password: process.env.ALOT_PASSWORD || 'P@ssw0rd',
+      senderId: process.env.ALOT_SENDER_ID || 'FTREEN',
+      route: process.env.ALOT_ROUTE || '5',
+      templateId: process.env.MOBILE_OTP_TEMPLATE_ID || '1707176622463150769',
+      peid: process.env.DLT_PEID || '1201159568446234948',
+    });
+  }
+
+  /**
+   * Send OTP via SMS using ALOT provider
+   */
+  private async sendSmsOtp(msisdn: string, otp: string): Promise<void> {
+    try {
+      const message = `OTP for mobile number verification is ${otp}. Do not share this OTP with anyone. Thanks & Regards Fintree Finance Private Limited.`;
+      await this.smsProvider.sendSms(msisdn, message);
+      console.log(`[SMS OTP] OTP sent successfully to ${msisdn}`);
+    } catch (error: any) {
+      console.error('[SMS OTP] Error sending SMS:', error.message);
+      throw new Error('Unable to send OTP');
+    }
   }
 
   async createCustomer(data: {
@@ -458,8 +485,8 @@ export class CustomerService {
 
     await this.otpSessionRepository.save(otpSession);
 
-    // In production, send OTP via SMS here
-    console.log(`[OTP LOGIN] OTP for ${mobile}: ${otp}`);
+    // Send OTP via SMS
+    await this.sendSmsOtp(mobile, otp);
 
     return {
       success: true,
@@ -491,6 +518,7 @@ export class CustomerService {
       },
       order: { createdAt: 'DESC' },
     });
+    console.log("otpSession",otpSession)
 
     if (!otpSession) {
       return { success: false, message: 'No OTP request found. Please request OTP first.' };
@@ -521,9 +549,8 @@ export class CustomerService {
     otpSession.status = OtpSessionStatus.VERIFIED;
     await this.otpSessionRepository.save(otpSession);
 
-    // Get partner_loan_id from LMS
-    const lmsCustomer = await this.findCustomerByMobile(mobile);
-    const partnerLoanId = lmsCustomer?.partner_loan_id || '';
+    // Get lanId from local customer record
+    const partnerLoanId = customer.lanId || '';
 
     // Generate JWT token
     const token = generateCustomerToken(customer.id, partnerLoanId);
@@ -723,9 +750,8 @@ export class CustomerService {
     otpSession.status = OtpSessionStatus.VERIFIED;
     await this.otpSessionRepository.save(otpSession);
 
-    // Get partner_loan_id from LMS
-    const lmsCustomer = await this.findCustomerByMobile(mobile);
-    const partnerLoanId = lmsCustomer?.partner_loan_id || '';
+    // Get lanId from local customer record
+    const partnerLoanId = customer.lanId || '';
 
     const tokens = await generateTokenPair(customer.id, partnerLoanId);
     const customerInfo = this.mapToLoginInfo(customer);
@@ -1694,13 +1720,15 @@ async getLoanScheduleByLan(lan: string): Promise<any> {
         invoice_due_date,
         disbursement_date,
         total_amount_demand,
-        remaining_principal,
-        remaining_interest,
-        remaining_penal_interest,
+        remaining_disbursement_amount,
+        cumulate_interest_demand,
+        cumelate_penal_interest_demand,
+        cumulate_interest_demand,
         overdue_amount_demand,
         status
       FROM supply_chain_daily_demand
       WHERE lan = ?
+        AND daily_date = CURDATE()
       ORDER BY invoice_due_date ASC
       `,
       [lan]
@@ -1710,7 +1738,6 @@ async getLoanScheduleByLan(lan: string): Promise<any> {
       success: true,
       data: schedule
     };
-
   } catch (error: any) {
     return {
       success: false,
@@ -1835,16 +1862,98 @@ async getLoanScheduleByLan(lan: string): Promise<any> {
   /**
    * Get all LANs from LMS database with optional filters
    */
-async getAllLans(partnerId: any) {
-  const query = `
-    SELECT DISTINCT lender
-    FROM supply_chain_sanctions
-    WHERE partner_loan_id = ?
-  `;
+ async getAllLans(partnerId: any) {
+   const query = `
+     SELECT DISTINCT lender
+     FROM supply_chain_sanctions
+     WHERE partner_loan_id = ?
+   `;
 
-  const results = await LMSDataSource.query(query, [partnerId]);
-  return results.map((row: any) => row.lender);
-}
+   const results = await LMSDataSource.query(query, [partnerId]);
+   return results.map((row: any) => row.lender);
+ }
+
+ /**
+  * Get LAN from sanction table by lender name
+  * @param partnerLoanId - Partner loan ID
+  * @param lender - Lender name
+  */
+ async getLanByLender(partnerLoanId: string, lender: string): Promise<{ lan: string | null; lender: string; partnerLoanId: string }> {
+   const result = await LMSDataSource.query(
+     `SELECT lan FROM supply_chain_sanctions 
+      WHERE partner_loan_id = ? AND lender = ? 
+      LIMIT 1`,
+     [partnerLoanId, lender]
+   );
+   return {
+     lan: result[0]?.lan || null,
+     lender,
+     partnerLoanId,
+   };
+ }
+
+ /**
+  * Get all LANs with lender from sanction table
+  * @param partnerLoanId - Partner loan ID
+  */
+ async getLansByPartnerLoanId(partnerLoanId: string): Promise<any[]> {
+   const result = await LMSDataSource.query(
+     `SELECT DISTINCT lan, lender FROM supply_chain_sanctions 
+      WHERE partner_loan_id = ?`,
+     [partnerLoanId]
+   );
+   return result;
+ }
+
+ /**
+  * Get invoice disbursement details by lan and partnerloanId
+  * @param lan - LAN (Loan Account Number)
+  * @param partnerLoanId - Partner loan ID
+  */
+ async getInvoiceDisbursementByLanAndPartnerLoanId(lan: string, partnerLoanId: string): Promise<any[]> {
+   const result = await LMSDataSource.query(
+     `SELECT * FROM invoice_disbursements 
+      WHERE lan = ? AND partner_loan_id = ?`,
+     [lan, partnerLoanId]
+   );
+   return result;
+ }
+
+ /**
+  * Get invoice details via lender
+  * 1. Find LAN from sanction table via lender
+  * 2. Find main data from invoice_disbursement table where lan and partnerloanId
+  * @param partnerLoanId - Partner loan ID
+  * @param lender - Lender name
+  */
+ async getInvoiceDetailsByLender(partnerLoanId: string, lender: string): Promise<{
+   lan: string | null;
+   lender: string;
+   partnerLoanId: string;
+   invoices: any[];
+ }> {
+   // Step 1: Find LAN from sanction table via lender
+   const lanResult = await this.getLanByLender(partnerLoanId, lender);
+   
+   if (!lanResult.lan) {
+     return {
+       lan: null,
+       lender,
+       partnerLoanId,
+       invoices: [],
+     };
+   }
+
+   // Step 2: Find main data from invoice_disbursement table
+   const invoices = await this.getInvoiceDisbursementByLanAndPartnerLoanId(lanResult.lan, partnerLoanId);
+
+   return {
+     lan: lanResult.lan,
+     lender,
+     partnerLoanId,
+     invoices,
+   };
+ }
 }
 
 

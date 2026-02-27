@@ -152,6 +152,22 @@ router.get('/loans/foreclosure-preview', (req: Request, res: Response) => custom
  */
 router.get('/lan', customerController.getLan);
 
+/**
+ * GET /api/customers/invoice-details
+ * Get invoice details via lender
+ * 
+ * Query params:
+ *   lender (required) - Lender name to filter by
+ * 
+ * Flow:
+ *   1. Find LAN from sanction table via lender
+ *   2. Find main data from invoice_disbursement table where lan and partnerloanId
+ * 
+ * Example:
+ *   GET /api/customers/invoice-details?lender=HDFC Bank
+ */
+router.get('/invoice-details', customerController.getInvoiceDetailsByLender);
+
 // =====================================================
 // 🔹 TRANSACTION ROUTES
 // =====================================================

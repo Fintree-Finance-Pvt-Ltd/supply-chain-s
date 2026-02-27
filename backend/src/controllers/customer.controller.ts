@@ -884,6 +884,48 @@ getLan = async (req: Request, res: Response): Promise<void> => {
     });
   }
 };
+
+/**
+ * GET /api/customers/invoice-details
+ * Get invoice details via lender
+ * Query params: lender (required)
+ * 1. Find LAN from sanction table via lender
+ * 2. Find main data from invoice_disbursement table where lan and partnerloanId
+ */
+getInvoiceDetailsByLender = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const partnerLoanId = req.partnerLoanId;
+    const lender = req.query.lender as string;
+
+    if (!partnerLoanId) {
+      res.status(400).json({
+        success: false,
+        message: 'partnerLoanId is required',
+      });
+      return;
+    }
+
+    if (!lender) {
+      res.status(400).json({
+        success: false,
+        message: 'lender query parameter is required',
+      });
+      return;
+    }
+
+    const result = await this.customerService.getInvoiceDetailsByLender(partnerLoanId, lender);
+
+    res.status(200).json({
+      success: true,
+      data: result,
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to fetch invoice details from LMS',
+    });
+  }
+};
 }
 
 
