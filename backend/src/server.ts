@@ -1,5 +1,6 @@
 import app from './app';
 import { AppDataSource } from './config/database';
+import { initializeLMSDatabase } from './config/lmsDatabase';
 import * as dotenv from 'dotenv';
 
 dotenv.config();
@@ -8,8 +9,16 @@ const PORT = process.env.PORT || 3000;
 
 // Initialize database connection
 AppDataSource.initialize()
-  .then(() => {
-    console.log('✅ Database connected successfully');
+  .then(async () => {
+    console.log('✅ SCF Database connected successfully');
+
+    // Initialize LMS database connection
+    try {
+      await initializeLMSDatabase();
+      console.log('✅ LMS Database connection initialized');
+    } catch (lmsError) {
+      console.warn('⚠️ LMS Database connection failed - LMS features may not work:', lmsError);
+    }
 
     // Start server
     app.listen(PORT, () => {
@@ -25,16 +34,13 @@ AppDataSource.initialize()
 
 // Graceful shutdown
 process.on('SIGTERM', async () => {
-  console.log('SIGTERM received, closing database connection...');
+  console.log('SIGTERM received, closing database connections...');
   await AppDataSource.destroy();
   process.exit(0);
 });
 
 process.on('SIGINT', async () => {
-  console.log('SIGINT received, closing database connection...');
+  console.log('SIGINT received, closing database connections...');
   await AppDataSource.destroy();
   process.exit(0);
 });
-
-
-

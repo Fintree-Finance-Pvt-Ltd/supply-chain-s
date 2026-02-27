@@ -27,6 +27,11 @@ import { CustomerAddress } from './CustomerAddress';
 import { KycVerificationStatus } from './KycVerificationStatus';
 
 import { CASE_STATUS, COMPANY_TYPES } from '../config/constants';
+import { Loan } from './Loan';
+import { Drawdown } from './Drawdown';
+import { Notification } from './Notification';
+import { RefreshToken } from './RefreshToken';
+import { LoanTransaction } from './Loan';
 
 @Entity('customers')
 export class Customer {
@@ -43,6 +48,9 @@ export class Customer {
 
   @Column({ type: 'varchar', length: 20 })
   mobile: string;
+
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  password: string;
 
   @Column({ type: 'varchar', length: 255, nullable: true })
   email: string;
@@ -196,4 +204,20 @@ export class Customer {
 
   @OneToMany(() => CustomerAddress, (address) => address.customer, { cascade: true })
   addresses: CustomerAddress[];
+
+  // =====================================================
+  // 🔹 NEW SCF CUSTOMER APP RELATIONS
+  // =====================================================
+
+  @OneToMany(() => Loan, (loan) => loan.customer)
+  loans: Loan[];
+
+  @OneToMany(() => Drawdown, (drawdown) => drawdown.customer)
+  drawdowns: Drawdown[];
+
+  @OneToMany(() => Notification, (notification) => notification.customer)
+  notifications: Notification[];
+
+  @OneToMany(() => RefreshToken, (refreshToken) => refreshToken.customer)
+  refreshTokens: RefreshToken[];
 }
