@@ -94,6 +94,9 @@ export class Customer {
   @Column({ type: 'varchar', length: 50, nullable: true })
   lanId: string;
 
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  lender: string;
+
   @Column({ type: 'text', nullable: true })
   rejectionReason: string;
 

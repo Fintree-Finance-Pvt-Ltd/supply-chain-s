@@ -24,6 +24,7 @@ export { ContactPerson } from './ContactPerson';
 export { CustomerAddress } from './CustomerAddress';
 export { OtpSession } from './OtpSession';
 export { KycVerificationStatus } from './KycVerificationStatus';
-
+export { SupplierBankDetail } from './SupplierBankDetail';
+export { SupplierDocument } from './SupplierDocument';
 
 

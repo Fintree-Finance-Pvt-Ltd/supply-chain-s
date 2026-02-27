@@ -38,6 +38,12 @@ export class SanctionLimitHistory {
     @Column({ type: 'text', nullable: true })
     remarks: string;
 
+    @Column({ type: 'varchar', length: 50, nullable: true })
+    lender: string;
+
+    @Column({ type: 'varchar', length: 50, nullable: true })
+    lanId: string;
+
     @Column({ type: 'varchar', length: 50 })
     changedByRole: string; // 'CREDIT_L2', 'CEO', 'MD'
 

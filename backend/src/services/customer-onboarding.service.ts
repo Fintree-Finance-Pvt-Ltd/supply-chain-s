@@ -17,6 +17,11 @@ export class CustomerOnboardingService {
   private sanctionHistoryRepository = AppDataSource.getRepository(SanctionLimitHistory);
   private coApplicantRepository = AppDataSource.getRepository(CoApplicant);
 
+  // LAN ID sequence counter - starts from 10000101 (after FFPL prefix)
+  private static LAN_SEQUENCE_KEY = 'lan_sequence';
+  private static LAN_PREFIX = 'FFPL';
+  private static LAN_START_NUMBER = 10000101;
+
   private onboardingService: OnboardingIntegrationService;
 
   constructor() {
@@ -246,6 +251,17 @@ export class CustomerOnboardingService {
     return workflow;
   }
 
+  private async getNextLanId(): Promise<string> {
+    const result = await this.customerRepository
+      .createQueryBuilder('customer')
+      .select('MAX(CAST(SUBSTRING(customer.lanId, 5) AS UNSIGNED))', 'maxId')
+      .where('customer.lanId LIKE :prefix AND CAST(SUBSTRING(customer.lanId, 5) AS UNSIGNED) >= :start', { prefix: 'FFPL%', start: CustomerOnboardingService.LAN_START_NUMBER })
+      .getRawOne();
+
+    const nextNumber = (result?.maxId || CustomerOnboardingService.LAN_START_NUMBER - 1) + 1;
+    return `${CustomerOnboardingService.LAN_PREFIX}${nextNumber.toString().padStart(8, '0')}`;
+  }
+
   async creditL2Approve(customerId: number, userId: number, remarks: string, approved: boolean, sanctionData?: any) {
     const customer = await this.customerRepository.findOne({ where: { id: customerId } });
     if (!customer) throw new Error('Customer not found');
@@ -275,16 +291,22 @@ export class CustomerOnboardingService {
       }
 
       // Record history
+      const lanId = await this.getNextLanId();
       await this.sanctionHistoryRepository.save(this.sanctionHistoryRepository.create({
         customerId,
         changedByUserId: userId,
         changedByRole: 'CREDIT_L2',
         remarks,
+        lender: 'FFPL',
+        lanId: lanId,
         ...sanctionData
       }));
 
-      const lanId = `LAN-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`.toUpperCase();
       customer.lanId = lanId;
+      // Set lender based on LAN ID prefix
+      if (lanId.startsWith('FFPL')) {
+        customer.lender = 'FFPL';
+      }
       await this.customerRepository.save(customer);
     }
 
