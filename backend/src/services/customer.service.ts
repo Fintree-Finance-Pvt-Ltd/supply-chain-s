@@ -421,76 +421,159 @@ export class CustomerService {
    * Request OTP for login
    * READ ONLY from LMS supply_chain_loans table
    */
-  async requestLoginOtp(mobile: string): Promise<{
-    success: boolean;
-    message?: string;
-    expiresAt?: Date;
-  }> {
-    // Check if customer exists in LMS supply_chain_loans by applicant_mobile
-    const lmsCustomer = await this.findCustomerByMobile(mobile);
-    console.log("lmsCustomer",lmsCustomer)
-    if (!lmsCustomer) {
-      return { success: false, message: 'Customer not found with this mobile number' };
-    }
+  // async requestLoginOtp(mobile: string): Promise<{
+  //   success: boolean;
+  //   message?: string;
+  //   expiresAt?: Date;
+  // }> {
+  //   // Check if customer exists in LMS supply_chain_loans by applicant_mobile
+  //   const lmsCustomer = await this.findCustomerByMobile(mobile);
+  //   console.log("lmsCustomer",lmsCustomer)
+  //   if (!lmsCustomer) {
+  //     return { success: false, message: 'Customer not found with this mobile number' };
+  //   }
 
-    // Try to find customer in internal DB for OTP session
-    const customer = await this.customerRepository.findOne({
-      where: { mobile },
+  //   // Try to find customer in internal DB for OTP session
+  //   const customer = await this.customerRepository.findOne({
+  //     where: { mobile },
+  //   });
+
+  //   if (!customer) {
+  //     return { success: false, message: 'Customer not found. Please contact support.' };
+  //   }
+
+  //   // Check for existing valid OTP session
+  //   const existingSession = await this.otpSessionRepository.findOne({
+  //     where: {
+  //       customerId: customer.id,
+  //       identifier: mobile,
+  //       identifierType: IdentifierType.MOBILE,
+  //       status: OtpSessionStatus.SENT,
+  //     },
+  //     order: { createdAt: 'DESC' },
+  //   });
+  //    console.log("existingSession",existingSession)
+  //   if (existingSession) {
+  //     // Check if we can resend (5 minutes cooldown)
+  //     const timeSinceLastSent = Date.now() - existingSession.createdAt.getTime();
+  //     if (timeSinceLastSent < 300000) {
+  //       const remainingTime = Math.ceil((300000 - timeSinceLastSent) / 1000);
+  //       return { success: false, message: `Please wait ${remainingTime} seconds before requesting new OTP` };
+  //     }
+  //   }
+
+  //   // Generate new OTP
+  //   const otp = generateOtp();
+  //   const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
+
+  //   // Create new OTP session
+  //   const otpSession = this.otpSessionRepository.create({
+  //     customerId: customer.id,
+  //     identifier: mobile,
+  //     identifierType: IdentifierType.MOBILE,
+  //     ownerType: 'COMPANY' as any,
+  //     otp: otp,
+  //     purpose: 'LOGIN',
+  //     status: OtpSessionStatus.SENT,
+  //     attempts: 0,
+  //     expiresAt,
+  //   });
+
+  //   await this.otpSessionRepository.save(otpSession);
+
+  //   // Send OTP via SMS
+  //   await this.sendSmsOtp(mobile, otp);
+
+  //   return {
+  //     success: true,
+  //     message: 'OTP sent successfully',
+  //     expiresAt,
+  //   };
+  // }
+
+
+
+  async requestLoginOtp(
+  mobile: string
+): Promise<{
+  success: boolean;
+  message?: string;
+  expiresAt?: Date;
+}> {
+  // 1. Check LMS customer (NO error if not found)
+  const lmsCustomer = await this.findCustomerByMobile(mobile);
+  console.log('lmsCustomer', lmsCustomer);
+
+  // 2. Find customer in internal DB (NO error if not found)
+  let customer = await this.customerRepository.findOne({
+    where: { mobile },
+  });
+
+  // Optional: create customer if not exists (only if your business allows)
+  if (!customer) {
+    customer = this.customerRepository.create({
+      mobile,
     });
+    customer = await this.customerRepository.save(customer);
+  }
 
-    if (!customer) {
-      return { success: false, message: 'Customer not found. Please contact support.' };
-    }
-
-    // Check for existing valid OTP session
-    const existingSession = await this.otpSessionRepository.findOne({
-      where: {
-        customerId: customer.id,
-        identifier: mobile,
-        identifierType: IdentifierType.MOBILE,
-        status: OtpSessionStatus.SENT,
-      },
-      order: { createdAt: 'DESC' },
-    });
-     console.log("existingSession",existingSession)
-    if (existingSession) {
-      // Check if we can resend (5 minutes cooldown)
-      const timeSinceLastSent = Date.now() - existingSession.createdAt.getTime();
-      if (timeSinceLastSent < 300000) {
-        const remainingTime = Math.ceil((300000 - timeSinceLastSent) / 1000);
-        return { success: false, message: `Please wait ${remainingTime} seconds before requesting new OTP` };
-      }
-    }
-
-    // Generate new OTP
-    const otp = generateOtp();
-    const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
-
-    // Create new OTP session
-    const otpSession = this.otpSessionRepository.create({
+  // 3. Check existing OTP session
+  const existingSession = await this.otpSessionRepository.findOne({
+    where: {
       customerId: customer.id,
       identifier: mobile,
       identifierType: IdentifierType.MOBILE,
-      ownerType: 'COMPANY' as any,
-      otp: otp,
-      purpose: 'LOGIN',
       status: OtpSessionStatus.SENT,
-      attempts: 0,
-      expiresAt,
-    });
+    },
+    order: { createdAt: 'DESC' },
+  });
 
-    await this.otpSessionRepository.save(otpSession);
+  console.log('existingSession', existingSession);
 
-    // Send OTP via SMS
-    await this.sendSmsOtp(mobile, otp);
+  if (existingSession) {
+    const timeSinceLastSent =
+      Date.now() - existingSession.createdAt.getTime();
 
-    return {
-      success: true,
-      message: 'OTP sent successfully',
-      expiresAt,
-    };
+    // 5 minutes cooldown
+    if (timeSinceLastSent < 300000) {
+      const remainingTime = Math.ceil(
+        (300000 - timeSinceLastSent) / 1000
+      );
+      return {
+        success: false,
+        message: `Please wait ${remainingTime} seconds before requesting new OTP`,
+      };
+    }
   }
 
+  // 4. Generate new OTP
+  const otp = generateOtp();
+  const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
+
+  // 5. Insert OTP session
+  const otpSession = this.otpSessionRepository.create({
+    customerId: customer.id,
+    identifier: mobile,
+    identifierType: IdentifierType.MOBILE,
+    ownerType: 'COMPANY' as any,
+    otp,
+    purpose: 'LOGIN',
+    status: OtpSessionStatus.SENT,
+    attempts: 0,
+    expiresAt,
+  });
+
+  await this.otpSessionRepository.save(otpSession);
+
+  // 6. Send OTP
+  await this.sendSmsOtp(mobile, otp);
+
+  return {
+    success: true,
+    message: 'OTP sent successfully',
+    expiresAt,
+  };
+}
   /**
    * Verify OTP and login
    * READ ONLY from LMS supply_chain_loans table
