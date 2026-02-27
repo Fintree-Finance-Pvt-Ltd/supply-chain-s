@@ -24,13 +24,7 @@ export { ContactPerson } from './ContactPerson';
 export { CustomerAddress } from './CustomerAddress';
 export { OtpSession } from './OtpSession';
 export { KycVerificationStatus } from './KycVerificationStatus';
-
-// =====================================================
-// 🔹 NEW SCF CUSTOMER APP ENTITIES
-// =====================================================
-export { Loan, LoanSchedule, LoanTransaction } from './Loan';
-export { Drawdown } from './Drawdown';
-export { Notification } from './Notification';
-export { RefreshToken } from './RefreshToken';
+export { SupplierBankDetail } from './SupplierBankDetail';
+export { SupplierDocument } from './SupplierDocument';
 
 

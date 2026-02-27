@@ -4,7 +4,8 @@ import { CustomerOnboardingService } from '../services/customer-onboarding.servi
 import { SupplierOnboardingService } from '../services/supplier-onboarding.service';
 import { InvoiceDiscountingService } from '../services/invoice-discounting.service';
 import { DocumentService } from '../services/document.service';
-
+import multer from 'multer';
+import path from 'path';
 const router = Router();
 
 // Apply auth middleware to all workflow routes
@@ -41,6 +42,22 @@ const checkRole = (allowedRoles: string[]) => {
     next();
   };
 };
+
+
+const supplierUploadStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => cb(null, path.join(__dirname, '../../uploads')),
+  filename: (_req, file, cb) => cb(null, `${Date.now()}-${file.originalname}`),
+});
+
+const supplierUpload = multer({ storage: supplierUploadStorage });
+
+const upload = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, path.join(__dirname, '../../uploads')),
+    filename: (_req, file, cb) => cb(null, `${Date.now()}-${file.originalname}`),
+  }),
+});
+
 
 // ==================== CUSTOMER ONBOARDING ROUTES ====================
 
@@ -553,7 +570,7 @@ router.post('/suppliers/create', checkRole(['relationship_manager']), async (req
       });
     }
 
-    const supplier = await supplierOnboardingService.createSupplier(
+    const supplier = await supplierOnboardingService.createSupplierByRM(
       {
         customerId,
         supplierName,
@@ -646,13 +663,14 @@ router.post('/suppliers/:supplierId/ops-l1', checkRole(['operations_team_l1']), 
 router.post('/suppliers/:supplierId/ops-head', checkRole(['operations_head']), async (req: Request, res: Response) => {
   try {
     const { supplierId } = req.params;
-    const { remarks } = req.body;
+    const { remarks, approved } = req.body;
     const user = (req as any).user;
 
     const workflow = await supplierOnboardingService.opsHeadApprove(
       parseInt(supplierId),
       user.id,
       remarks || '',
+      !!approved,
     );
 
     res.json({
@@ -691,23 +709,30 @@ router.get('/suppliers/dashboard/rm', checkRole(['relationship_manager']), async
 
 /**
  * GET /api/workflows/suppliers/dashboard/operations
- * Operations Dashboard
+ * Operations Dashboard - gets pending suppliers based on role
  */
-router.get('/suppliers/dashboard/operations', checkRole(['operations_team_l1', 'operations_head']), async (req: Request, res: Response) => {
+router.get('/suppliers/dashboard/operations', checkRole(['operations_team_l1', 'operations_team_l2', 'operations_head']), async (req, res) => {
   try {
     const user = (req as any).user;
-    const userRole = user.roles?.[0]?.name || 'OPERATIONS_L1';
+    const userRole = (user?.roles?.[0]?.name || '').toLowerCase();
     const dashboard = await supplierOnboardingService.getOperationsPending(userRole);
 
-    res.json({
-      success: true,
-      data: dashboard,
-    });
+    res.json({ success: true, data: dashboard });
   } catch (error: any) {
-    res.status(404).json({
-      success: false,
-      message: error.message,
-    });
+    res.status(404).json({ success: false, message: error.message });
+  }
+});
+
+/**
+ * GET /api/workflows/suppliers/dashboard/all
+ * Get all suppliers (for Completed/Rejected tab)
+ */
+router.get('/suppliers/dashboard/all', async (req, res) => {
+  try {
+    const suppliers = await supplierOnboardingService.getAllSuppliers();
+    res.json({ success: true, data: suppliers });
+  } catch (error: any) {
+    res.status(404).json({ success: false, message: error.message });
   }
 });
 
@@ -1099,6 +1124,177 @@ router.get('/invoices/:invoiceId/details', async (req: Request, res: Response) =
       success: false,
       message: error.message,
     });
+  }
+});
+
+
+/**
+ * POST /api/workflows/suppliers/ops-l1/create
+ * Operations L1 creates supplier onboarding directly -> goes to DRAFT first
+ */
+router.post('/suppliers/ops-l1/create', checkRole(['operations_team_l1']), async (req, res) => {
+  try {
+    const user = (req as any).user;
+    const { customerId, supplierName, partnerLoanId, mobileNumber, email, address, gstNumber, panNumber } = req.body;
+
+    if (!customerId || !supplierName || !mobileNumber) {
+      return res.status(400).json({ success: false, message: 'customerId, supplierName, mobileNumber required' });
+    }
+
+    const result = await supplierOnboardingService.createSupplierByOpsL1(
+      { customerId, supplierName, partnerLoanId, mobileNumber, email, address, gstNumber, panNumber },
+      user.id
+    );
+
+    res.status(201).json({ success: true, message: 'Supplier created in Draft status', data: result });
+  } catch (error: any) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+});
+
+/**
+ * POST /api/workflows/suppliers/:supplierId/submit-to-ops-head
+ * Ops L1 submits supplier to Ops Head for approval
+ */
+router.post('/suppliers/:supplierId/submit-to-ops-head', checkRole(['operations_team_l1']), async (req, res) => {
+  try {
+    const { supplierId } = req.params;
+    const { remarks } = req.body;
+    const user = (req as any).user;
+
+    const workflow = await supplierOnboardingService.opsL1SubmitToOpsHead(
+      parseInt(supplierId),
+      user.id,
+      remarks || 'Submitted to Operations Head'
+    );
+
+    res.json({ 
+      success: true, 
+      message: 'Supplier submitted to Operations Head for approval', 
+      data: workflow 
+    });
+  } catch (error: any) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+});
+
+/**
+ * POST /api/workflows/suppliers/:supplierId/cheque
+ * Upload cheque and auto-fill bank details
+ */
+router.post(
+  '/suppliers/:supplierId/cheque',
+  checkRole(['operations_team_l1']),
+  supplierUpload.single('cheque'),
+  async (req: Request, res: Response) => {
+    try {
+      const user = (req as any).user;
+      const { supplierId } = req.params;
+
+      if (!req.file) return res.status(400).json({ success: false, message: 'cheque file is required' });
+
+      const result = await supplierOnboardingService.uploadSupplierChequeAndAutofill(
+        Number(supplierId),
+        req.file,
+        user.id
+      );
+
+      res.json({
+        success: true,
+        message: 'Cheque uploaded and bank details auto-filled',
+        data: result,
+      });
+    } catch (error: any) {
+      res.status(400).json({ success: false, message: error.message });
+    }
+  }
+);
+
+/**
+ * POST /api/workflows/suppliers/:supplierId/ops-head/decision
+ * Operations Head final approve/reject
+ */
+router.post('/suppliers/:supplierId/ops-head', checkRole(['operations_head']), async (req, res) => {
+  try {
+    const { supplierId } = req.params;
+    const { remarks, approved } = req.body;
+    const user = (req as any).user;
+
+    const workflow = await supplierOnboardingService.opsHeadDecision(
+      parseInt(supplierId),
+      user.id,
+      remarks || '',
+      !!approved
+    );
+
+    res.json({
+      success: true,
+      message: approved ? 'Supplier onboarded (completed)' : 'Supplier rejected by Operations Head',
+      data: workflow,
+    });
+  } catch (error: any) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+});
+
+/**
+ * GET /api/workflows/suppliers/customers/approved
+ * Get approved customers for supplier onboarding dropdown
+ */
+router.get('/suppliers/customers/approved', async (req, res) => {
+  try {
+    const customers = await supplierOnboardingService.getApprovedCustomers();
+    res.json({ success: true, data: customers });
+  } catch (error: any) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+});
+
+/**
+ * GET /api/workflows/suppliers/:supplierId/details
+ * Get supplier details with all relationships
+ */
+router.get('/suppliers/:supplierId/details', async (req, res) => {
+  try {
+    const { supplierId } = req.params;
+    const result = await supplierOnboardingService.getSupplierById(parseInt(supplierId));
+    res.json({ success: true, data: result });
+  } catch (error: any) {
+    res.status(404).json({ success: false, message: error.message });
+  }
+});
+
+/**
+ * POST /api/workflows/suppliers/rm/create
+ * RM creates supplier in draft status
+ */
+router.post('/suppliers/rm/create', checkRole(['relationship_manager']), async (req, res) => {
+  try {
+    const user = (req as any).user;
+    const { customerId, supplierName, supplierCode, email, contactNumber, address, gstNumber, panNumber, partnerLoanId } = req.body;
+
+    if (!customerId || !supplierName) {
+      return res.status(400).json({ success: false, message: 'customerId and supplierName are required' });
+    }
+
+    const result = await supplierOnboardingService.createSupplierByRM(
+      {
+        customerId,
+        supplierName,
+        supplierCode,
+        email,
+        contactNumber,
+        address,
+        gstNumber,
+        panNumber,
+        partnerLoanId,
+      },
+      user.id
+    );
+
+    res.status(201).json({ success: true, message: 'Supplier created successfully', data: result });
+  } catch (error: any) {
+    res.status(400).json({ success: false, message: error.message });
   }
 });
 

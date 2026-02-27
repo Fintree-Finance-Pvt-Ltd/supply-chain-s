@@ -50,6 +50,7 @@ const Sidebar = () => {
         return [
           { path: '/operations/dashboard', label: 'Ops Dashboard', icon: FiHome },
           { path: '/operations/pending', label: 'Pending Checks', icon: FiCheckCircle },
+           { path: '/operations/suppliers', label: 'Supplier Onboarding', icon: FiUserPlus },
         ]
 
       case ROLES.CEO:

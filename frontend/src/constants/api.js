@@ -67,8 +67,12 @@ export const API_ENDPOINTS = {
   // Supplier Workflow
   WORKFLOW_SUPPLIER_CREATE: '/workflows/suppliers/create',
   WORKFLOW_SUPPLIER_SUBMIT: (id) => `/workflows/suppliers/${id}/submit`,
-  WORKFLOW_SUPPLIER_OPS_L1: (id) => `/workflows/suppliers/${id}/ops-l1`,
+  WORKFLOW_SUPPLIER_OPS_L1_CREATE: '/workflows/suppliers/ops-l1/create',
+  WORKFLOW_SUPPLIER_CHEQUE_UPLOAD: (id) => `/workflows/suppliers/${id}/cheque`,
   WORKFLOW_SUPPLIER_OPS_HEAD: (id) => `/workflows/suppliers/${id}/ops-head`,
+  WORKFLOW_SUPPLIER_RM_CREATE: '/workflows/suppliers/rm/create',
+  WORKFLOW_SUPPLIER_CUSTOMERS_APPROVED: '/workflows/suppliers/customers/approved',
+  WORKFLOW_SUPPLIER_DETAILS: (id) => `/workflows/suppliers/${id}/details`,
 
   // Invoice Workflow
   WORKFLOW_INVOICE_CREATE: '/workflows/invoices/create',
@@ -84,6 +88,10 @@ export const API_ENDPOINTS = {
   DASHBOARD_CREDIT_PENDING: (level) => `/workflows/customers/dashboard/credit/${level}`,
   DASHBOARD_EXECUTIVE_PENDING: '/workflows/customers/dashboard/executive',
   DASHBOARD_OPERATIONS_PENDING: '/workflows/customers/dashboard/operations',
+  // Supplier Dashboards
+
+  
+DASHBOARD_OPERATIONS_SUPPLIERS: '/workflows/suppliers/dashboard/operations',
 
   DASHBOARD_RM_SUPPLIERS: '/workflows/suppliers/dashboard/rm',
   DASHBOARD_RM_INVOICES: '/workflows/invoices/dashboard/rm',

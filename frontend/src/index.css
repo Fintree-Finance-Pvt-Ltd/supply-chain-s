@@ -177,5 +177,9 @@
   .action-button-success {
     @apply text-success-600 hover:text-success-700 hover:bg-success-50;
   }
-}
 
+
+.input {
+  @apply w-full border p-2 rounded mt-2;
+}
+}

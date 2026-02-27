@@ -13,6 +13,10 @@ import { User } from './User';
 import { Invoice } from './Invoice';
 import { CaseStatusHistory } from './CaseStatusHistory';
 
+import { OneToOne } from 'typeorm';
+import { SupplierBankDetail } from './SupplierBankDetail';
+import { SupplierDocument } from './SupplierDocument';
+
 @Entity('suppliers')
 export class Supplier {
   @PrimaryGeneratedColumn('increment')
@@ -78,4 +82,10 @@ export class Supplier {
 
   @OneToMany(() => CaseStatusHistory, history => history.supplier)
   statusHistory: CaseStatusHistory[];
+
+  @OneToOne(() => SupplierBankDetail, (bd) => bd.supplier)
+bankDetail: SupplierBankDetail;
+
+@OneToMany(() => SupplierDocument, (d) => d.supplier)
+documents: SupplierDocument[];
 }

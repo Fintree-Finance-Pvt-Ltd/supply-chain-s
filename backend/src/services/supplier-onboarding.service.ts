@@ -1,15 +1,23 @@
 import { AppDataSource } from '../config/database';
 import { Supplier } from '../entities/Supplier';
 import { Customer } from '../entities/Customer';
-import { Invoice } from '../entities/Invoice';
 import { CaseWorkflow } from '../entities/CaseWorkflow';
 import { CaseStatusHistory } from '../entities/CaseStatusHistory';
+import { SupplierBankDetail } from '../entities/SupplierBankDetail';
+import { SupplierDocument } from '../entities/SupplierDocument';
+import { ChequeParserService } from './cheque-parser.service';
 
 export class SupplierOnboardingService {
   private supplierRepository = AppDataSource.getRepository(Supplier);
   private customerRepository = AppDataSource.getRepository(Customer);
   private workflowRepository = AppDataSource.getRepository(CaseWorkflow);
   private historyRepository = AppDataSource.getRepository(CaseStatusHistory);
+  private supplierDocRepository = AppDataSource.getRepository(SupplierDocument);
+  private supplierBankRepository = AppDataSource.getRepository(SupplierBankDetail);
+  private chequeParser = new ChequeParserService();
+
+  MAX_SUPPLIERS_PER_LAN = 20;
+  MIN_SUPPLIERS_PER_LAN = 10;
 
   private async getOrCreateWorkflow(supplierId: number, workflowType: string = 'SUPPLIER_ONBOARDING'): Promise<CaseWorkflow> {
     let workflow = await this.workflowRepository.findOne({
@@ -20,7 +28,7 @@ export class SupplierOnboardingService {
       const supplier = await this.supplierRepository.findOne({ where: { id: supplierId } });
       if (!supplier) throw new Error('Supplier not found');
 
-      const status = (supplier.status || 'draft').toLowerCase();
+      const status = (supplier.status || 'DRAFT').toUpperCase();
       workflow = this.workflowRepository.create({
         workflowType: workflowType as any,
         supplierId: supplier.id,
@@ -35,12 +43,13 @@ export class SupplierOnboardingService {
   }
 
   private getApproverForStatus(status: string): string {
-    switch (status) {
-      case 'draft': return 'RM';
-      case 'submitted': return 'OPERATIONS_L1';
-      case 'ops_l1_approved': return 'OPERATIONS_HEAD';
-      case 'completed': return 'None';
-      default: return 'RM';
+    const s = status.toUpperCase();
+    switch (s) {
+      case 'DRAFT': return 'OPERATIONS_TEAM_L1';
+      case 'SUBMITTED': return 'OPERATIONS_HEAD';
+      case 'OPS_L1_APPROVED': return 'OPERATIONS_HEAD';
+      case 'COMPLETED': return 'None';
+      default: return 'OPERATIONS_TEAM_L1';
     }
   }
 
@@ -64,66 +73,77 @@ export class SupplierOnboardingService {
     return await this.historyRepository.save(history);
   }
 
-  MAX_SUPPLIERS_PER_LAN = 20;
-  MIN_SUPPLIERS_PER_LAN = 10;
-
-  async createSupplier(data: any, rmId: number) {
-    const customer = await this.customerRepository.findOne({
-      where: { id: data.customerId },
-    });
+  // Ops L1 creates supplier in DRAFT status
+  async createSupplierByOpsL1(data: any, opsL1UserId: number) {
+    const customer = await this.customerRepository.findOne({ where: { id: data.customerId } });
     if (!customer || !customer.lanId) throw new Error('Customer must be approved with LAN ID');
 
-    const count = await this.getSupplierCountForLan(data.customerId);
-    if ((count || 0) >= this.MAX_SUPPLIERS_PER_LAN) {
-      throw new Error(`Maximum ${this.MAX_SUPPLIERS_PER_LAN} suppliers already added to this LAN`);
-    }
-
-    // Clean up empty strings for unique fields
-    const cleanedData = { ...data };
-    if (cleanedData.supplierCode === '') cleanedData.supplierCode = undefined;
-
     const supplier = this.supplierRepository.create({
-      ...cleanedData,
-      createdByUserId: rmId,
-      status: 'draft',
+      customerId: data.customerId,
+      supplierName: data.supplierName,
+      contactNumber: data.mobileNumber,
+      supplierCode: data.supplierCode || `SUP-${Date.now()}`,
+      email: data.email || '',
+      address: data.address || null,
+      gstNumber: data.gstNumber || null,
+      panNumber: data.panNumber || null,
+      createdByUserId: opsL1UserId,
+      status: 'DRAFT',
     });
-    const savedSupplier = (await this.supplierRepository.save(supplier)) as unknown as Supplier;
+
+    const savedSupplier = await this.supplierRepository.save(supplier);
+
+    // Save bank details if provided
+    if (data.bankAccountNumber || data.ifscCode || data.bankName) {
+      const bankDetail = this.supplierBankRepository.create({
+        supplierId: savedSupplier.id,
+        bankAccountNumber: data.bankAccountNumber || '',
+        ifscCode: data.ifscCode || '',
+        bankName: data.bankName || '',
+        accountHolderName: data.accountHolderName || '',
+      });
+      await this.supplierBankRepository.save(bankDetail);
+    }
 
     const workflow = this.workflowRepository.create({
       workflowType: 'SUPPLIER_ONBOARDING',
       supplierId: savedSupplier.id,
-      customerId: data.customerId,
-      currentStatus: 'draft',
-      currentApproverRoleName: 'RM',
+      customerId: savedSupplier.customerId,
+      currentStatus: 'DRAFT',
+      currentApproverRoleName: 'OPERATIONS_TEAM_L1',
+      remarks: 'Created by Operations L1',
     });
     const savedWorkflow = await this.workflowRepository.save(workflow);
 
     await this.logHistory({
-      customerId: data.customerId,
+      customerId: savedSupplier.customerId,
       supplierId: savedSupplier.id,
       caseWorkflowId: savedWorkflow.id,
-      status: 'draft',
+      status: 'DRAFT',
       previousStatus: 'None',
-      changedBy: rmId,
-      remarks: 'Supplier created in Draft state',
+      changedBy: opsL1UserId,
+      remarks: 'Supplier created by Operations L1',
     });
 
     return { supplier: savedSupplier, workflow: savedWorkflow };
   }
 
-  async submitSupplier(supplierId: number, userId: number, remarks: string) {
+  // Ops L1 submits supplier to Ops Head (changes status to OPS_L1_APPROVED)
+  async opsL1SubmitToOpsHead(supplierId: number, userId: number, remarks: string) {
     const supplier = await this.supplierRepository.findOne({ where: { id: supplierId } });
     if (!supplier) throw new Error('Supplier not found');
 
     const workflow = await this.getOrCreateWorkflow(supplierId);
-    if (workflow.currentStatus !== 'draft') throw new Error('Can only submit from Draft status');
+    if (workflow.currentStatus !== 'DRAFT') {
+      throw new Error('Can only submit from Draft status');
+    }
 
     const previousStatus = workflow.currentStatus;
-    supplier.status = 'submitted';
+    supplier.status = 'OPS_L1_APPROVED';
     await this.supplierRepository.save(supplier);
 
-    workflow.currentStatus = 'submitted';
-    workflow.currentApproverRoleName = 'OPERATIONS_L1';
+    workflow.currentStatus = 'OPS_L1_APPROVED';
+    workflow.currentApproverRoleName = 'OPERATIONS_HEAD';
     workflow.remarks = remarks;
     await this.workflowRepository.save(workflow);
 
@@ -131,7 +151,7 @@ export class SupplierOnboardingService {
       customerId: supplier.customerId,
       supplierId: supplier.id,
       caseWorkflowId: workflow.id,
-      status: 'submitted',
+      status: 'OPS_L1_APPROVED',
       previousStatus,
       changedBy: userId,
       remarks,
@@ -140,21 +160,36 @@ export class SupplierOnboardingService {
     return workflow;
   }
 
-  async opsL1Approve(supplierId: number, userId: number, remarks: string, approved: boolean) {
+  // Ops Head approves supplier (changes status to COMPLETED)
+  async opsHeadApprove(supplierId: number, userId: number, remarks: string, approved: boolean) {
     const supplier = await this.supplierRepository.findOne({ where: { id: supplierId } });
     if (!supplier) throw new Error('Supplier not found');
 
     const workflow = await this.getOrCreateWorkflow(supplierId);
-    if (workflow.currentStatus !== 'submitted') throw new Error('Cannot approve: Pending at Operations L1');
+    
+    // Allow both SUBMITTED and OPS_L1_APPROVED statuses for Ops Head approval
+    if (workflow.currentStatus !== 'OPS_L1_APPROVED' && workflow.currentStatus !== 'SUBMITTED') {
+      throw new Error('Cannot decide: Supplier must be submitted to Operations Head');
+    }
 
     const previousStatus = workflow.currentStatus;
-    supplier.status = approved ? 'ops_l1_approved' : 'rejected';
-    await this.supplierRepository.save(supplier);
 
-    workflow.currentStatus = approved ? 'ops_l1_approved' : 'rejected';
-    workflow.currentApproverRoleName = approved ? 'OPERATIONS_HEAD' : 'RM';
-    if (!approved) workflow.isRejected = true;
+    if (approved) {
+      supplier.status = 'COMPLETED';
+      workflow.currentStatus = 'COMPLETED';
+      workflow.currentApproverRoleName = 'None';
+      workflow.isCompleted = true;
+      workflow.completedDate = new Date();
+    } else {
+      supplier.status = 'REJECTED';
+      supplier.rejectionReason = remarks || 'Rejected by Operations Head';
+      workflow.currentStatus = 'REJECTED';
+      workflow.currentApproverRoleName = 'OPERATIONS_TEAM_L1';
+      workflow.isRejected = true;
+    }
+
     workflow.remarks = remarks;
+    await this.supplierRepository.save(supplier);
     await this.workflowRepository.save(workflow);
 
     await this.logHistory({
@@ -170,21 +205,19 @@ export class SupplierOnboardingService {
     return workflow;
   }
 
-  async opsHeadApprove(supplierId: number, userId: number, remarks: string) {
+  async submitSupplier(supplierId: number, userId: number, remarks: string) {
     const supplier = await this.supplierRepository.findOne({ where: { id: supplierId } });
     if (!supplier) throw new Error('Supplier not found');
 
     const workflow = await this.getOrCreateWorkflow(supplierId);
-    if (workflow.currentStatus !== 'ops_l1_approved') throw new Error('Cannot approve: Pending at Operations Head');
+    if (workflow.currentStatus !== 'DRAFT') throw new Error('Can only submit from Draft status');
 
     const previousStatus = workflow.currentStatus;
-    supplier.status = 'completed';
+    supplier.status = 'SUBMITTED';
     await this.supplierRepository.save(supplier);
 
-    workflow.currentStatus = 'completed';
-    workflow.currentApproverRoleName = 'None';
-    workflow.isCompleted = true;
-    workflow.completedDate = new Date();
+    workflow.currentStatus = 'SUBMITTED';
+    workflow.currentApproverRoleName = 'OPERATIONS_HEAD';
     workflow.remarks = remarks;
     await this.workflowRepository.save(workflow);
 
@@ -192,7 +225,37 @@ export class SupplierOnboardingService {
       customerId: supplier.customerId,
       supplierId: supplier.id,
       caseWorkflowId: workflow.id,
-      status: 'completed',
+      status: 'SUBMITTED',
+      previousStatus,
+      changedBy: userId,
+      remarks,
+    });
+
+    return workflow;
+  }
+
+  async opsL1Approve(supplierId: number, userId: number, remarks: string, approved: boolean) {
+    const supplier = await this.supplierRepository.findOne({ where: { id: supplierId } });
+    if (!supplier) throw new Error('Supplier not found');
+
+    const workflow = await this.getOrCreateWorkflow(supplierId);
+    if (workflow.currentStatus !== 'SUBMITTED') throw new Error('Cannot approve: Pending at Operations L1');
+
+    const previousStatus = workflow.currentStatus;
+    supplier.status = approved ? 'OPS_L1_APPROVED' : 'REJECTED';
+    await this.supplierRepository.save(supplier);
+
+    workflow.currentStatus = approved ? 'OPS_L1_APPROVED' : 'REJECTED';
+    workflow.currentApproverRoleName = approved ? 'OPERATIONS_HEAD' : 'OPERATIONS_TEAM_L1';
+    if (!approved) workflow.isRejected = true;
+    workflow.remarks = remarks;
+    await this.workflowRepository.save(workflow);
+
+    await this.logHistory({
+      customerId: supplier.customerId,
+      supplierId: supplier.id,
+      caseWorkflowId: workflow.id,
+      status: workflow.currentStatus,
       previousStatus,
       changedBy: userId,
       remarks,
@@ -222,21 +285,35 @@ export class SupplierOnboardingService {
 
     return {
       totalSuppliers: suppliers?.length || 0,
-      draft: suppliers?.filter((s) => s.status === 'draft').length || 0,
-      submitted: suppliers?.filter((s) => s.status === 'submitted').length || 0,
-      completed: suppliers?.filter((s) => s.status === 'completed').length || 0,
-      rejected: suppliers?.filter((s) => s.status === 'rejected').length || 0,
+      draft: suppliers?.filter((s) => s.status === 'DRAFT').length || 0,
+      submitted: suppliers?.filter((s) => s.status === 'SUBMITTED').length || 0,
+      opsL1Approved: suppliers?.filter((s) => s.status === 'OPS_L1_APPROVED').length || 0,
+      completed: suppliers?.filter((s) => s.status === 'COMPLETED').length || 0,
+      rejected: suppliers?.filter((s) => s.status === 'REJECTED').length || 0,
       lanWiseSuppliers,
       suppliers,
     };
   }
 
   async getOperationsPending(role: string) {
-    const statusFilter = role === 'OPERATIONS_HEAD' ? 'ops_l1_approved' : 'submitted';
-    const suppliers = await this.supplierRepository.find({
-      where: { status: statusFilter as any },
-      relations: ['customer'],
-    });
+    const r = (role || '').toLowerCase();
+    // Operations L1 sees DRAFT suppliers, Operations Head sees OPS_L1_APPROVED or SUBMITTED
+    let suppliers;
+    if (r === 'operations_head') {
+      suppliers = await this.supplierRepository.find({
+        where: [
+          { status: 'OPS_L1_APPROVED' as any },
+          { status: 'SUBMITTED' as any }
+        ],
+        relations: ['customer'],
+      });
+    } else {
+      // Ops L1 sees DRAFT suppliers they created
+      suppliers = await this.supplierRepository.find({
+        where: { status: 'DRAFT' as any },
+        relations: ['customer'],
+      });
+    }
     return suppliers;
   }
 
@@ -249,7 +326,7 @@ export class SupplierOnboardingService {
 
   async getApprovedSuppliersByCustomerLan(customerId: number) {
     return this.supplierRepository.find({
-      where: { customerId, status: 'completed' },
+      where: { customerId, status: 'COMPLETED' },
       relations: ['customer'],
     });
   }
@@ -261,5 +338,222 @@ export class SupplierOnboardingService {
   async canAddMoreSuppliers(customerId: number) {
     const count = await this.getSupplierCountForLan(customerId);
     return count < this.MAX_SUPPLIERS_PER_LAN;
+  }
+
+  async uploadSupplierChequeAndAutofill(supplierId: number, file: Express.Multer.File, userId: number) {
+    const supplier = await this.supplierRepository.findOne({ where: { id: supplierId } });
+    if (!supplier) throw new Error('Supplier not found');
+
+    // Convert absolute path to relative path for Windows compatibility
+    // file.path is like "C:\Users\...\uploads\filename.ext"
+    // We want to store just "uploads/filename.ext"
+    let relativePath = file.path;
+    if (file.path.includes('\\')) {
+      // Windows path - extract the relative part after 'uploads'
+      const pathParts = file.path.split('\\');
+      const uploadsIndex = pathParts.indexOf('uploads');
+      if (uploadsIndex !== -1) {
+        relativePath = pathParts.slice(uploadsIndex).join('/');
+      } else {
+        // Fallback: just use the filename
+        relativePath = `uploads/${file.filename}`;
+      }
+    } else {
+      // Unix/Mac path
+      relativePath = file.path.replace(/.*\/uploads\//, 'uploads/');
+    }
+
+    const doc = this.supplierDocRepository.create({
+      supplierId,
+      documentType: 'CHEQUE',
+      fileName: file.originalname,
+      filePath: relativePath,
+      mimeType: file.mimetype,
+      fileSize: file.size,
+      uploadedBy: userId,
+    });
+    const savedDoc = await this.supplierDocRepository.save(doc);
+
+    const extracted = await this.chequeParser.extractBankDetailsFromCheque(file.path);
+
+    let bank = await this.supplierBankRepository.findOne({ where: { supplierId } });
+    if (!bank) {
+      bank = this.supplierBankRepository.create({
+        supplierId,
+        bankAccountNumber: extracted.bank_account_number,
+        ifscCode: extracted.ifsc_code,
+        bankName: extracted.bank_name,
+        accountHolderName: extracted.account_holder_name,
+        chequeDocumentId: savedDoc.id,
+      });
+    } else {
+      bank.bankAccountNumber = extracted.bank_account_number;
+      bank.ifscCode = extracted.ifsc_code;
+      bank.bankName = extracted.bank_name;
+      bank.accountHolderName = extracted.account_holder_name;
+      bank.chequeDocumentId = savedDoc.id;
+    }
+    const savedBank = await this.supplierBankRepository.save(bank);
+
+    return {
+      chequeDocument: savedDoc,
+      bankDetails: savedBank,
+      extracted,
+    };
+  }
+
+  // Ops Head decision (approve/reject)
+  async opsHeadDecision(supplierId: number, userId: number, remarks: string, approved: boolean) {
+    const supplier = await this.supplierRepository.findOne({ where: { id: supplierId } });
+    if (!supplier) throw new Error('Supplier not found');
+
+    const workflow = await this.getOrCreateWorkflow(supplierId);
+    if (workflow.currentStatus !== 'OPS_L1_APPROVED' && workflow.currentStatus !== 'SUBMITTED') {
+      throw new Error('Cannot decide: Pending at Operations Head only');
+    }
+
+    const previousStatus = workflow.currentStatus;
+
+    if (approved) {
+      supplier.status = 'COMPLETED';
+      workflow.currentStatus = 'COMPLETED';
+      workflow.currentApproverRoleName = 'None';
+      workflow.isCompleted = true;
+      workflow.completedDate = new Date();
+    } else {
+      supplier.status = 'REJECTED';
+      supplier.rejectionReason = remarks || 'Rejected by Operations Head';
+      workflow.currentStatus = 'REJECTED';
+      workflow.currentApproverRoleName = 'OPERATIONS_TEAM_L1';
+      workflow.isRejected = true;
+    }
+
+    workflow.remarks = remarks;
+
+    await this.supplierRepository.save(supplier);
+    await this.workflowRepository.save(workflow);
+
+    await this.logHistory({
+      customerId: supplier.customerId,
+      supplierId: supplier.id,
+      caseWorkflowId: workflow.id,
+      status: workflow.currentStatus,
+      previousStatus,
+      changedBy: userId,
+      remarks,
+    });
+
+    return workflow;
+  }
+
+  async getApprovedCustomers() {
+    // Get customers with status 'completed' or 'fully_onboarded' or 'operations_approved'
+    return this.customerRepository.find({
+      where: [
+        { status: 'completed' },
+        { status: 'fully_onboarded' },
+        { status: 'operations_approved' }
+      ],
+      select: ['id', 'name', 'companyName', 'lanId', 'email', 'mobile'],
+      order: { name: 'ASC' },
+    });
+  }
+
+  async getSupplierById(supplierId: number) {
+    const supplier = await this.supplierRepository.findOne({
+      where: { id: supplierId },
+      relations: ['customer', 'bankDetail', 'documents'],
+    });
+
+    if (!supplier) {
+      throw new Error('Supplier not found');
+    }
+
+    const workflow = await this.workflowRepository.findOne({
+      where: { supplierId },
+      order: { createdAt: 'DESC' },
+    });
+
+    const history = await this.historyRepository.find({
+      where: { supplierId },
+      order: { createdAt: 'DESC' },
+    });
+
+    // Get cheque document if exists
+    const chequeDocument = supplier.documents?.find(d => d.documentType === 'CHEQUE');
+
+    return {
+      supplier,
+      workflow,
+      history,
+      chequeDocument,
+    };
+  }
+
+  async createSupplierByRM(data: any, rmUserId: number) {
+    const customer = await this.customerRepository.findOne({
+      where: { id: data.customerId },
+    });
+
+    if (!customer) {
+      throw new Error('Customer not found');
+    }
+
+    if (customer.status !== 'completed') {
+      throw new Error('Customer must be completed before supplier onboarding');
+    }
+
+    const count = await this.getSupplierCountForLan(data.customerId);
+    if ((count || 0) >= this.MAX_SUPPLIERS_PER_LAN) {
+      throw new Error(`Maximum ${this.MAX_SUPPLIERS_PER_LAN} suppliers already added to this LAN`);
+    }
+
+    const supplierCode = data.supplierCode || `SUP-${Date.now()}`;
+
+    const supplier = this.supplierRepository.create({
+      customerId: data.customerId,
+      supplierName: data.supplierName,
+      supplierCode,
+      email: data.email || '',
+      contactNumber: data.contactNumber || data.mobileNumber || '',
+      address: data.address || null,
+      gstNumber: data.gstNumber || null,
+      panNumber: data.panNumber || null,
+      createdByUserId: rmUserId,
+      status: 'DRAFT',
+    });
+
+    const savedSupplier = await this.supplierRepository.save(supplier);
+
+    const workflow = this.workflowRepository.create({
+      workflowType: 'SUPPLIER_ONBOARDING',
+      supplierId: savedSupplier.id,
+      customerId: data.customerId,
+      currentStatus: 'DRAFT',
+      currentApproverRoleName: 'OPERATIONS_TEAM_L1',
+      remarks: 'Supplier created by RM',
+    });
+
+    const savedWorkflow = await this.workflowRepository.save(workflow);
+
+    await this.logHistory({
+      customerId: data.customerId,
+      supplierId: savedSupplier.id,
+      caseWorkflowId: savedWorkflow.id,
+      status: 'DRAFT',
+      previousStatus: 'None',
+      changedBy: rmUserId,
+      remarks: 'Supplier created by RM',
+    });
+
+    return { supplier: savedSupplier, workflow: savedWorkflow };
+  }
+
+  // Get all suppliers (for Completed/Rejected tab)
+  async getAllSuppliers() {
+    return this.supplierRepository.find({
+      relations: ['customer'],
+      order: { createdAt: 'DESC' },
+    });
   }
 }

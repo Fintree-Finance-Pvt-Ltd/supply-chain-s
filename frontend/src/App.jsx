@@ -36,6 +36,9 @@ import ApprovalScreen from './pages/management/ApprovalScreen'
 // Operations Pages
 import OperationsDashboard from './pages/operations/OperationsDashboard'
 import OperationsCaseScreen from './pages/operations/OperationsCaseScreen'
+import SupplierDashboard from './pages/supplier/SupplierDashboard'
+import SupplierCreate from './pages/supplier/SupplierCreate'
+import SupplierDetail from './pages/supplier/SupplierDetail'
 
 // Common
 import Unauthorized from './pages/common/Unauthorized'
@@ -229,6 +232,32 @@ function App() {
             }
           />
 
+          {/* Supplier Routes - accessible by RM and Operations */}
+          <Route
+            path="operations/suppliers"
+            element={
+              <ProtectedRoute allowedRoles={[ROLES.RELATIONSHIP_MANAGER, ROLES.OPERATIONS_TEAM_L1, ROLES.OPERATIONS_TEAM_L2, ROLES.OPERATIONS_HEAD]}>
+                <SupplierDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="operations/suppliers/create"
+            element={
+              <ProtectedRoute allowedRoles={[ROLES.RELATIONSHIP_MANAGER, ROLES.OPERATIONS_TEAM_L1]}>
+                <SupplierCreate />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="operations/suppliers/:id"
+            element={
+              <ProtectedRoute allowedRoles={[ROLES.RELATIONSHIP_MANAGER, ROLES.OPERATIONS_TEAM_L1, ROLES.OPERATIONS_HEAD]}>
+                <SupplierDetail />
+              </ProtectedRoute>
+            }
+          />
+
           {/* Default redirect - handled by MainLayout */}
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="/dashboard" element={<div />} />
@@ -239,4 +268,3 @@ function App() {
 }
 
 export default App
-
