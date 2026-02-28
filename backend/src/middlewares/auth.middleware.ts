@@ -63,6 +63,3 @@ export const authMiddleware = async (
     res.status(401).json({ message: error.message || 'Invalid token' });
   }
 };
-
-
-

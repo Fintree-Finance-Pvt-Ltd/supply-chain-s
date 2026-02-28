@@ -21,11 +21,14 @@ export class AuthService {
     if (!user) {
       throw new Error('Invalid credentials');
     }
-
+console.log('USER FOUND:', !!user);
     const isPasswordValid = await comparePassword(password, user.password);
     if (!isPasswordValid) {
       throw new Error('Invalid credentials');
     }
+console.log('DB HASH:', user?.password);
+
+console.log('PASSWORD MATCH:', isPasswordValid);
 
     // Get user roles
     const userRoles = await this.userRoleRepository.find({

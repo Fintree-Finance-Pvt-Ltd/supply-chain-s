@@ -57,6 +57,28 @@ app.get('/health', (req, res) => {
   });
 });
 
+// API root handler
+app.get('/api', (req, res) => {
+  res.json({
+    success: true,
+    message: 'Supply Chain Finance API',
+    version: '1.0.0',
+    endpoints: {
+      auth: '/api/auth',
+      users: '/api/users',
+      roles: '/api/roles',
+      customers: '/api/customers',
+      kyc: '/api/kyc',
+      credit: '/api/credit',
+      approvals: '/api/approvals',
+      documents: '/api/documents',
+      operations: '/api/operations',
+      workflows: '/api/workflows',
+      onboarding: '/api/onboarding'
+    }
+  });
+});
+
 // API routes
 app.use('/api', routes);
 
