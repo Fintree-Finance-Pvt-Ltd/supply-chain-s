@@ -433,19 +433,19 @@ export class CustomerService {
       return { success: false, message: 'Customer not found with this mobile number' };
     }
 
-    // Find customer in main database for OTP session
-    const customer = await this.customerRepository.findOne({
-      where: { mobile },
-    });
+    // Try to find customer in internal DB for OTP session
+    // const customer = await this.customerRepository.findOne({
+    //   where: { mobile },
+    // });
 
-    if (!customer) {
-      return { success: false, message: 'Customer not found. Please contact support.' };
-    }
+    // if (!customer) {
+    //   return { success: false, message: 'Customer not found. Please contact support.' };
+    // }
 
     // Check for existing valid OTP session
     const existingSession = await this.otpSessionRepository.findOne({
       where: {
-        customerId: customer.id,
+        customerId: lmsCustomer.id,
         identifier: mobile,
         identifierType: IdentifierType.MOBILE,
         status: OtpSessionStatus.SENT,
@@ -468,7 +468,7 @@ export class CustomerService {
 
     // Create new OTP session
     const otpSession = this.otpSessionRepository.create({
-      customerId: customer.id,
+      customerId: lmsCustomer.id,
       identifier: mobile,
       identifierType: IdentifierType.MOBILE,
       ownerType: 'COMPANY' as any,
