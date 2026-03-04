@@ -7,9 +7,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 dotenv.config();
 
-console.log('JWT Utils - JWT_SECRET from env:', process.env.JWT_SECRET);
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
-console.log('JWT Utils - JWT_SECRET being used:', JWT_SECRET);
 const JWT_EXPIRES_IN: SignOptions['expiresIn'] =
   (process.env.JWT_EXPIRES_IN as any) || '7d';
 const REFRESH_TOKEN_EXPIRES_IN_DAYS = parseInt(process.env.REFRESH_TOKEN_EXPIRES_IN_DAYS || '30');

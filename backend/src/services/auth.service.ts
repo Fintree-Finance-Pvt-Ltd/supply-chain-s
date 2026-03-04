@@ -26,9 +26,6 @@ console.log('USER FOUND:', !!user);
     if (!isPasswordValid) {
       throw new Error('Invalid credentials');
     }
-console.log('DB HASH:', user?.password);
-
-console.log('PASSWORD MATCH:', isPasswordValid);
 
     // Get user roles
     const userRoles = await this.userRoleRepository.find({
