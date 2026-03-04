@@ -25,44 +25,9 @@ router.post('/password', customerController.setPassword);
 
 router.post('/auth/refresh', validateBody([{ field: 'refreshToken', required: true }]), 
   (req: Request, res: Response) => customerController.refreshToken(req, res));
-router.use(authMiddleware);
-
-// =====================================================
-// 🔹 CUSTOMER LOGIN ROUTES (Public - no auth required)
-// =====================================================
-
-/**
- * POST /api/customers/login
- * Login with mobile number and password
- */
-
-/**
- * POST /api/customers/login/otp
- * Request OTP for login
- */
-
-
-// =====================================================
-// 🔹 AUTH ROUTES (Public - refresh token)
-// =====================================================
-
-/**
- * POST /api/auth/refresh
- * Refresh access token
- */
-
-
-// =====================================================
-// 🔹 PROTECTED ROUTES (Authentication required)
-// =====================================================
-
-// Apply customer auth middleware to all routes below
+// router.use(authMiddleware);
 router.use(customerAuthMiddleware);
 
-/**
- * POST /api/auth/logout
- * Logout customer
- */
 router.post('/auth/logout', (req: Request, res: Response) => customerController.logout(req, res));
 
 /**
