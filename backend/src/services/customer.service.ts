@@ -14,7 +14,7 @@ import {
   RefreshToken,
 } from "../entities";
 import { CASE_STATUS, CaseStatus } from "../config/constants";
-import { Repository } from "typeorm";
+import { LEGAL_TCP_SOCKET_OPTIONS, Repository } from "typeorm";
 import { hashPassword, comparePassword } from "../utils/password";
 import { generateOtp } from "../integrations/otp/generators";
 import { IdentifierType, OtpSessionStatus } from "../entities/OtpSession";
@@ -415,32 +415,11 @@ export class CustomerService {
         };
       }
 
-      // Step 2: Try to find in internal DB for password validation
-      let customer = await this.customerRepository.findOne({
-        where: { mobile },
-        relations: ["addresses"],
-      });
-
-      // If customer doesn't exist in internal DB, they can't login with password
-      if (!customer) {
-        return {
-          success: false,
-          message: "Customer not found. Please use OTP login.",
-        };
-      }
-
-      // Step 3: Check if password is set
-      if (!customer.password) {
-        return {
-          success: false,
-          message: "Password not set. Please set password first.",
-        };
-      }
-
+      console.log(lmsCustomer)
       // Step 4: Validate password
       const isPasswordValid = await comparePassword(
         password,
-        customer.password,
+        lmsCustomer.password,
       );
       if (!isPasswordValid) {
         return { success: false, message: "Invalid password" };
@@ -648,14 +627,15 @@ export class CustomerService {
    * Set or update customer password
    * READ ONLY from LMS supply_chain_loans table - customer must exist in LMS
    */
-  async setPassword(
-    mobile: string,
-    password: string,
-  ): Promise<{
-    success: boolean;
-    message?: string;
-  }> {
-    // First check if customer exists in LMS supply_chain_loans
+async setPassword(
+  mobile: string,
+  password: string,
+): Promise<{
+  success: boolean;
+  message?: string;
+}> {
+  try {
+    // Check if customer exists in LMS
     const lmsCustomer = await this.findCustomerByMobile(mobile);
 
     if (!lmsCustomer) {
@@ -665,25 +645,31 @@ export class CustomerService {
       };
     }
 
-    // Then check if customer exists in internal DB
-    const customer = await this.customerRepository.findOne({
-      where: { mobile },
-    });
-
-    if (!customer) {
-      return {
-        success: false,
-        message: "Customer not found. Please contact support.",
-      };
-    }
-
+    // Hash password
     const hashedPassword = await hashPassword(password);
-    customer.password = hashedPassword;
-    await this.customerRepository.save(customer);
 
-    return { success: true, message: "Password set successfully" };
+    // Update password in LMS database
+    await LMSDataSource.query(
+      `
+      UPDATE supply_chain_loans
+      SET password = ?
+      WHERE applicant_mobile = ?
+      `,
+      [hashedPassword, mobile]
+    );
+
+    return {
+      success: true,
+      message: "Password set successfully",
+    };
+  } catch (error: any) {
+    console.error("Set password error:", error);
+    return {
+      success: false,
+      message: "Unable to set password",
+    };
   }
-
+}
   /**
    * Map customer to basic info for localStorage
    */
