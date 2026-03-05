@@ -15,7 +15,6 @@ AppDataSource.initialize()
     // Initialize LMS database connection
     try {
       await initializeLMSDatabase();
-      console.log('✅ LMS Database connection initialized');
     } catch (lmsError) {
       console.warn('⚠️ LMS Database connection failed - LMS features may not work:', lmsError);
     }

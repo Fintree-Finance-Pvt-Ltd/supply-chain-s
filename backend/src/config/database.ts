@@ -86,7 +86,7 @@ export const AppDataSource = new DataSource({
   password: process.env.DB_PASSWORD || '',
   database: process.env.DB_DATABASE || 'supplychainnew',
   synchronize: false, // Set to false to use migrations exclusively
-  logging: process.env.NODE_ENV !== 'production',
+  logging: false,
 
   // Use explicitly imported entities instead of glob pattern
   // This ensures TypeORM can find all entity metadata
