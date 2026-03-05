@@ -26,6 +26,38 @@ router.post('/password', customerController.setPassword);
 router.post('/auth/refresh', validateBody([{ field: 'refreshToken', required: true }]), 
   (req: Request, res: Response) => customerController.refreshToken(req, res));
 // router.use(authMiddleware);
+
+
+
+
+// Get single customer by ID (must be AFTER /basic routes)
+router.get('/:id', customerController.getCustomerById);
+
+// RM can update
+router.put(
+  '/:id',
+  roleMiddleware([ROLES.RELATIONSHIP_MANAGER]),
+  customerController.updateCustomer
+);
+
+// RM can submit
+router.post(
+  '/:id/submit',
+  roleMiddleware([ROLES.RELATIONSHIP_MANAGER]),
+  customerController.submitCase
+);
+
+// RM can create and manage customers
+router.post(
+  '/',
+  roleMiddleware([ROLES.RELATIONSHIP_MANAGER]),
+  customerController.createCustomer
+);
+
+// All authenticated users can view
+router.get('/', customerController.getCustomers);
+
+
 router.use(customerAuthMiddleware);
 
 router.post('/auth/logout', (req: Request, res: Response) => customerController.logout(req, res));
@@ -188,15 +220,7 @@ router.get('/profile/bank-details', (req: Request, res: Response) => customerCon
 // 🔹 EXISTING CUSTOMER MANAGEMENT ROUTES (RM/Admin)
 // =====================================================
 
-// RM can create and manage customers
-router.post(
-  '/',
-  roleMiddleware([ROLES.RELATIONSHIP_MANAGER]),
-  customerController.createCustomer
-);
 
-// All authenticated users can view
-router.get('/', customerController.getCustomers);
 
 // =====================================================
 // 🔹 SIMPLIFIED CUSTOMER BASIC INFO API (must be BEFORE /:id routes)
@@ -214,21 +238,6 @@ router.get('/basic', customerController.getAllCustomersBasic);
  */
 // router.get('/customerDetails', customerController.getCustomerBasicById);
 
-// Get single customer by ID (must be AFTER /basic routes)
-router.get('/:id', customerController.getCustomerById);
 
-// RM can update
-router.put(
-  '/:id',
-  roleMiddleware([ROLES.RELATIONSHIP_MANAGER]),
-  customerController.updateCustomer
-);
-
-// RM can submit
-router.post(
-  '/:id/submit',
-  roleMiddleware([ROLES.RELATIONSHIP_MANAGER]),
-  customerController.submitCase
-);
 
 export default router;
