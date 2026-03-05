@@ -1496,6 +1496,25 @@ async setPassword(
         };
       }
 
+
+        const originalLanResult = await LMSDataSource.query(
+      `
+      SELECT lan
+      FROM supply_chain_sanctions
+      WHERE lender = ?
+      LIMIT 1
+      `,
+      [lan],
+    );
+
+    const originalLan = originalLanResult?.[0]?.lan;
+
+    if (!originalLan) {
+      return {
+        success: false,
+        message: "LAN not found",
+      };
+    }
       const results = await LMSDataSource.query(
         `
       SELECT 
@@ -1510,7 +1529,7 @@ async setPassword(
       FROM supply_chain_allocation
       WHERE lan = ? AND collection_utr = ?
       `,
-        [lan, utr],
+        [originalLan, utr],
       );
 
       if (!results || results.length === 0) {
