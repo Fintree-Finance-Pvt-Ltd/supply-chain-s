@@ -486,8 +486,8 @@ export class CustomerService {
       const timeSinceLastSent =
         Date.now() - new Date(existingSession.created_at).getTime();
 
-      if (timeSinceLastSent < 300000) {
-        const remainingTime = Math.ceil((300000 - timeSinceLastSent) / 1000);
+      if (timeSinceLastSent < 30000) {
+        const remainingTime = Math.ceil((30000 - timeSinceLastSent) / 1000);
         return {
           success: false,
           message: `Please wait ${remainingTime} seconds before requesting new OTP`,
