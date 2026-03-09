@@ -1211,6 +1211,69 @@ router.post(
 );
 
 /**
+ * POST /api/workflows/suppliers/:supplierId/bank-details
+ * Update bank details manually
+ */
+router.post(
+  '/suppliers/:supplierId/bank-details',
+  checkRole(['operations_team_l1']),
+  async (req: Request, res: Response) => {
+    try {
+      const user = (req as any).user;
+      const { supplierId } = req.params;
+      const { bankAccountNumber, ifscCode, bankName, accountHolderName, micrCode, chequeNumber } = req.body;
+
+      const result = await supplierOnboardingService.updateBankDetails(
+        Number(supplierId),
+        {
+          bankAccountNumber,
+          ifscCode,
+          bankName,
+          accountHolderName,
+          micrCode,
+          chequeNumber,
+        },
+        user.id
+      );
+
+      res.json({
+        success: true,
+        message: 'Bank details updated successfully',
+        data: result,
+      });
+    } catch (error: any) {
+      res.status(400).json({ success: false, message: error.message });
+    }
+  }
+);
+
+/**
+ * DELETE /api/workflows/suppliers/:supplierId/cheque
+ * Delete cheque document and associated bank details
+ */
+router.delete(
+  '/suppliers/:supplierId/cheque',
+  checkRole(['operations_team_l1']),
+  async (req: Request, res: Response) => {
+    try {
+      const { supplierId } = req.params;
+
+      const result = await supplierOnboardingService.deleteChequeDocument(
+        Number(supplierId)
+      );
+
+      res.json({
+        success: true,
+        message: 'Cheque document deleted successfully',
+        data: result,
+      });
+    } catch (error: any) {
+      res.status(400).json({ success: false, message: error.message });
+    }
+  }
+);
+
+/**
  * POST /api/workflows/suppliers/:supplierId/ops-head/decision
  * Operations Head final approve/reject
  */

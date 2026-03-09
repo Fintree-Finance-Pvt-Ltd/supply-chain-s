@@ -65,6 +65,25 @@ export const supplierService = {
   },
 
   // ===============================
+  // Update Bank Details
+  // ===============================
+  updateBankDetails(supplierId, bankData) {
+    return api.post(
+      `/workflows/suppliers/${supplierId}/bank-details`,
+      bankData
+    )
+  },
+
+  // ===============================
+  // Delete Cheque Document
+  // ===============================
+  deleteChequeDocument(supplierId) {
+    return api.delete(
+      `/workflows/suppliers/${supplierId}/cheque`
+    )
+  },
+
+  // ===============================
   // Ops Head Decision
   // ===============================
   opsHeadDecision(supplierId, approved, remarks) {

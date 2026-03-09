@@ -374,7 +374,30 @@ export class SupplierOnboardingService {
     });
     const savedDoc = await this.supplierDocRepository.save(doc);
 
-    const extracted = await this.chequeParser.extractBankDetailsFromCheque(file.path);
+    // Call OCR API to extract bank details
+    // Pass supplier name as account holder name since API requires it
+    const extracted = await this.chequeParser.extractBankDetailsFromCheque(file, supplier.supplierName);
+
+    // Check if image quality is acceptable
+    const isCompleteImage = extracted.quality_check?.is_complete_image === 'yes';
+    
+    // If quality check failed, return warning but still save document
+    let warningMessage: string | undefined;
+    if (!isCompleteImage) {
+      warningMessage = extracted.quality_check?.message || 'Please upload a clear cheque image';
+    }
+
+    // If OCR failed to extract data (empty fields), return appropriate message
+    if (!extracted.bank_account_number && !extracted.bank_name && !extracted.account_holder_name) {
+      // Still save the document but return warning about manual entry needed
+      return {
+        chequeDocument: savedDoc,
+        bankDetails: null,
+        extracted: extracted.raw_response,
+        warning: warningMessage || 'Unable to read cheque. Please enter details manually.',
+        ocrSuccess: false,
+      };
+    }
 
     let bank = await this.supplierBankRepository.findOne({ where: { supplierId } });
     if (!bank) {
@@ -384,6 +407,8 @@ export class SupplierOnboardingService {
         ifscCode: extracted.ifsc_code,
         bankName: extracted.bank_name,
         accountHolderName: extracted.account_holder_name,
+        micrCode: extracted.micr_code || '',
+        chequeNumber: extracted.cheque_number || '',
         chequeDocumentId: savedDoc.id,
       });
     } else {
@@ -391,6 +416,8 @@ export class SupplierOnboardingService {
       bank.ifscCode = extracted.ifsc_code;
       bank.bankName = extracted.bank_name;
       bank.accountHolderName = extracted.account_holder_name;
+      bank.micrCode = extracted.micr_code || '';
+      bank.chequeNumber = extracted.cheque_number || '';
       bank.chequeDocumentId = savedDoc.id;
     }
     const savedBank = await this.supplierBankRepository.save(bank);
@@ -399,7 +426,63 @@ export class SupplierOnboardingService {
       chequeDocument: savedDoc,
       bankDetails: savedBank,
       extracted,
+      ocrSuccess: true,
+      warning: warningMessage,
     };
+  }
+
+  // Update bank details manually
+  async updateBankDetails(
+    supplierId: number,
+    data: {
+      bankAccountNumber: string;
+      ifscCode: string;
+      bankName: string;
+      accountHolderName: string;
+      micrCode?: string;
+      chequeNumber?: string;
+    },
+    userId: number
+  ) {
+    const supplier = await this.supplierRepository.findOne({ where: { id: supplierId } });
+    if (!supplier) throw new Error('Supplier not found');
+
+    let bank = await this.supplierBankRepository.findOne({ where: { supplierId } });
+    if (!bank) {
+      bank = this.supplierBankRepository.create({
+        supplierId,
+        bankAccountNumber: data.bankAccountNumber,
+        ifscCode: data.ifscCode,
+        bankName: data.bankName,
+        accountHolderName: data.accountHolderName,
+        micrCode: data.micrCode || '',
+        chequeNumber: data.chequeNumber || '',
+      });
+    } else {
+      bank.bankAccountNumber = data.bankAccountNumber;
+      bank.ifscCode = data.ifscCode;
+      bank.bankName = data.bankName;
+      bank.accountHolderName = data.accountHolderName;
+      bank.micrCode = data.micrCode || '';
+      bank.chequeNumber = data.chequeNumber || '';
+    }
+
+    const savedBank = await this.supplierBankRepository.save(bank);
+    return savedBank;
+  }
+
+  // Delete cheque document and associated bank details
+  async deleteChequeDocument(supplierId: number) {
+    const supplier = await this.supplierRepository.findOne({ where: { id: supplierId } });
+    if (!supplier) throw new Error('Supplier not found');
+
+    // Delete bank details first
+    await this.supplierBankRepository.delete({ supplierId });
+
+    // Delete cheque document
+    await this.supplierDocRepository.delete({ supplierId, documentType: 'CHEQUE' });
+
+    return { success: true };
   }
 
   // Ops Head decision (approve/reject)

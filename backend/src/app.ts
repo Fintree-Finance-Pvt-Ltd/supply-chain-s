@@ -13,8 +13,10 @@ dotenv.config();
 
 const app: Application = express();
 
-// Security middleware
-app.use(helmet());
+// Security middleware - configure for static file serving
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
+}));
 
 // CORS configuration - handle multiple origins properly
 const allowedOrigins = process.env.CORS_ORIGIN
@@ -45,8 +47,14 @@ startBureauPdfCron();
 // Aadhaar Webhook route (must be public, before auth)
 app.use('/api', aadhaarWebhookRoutes);
 
-// Serve uploaded files
-app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+// Serve uploaded files with CORS headers
+app.use('/uploads', express.static(path.join(__dirname, '../uploads'), {
+  setHeaders: (res) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  },
+}));
 
 // Health check
 app.get('/health', (req, res) => {

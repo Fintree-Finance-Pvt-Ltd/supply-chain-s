@@ -21,6 +21,12 @@ export class SupplierBankDetail {
   @Column({ type: 'varchar', length: 120 })
   accountHolderName: string;
 
+  @Column({ type: 'varchar', length: 20, nullable: true })
+  micrCode: string;
+
+  @Column({ type: 'varchar', length: 20, nullable: true })
+  chequeNumber: string;
+
   @Column({ nullable: true })
   chequeDocumentId?: number;
 
