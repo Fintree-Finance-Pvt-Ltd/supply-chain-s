@@ -64,6 +64,9 @@ export const API_ENDPOINTS = {
   WORKFLOW_CUSTOMER_BANK_DETAILS: (id) => `/workflows/customers/${id}/bank-details`,
   WORKFLOW_DOCUMENT_UPDATE: (id) => `/workflows/documents/${id}`,
 
+  // Sanction Limits
+  WORKFLOW_SANCTION_LIMITS: (customerId) => `/workflows/customers/${customerId}/sanction-limits`,
+
   // Supplier Workflow
   WORKFLOW_SUPPLIER_CREATE: '/workflows/suppliers/create',
   WORKFLOW_SUPPLIER_SUBMIT: (id) => `/workflows/suppliers/${id}/submit`,

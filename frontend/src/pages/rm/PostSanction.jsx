@@ -13,6 +13,14 @@ const PostSanction = () => {
   const navigate = useNavigate()
   const dispatch = useDispatch()
   const { currentCase, isLoading } = useSelector((state) => state.cases)
+  const { user } = useSelector((state) => state.auth)
+
+  // Only RM and MD can access sanction details
+  const canAccessSanctionDetails = () => {
+    if (!user) return false;
+    const role = (user.role || '').toLowerCase();
+    return role === 'relationship_manager' || role === 'md';
+  };
 
   const [documents, setDocuments] = useState([])
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -135,7 +143,7 @@ const PostSanction = () => {
             </div>
           </div>
 
-          {currentCase.creditSanctions && currentCase.creditSanctions.length > 0 && (
+          {currentCase.creditSanctions && currentCase.creditSanctions.length > 0 && canAccessSanctionDetails() && (
             <div className="card">
               <h2 className="text-xl font-semibold text-gray-900 mb-4">Sanction Details</h2>
               <div className="grid grid-cols-2 gap-4">

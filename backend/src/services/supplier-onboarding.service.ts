@@ -5,6 +5,7 @@ import { CaseWorkflow } from '../entities/CaseWorkflow';
 import { CaseStatusHistory } from '../entities/CaseStatusHistory';
 import { SupplierBankDetail } from '../entities/SupplierBankDetail';
 import { SupplierDocument } from '../entities/SupplierDocument';
+import { SanctionLimitHistory } from '../entities/SanctionLimitHistory';
 import { ChequeParserService } from './cheque-parser.service';
 
 export class SupplierOnboardingService {
@@ -14,6 +15,7 @@ export class SupplierOnboardingService {
   private historyRepository = AppDataSource.getRepository(CaseStatusHistory);
   private supplierDocRepository = AppDataSource.getRepository(SupplierDocument);
   private supplierBankRepository = AppDataSource.getRepository(SupplierBankDetail);
+  private sanctionHistoryRepository = AppDataSource.getRepository(SanctionLimitHistory);
   private chequeParser = new ChequeParserService();
 
   MAX_SUPPLIERS_PER_LAN = 20;
@@ -75,8 +77,13 @@ export class SupplierOnboardingService {
 
   // Ops L1 creates supplier in DRAFT status
   async createSupplierByOpsL1(data: any, opsL1UserId: number) {
-    const customer = await this.customerRepository.findOne({ where: { id: data.customerId } });
-    if (!customer || !customer.lanId) throw new Error('Customer must be approved with LAN ID');
+    // Check if customer has a valid LAN ID from sanction_limit_history table
+    const latestSanction = await this.sanctionHistoryRepository.findOne({
+      where: { customerId: data.customerId },
+      order: { createdAt: 'DESC' }
+    });
+    
+    if (!latestSanction || !latestSanction.lanId) throw new Error('Customer must be approved with LAN ID');
 
     const supplier = this.supplierRepository.create({
       customerId: data.customerId,

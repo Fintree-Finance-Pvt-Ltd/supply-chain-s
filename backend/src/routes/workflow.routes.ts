@@ -156,14 +156,46 @@ router.patch('/customers/:customerId/bank-details', checkRole(['relationship_man
 /**
  * POST /api/workflows/customers/:customerId/credit-l1
  * Credit Team L1 reviews and approves/rejects
+ * Now supports multiple partner sanction limits (FFPL, MFL, KITE)
+ * NOTE: Credit L1/L2 can only edit sanctionAmount.
+ * CEO can edit tenure and interestRate.
+ * Only MD can edit all fields.
  */
 router.post('/customers/:customerId/credit-l1', checkRole(['credit_team_l1']), async (req: Request, res: Response) => {
   try {
     const { customerId } = req.params;
-    const { approved, remarks, sanctionAmount, tenure, interestRate, conditions, penalCharges, processingFees } = req.body;
+    const { approved, remarks, partnerSanctions } = req.body;
     const user = (req as any).user;
+    const userRole = (user?.roles?.[0]?.name || '').toLowerCase();
 
-    const sanctionData = sanctionAmount ? { sanctionAmount, tenure, interestRate, conditions, penalCharges, processingFees } : undefined;
+    // Check if user is trying to modify sanction data
+    const isModifyingSanctions = approved && partnerSanctions && Array.isArray(partnerSanctions) && partnerSanctions.length > 0;
+    
+    // Credit team can only modify sanctionAmount (not tenure, ROI, etc.)
+    if (isModifyingSanctions && userRole === 'credit_team_l1') {
+      // Validate that credit team only sends sanctionAmount
+      for (const ps of partnerSanctions) {
+        if (ps.tenure || ps.interestRate || ps.penalCharges || ps.processingFees || ps.conditions) {
+          res.status(403).json({
+            success: false,
+            message: 'Credit L1 can only modify sanctionAmount. ROI, Tenure, and other terms cannot be edited.',
+          });
+          return;
+        }
+      }
+    }
+
+    // Validate partnerSanctions if provided
+    let sanctionData = undefined;
+    if (isModifyingSanctions) {
+      // Validate each partner sanction entry
+      for (const ps of partnerSanctions) {
+        if (!ps.partner || !ps.sanctionAmount) {
+          throw new Error('Each partner sanction must have partner and sanctionAmount');
+        }
+      }
+      sanctionData = { partnerSanctions };
+    }
 
     const workflow = await customerOnboardingService.creditL1Approve(
       parseInt(customerId),
@@ -187,14 +219,66 @@ router.post('/customers/:customerId/credit-l1', checkRole(['credit_team_l1']), a
 });
 
 /**
+ * GET /api/workflows/customers/:customerId/sanction-limits
+ * Get all sanction limits for a customer (all partner sanctions)
+ * Restricted to RM, MD, and CEO roles
+ */
+router.get('/customers/:customerId/sanction-limits', async (req: Request, res: Response) => {
+  try {
+    // Check if user has RM, MD, or CEO role
+    const user = (req as any).user;
+    const userRoles = user.roles.map((r: any) => r.name);
+    if (!userRoles.includes('relationship_manager') && !userRoles.includes('md') && !userRoles.includes('ceo')) {
+      return res.status(403).json({
+        success: false,
+        message: 'Unauthorized to access sanction details',
+      });
+    }
+
+    const { customerId } = req.params;
+    const sanctionLimits = await customerOnboardingService.getSanctionLimitsByCustomerId(
+      parseInt(customerId)
+    );
+
+    res.json({
+      success: true,
+      data: sanctionLimits,
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+});
+
+/**
  * POST /api/workflows/customers/:customerId/credit-l2
  * Credit Team L2 reviews and approves/rejects (generates LAN ID if approved)
+ * NOTE: Credit L2 can only edit sanctionAmount.
+ * CEO can edit tenure and interestRate.
+ * Only MD can edit all fields.
  */
 router.post('/customers/:customerId/credit-l2', checkRole(['credit_team_l2']), async (req: Request, res: Response) => {
   try {
     const { customerId } = req.params;
     const { approved, remarks, sanctionAmount, tenure, interestRate, conditions, penalCharges, processingFees } = req.body;
     const user = (req as any).user;
+    const userRole = (user?.roles?.[0]?.name || '').toLowerCase();
+
+    // Check if user is trying to modify sanction data
+    const isModifyingSanctions = approved && sanctionAmount;
+    
+    // Credit team can only modify sanctionAmount (not tenure, ROI, etc.)
+    if (isModifyingSanctions && userRole === 'credit_team_l2') {
+      if (tenure || interestRate || penalCharges || processingFees || conditions) {
+        res.status(403).json({
+          success: false,
+          message: 'Credit L2 can only modify sanctionAmount. ROI, Tenure, and other terms cannot be edited.',
+        });
+        return;
+      }
+    }
 
     const sanctionData = sanctionAmount ? { sanctionAmount, tenure, interestRate, conditions, penalCharges, processingFees } : undefined;
 
@@ -222,14 +306,28 @@ router.post('/customers/:customerId/credit-l2', checkRole(['credit_team_l2']), a
 /**
  * POST /api/workflows/customers/:customerId/ceo-approve
  * CEO reviews and approves/rejects
+ * NOTE: CEO can edit sanctionAmount, tenure and interestRate.
+ * Only MD can edit all fields including penalCharges, processingFees, conditions.
  */
 router.post('/customers/:customerId/ceo-approve', checkRole(['ceo']), async (req: Request, res: Response) => {
   try {
     const { customerId } = req.params;
     const { approved, remarks, sanctionAmount, tenure, interestRate, conditions, penalCharges, processingFees } = req.body;
     const user = (req as any).user;
+    const userRole = (user?.roles?.[0]?.name || '').toLowerCase();
 
-    const sanctionData = sanctionAmount ? { sanctionAmount, tenure, interestRate, conditions, penalCharges, processingFees } : undefined;
+    // CEO can modify sanctionAmount, tenure, and interestRate (not penalCharges, processingFees, conditions)
+    if (approved) {
+      if (penalCharges || processingFees || conditions) {
+        res.status(403).json({
+          success: false,
+          message: 'CEO can only modify sanctionAmount, tenure and interestRate. Penal charges, processing fees, and conditions can only be edited by MD.',
+        });
+        return;
+      }
+    }
+
+    const sanctionData = (sanctionAmount || tenure || interestRate) ? { sanctionAmount, tenure, interestRate, conditions, penalCharges, processingFees } : undefined;
 
     const workflow = await customerOnboardingService.ceoApprove(
       parseInt(customerId),
@@ -287,14 +385,24 @@ router.post('/customers/:customerId/rm-submit-md', checkRole(['relationship_mana
 /**
  * POST /api/workflows/customers/:customerId/md-approve
  * MD reviews and approves/rejects (final credit decision)
+ * NOTE: MD can edit all sanction fields including sanctionAmount, tenure, ROI, etc.
  */
 router.post('/customers/:customerId/md-approve', checkRole(['md']), async (req: Request, res: Response) => {
   try {
     const { customerId } = req.params;
-    const { approved, remarks, sanctionAmount, tenure, interestRate, conditions, penalCharges, processingFees } = req.body;
+    const { approved, remarks, sanctionAmount, tenure, interestRate, conditions, penalCharges, processingFees, partnerSanctions } = req.body;
     const user = (req as any).user;
 
-    const sanctionData = sanctionAmount ? { sanctionAmount, tenure, interestRate, conditions, penalCharges, processingFees } : undefined;
+    let sanctionData;
+    
+    // Support both single sanction and partner-specific sanctions
+    if (partnerSanctions && Array.isArray(partnerSanctions) && partnerSanctions.length > 0) {
+      // MD is providing partner-specific sanctions
+      sanctionData = { partnerSanctions };
+    } else if (sanctionAmount) {
+      // Legacy single sanction format
+      sanctionData = { sanctionAmount, tenure, interestRate, conditions, penalCharges, processingFees };
+    }
 
     const workflow = await customerOnboardingService.mdApprove(
       parseInt(customerId),

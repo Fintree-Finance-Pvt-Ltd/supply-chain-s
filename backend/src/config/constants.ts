@@ -140,4 +140,13 @@ export const ADDRESS_TYPES = {
   OWNED: 'Owned',
 } as const;
 
+// Partners/Lenders for sanction limits
+export const PARTNERS = {
+  FFPL: 'FFPL',
+  MFL: 'MFL',
+  KITE: 'KITE',
+} as const;
+
+export type Partner = typeof PARTNERS[keyof typeof PARTNERS];
+
 

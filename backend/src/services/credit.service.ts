@@ -1,5 +1,5 @@
 import { AppDataSource } from '../config/database';
-import { CreditSanction, Customer } from '../entities';
+import { CreditSanction, Customer, SanctionLimitHistory } from '../entities';
 import { ApprovalService } from './approval.service';
 import { CustomerService } from './customer.service';
 import { CASE_STATUS, APPROVAL_FLOW_TYPES } from '../config/constants';
@@ -7,11 +7,13 @@ import { Repository } from 'typeorm';
 
 export class CreditService {
   private creditSanctionRepository: Repository<CreditSanction>;
+  private sanctionHistoryRepository: Repository<SanctionLimitHistory>;
   private approvalService: ApprovalService;
   private customerService: CustomerService;
 
   constructor() {
     this.creditSanctionRepository = AppDataSource.getRepository(CreditSanction);
+    this.sanctionHistoryRepository = AppDataSource.getRepository(SanctionLimitHistory);
     this.approvalService = new ApprovalService();
     this.customerService = new CustomerService();
   }
@@ -95,6 +97,17 @@ export class CreditService {
 
     Object.assign(sanction, data);
     return await this.creditSanctionRepository.save(sanction);
+  }
+
+  /**
+   * Get all sanction limits for a customer based on customerId
+   * Returns all available partner sanctions (FFPL, MFL, KITE) from sanction_limit_history
+   */
+  async getSanctionLimitsByCustomerId(customerId: number): Promise<SanctionLimitHistory[]> {
+    return await this.sanctionHistoryRepository.find({
+      where: { customerId },
+      order: { createdAt: 'DESC' },
+    });
   }
 }
 

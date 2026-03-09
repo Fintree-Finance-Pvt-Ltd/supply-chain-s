@@ -5,7 +5,7 @@ export const workflowService = {
     // Customer Onboarding
     createCustomer: (data) => api.post(API_ENDPOINTS.WORKFLOW_CUSTOMER_CREATE, data),
     submitCustomer: (id, remarks, pushedTo) => api.post(API_ENDPOINTS.WORKFLOW_CUSTOMER_SUBMIT(id), { remarks, pushedTo }),
-    approveCreditL1: (id, approved, remarks, sanctionData) => api.post(API_ENDPOINTS.WORKFLOW_CUSTOMER_CREDIT_L1(id), { approved, remarks, ...sanctionData }),
+    approveCreditL1: (id, approved, remarks, sanctionData) => api.post(API_ENDPOINTS.WORKFLOW_CUSTOMER_CREDIT_L1(id), { approved, remarks, partnerSanctions: sanctionData?.partnerSanctions }),
     approveCreditL2: (id, approved, remarks, sanctionData) => api.post(API_ENDPOINTS.WORKFLOW_CUSTOMER_CREDIT_L2(id), { approved, remarks, ...sanctionData }),
     approveCEO: (id, approved, remarks, sanctionData) => api.post(API_ENDPOINTS.WORKFLOW_CUSTOMER_CEO(id), { approved, remarks, ...sanctionData }),
     submitRMToMD: (id, remarks, sanctionData) => api.post(`/workflows/customers/${id}/rm-submit-md`, { remarks, ...sanctionData }),
@@ -15,6 +15,9 @@ export const workflowService = {
     approveOpsHead: (id, remarks) => api.post(API_ENDPOINTS.WORKFLOW_CUSTOMER_OPS_HEAD(id), { remarks }),
     updateBankDetails: (id, data) => api.patch(API_ENDPOINTS.WORKFLOW_CUSTOMER_BANK_DETAILS(id), data),
     updateDocumentMetadata: (id, data) => api.patch(API_ENDPOINTS.WORKFLOW_DOCUMENT_UPDATE(id), data),
+
+    // Sanction Limits
+    getSanctionLimits: (customerId) => api.get(API_ENDPOINTS.WORKFLOW_SANCTION_LIMITS(customerId)),
 
     // Supplier Onboarding
     createSupplier: (data) => api.post(API_ENDPOINTS.WORKFLOW_SUPPLIER_CREATE, data),

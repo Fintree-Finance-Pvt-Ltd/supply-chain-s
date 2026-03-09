@@ -13,6 +13,9 @@ import StatusBadge from '../../components/StatusBadge'
 import ApprovalTimeline from '../../components/ApprovalTimeline'
 import CustomerFullDetails from '../../components/CustomerFullDetails'
 
+// Partner list for multi-partner sanction support
+const PARTNERS = ['FFPL', 'MFL', 'KITE']
+
 const CreditCaseDetail = () => {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -20,14 +23,20 @@ const CreditCaseDetail = () => {
   const { user } = useSelector((state) => state.auth)
   const { currentCase, isLoading, error } = useSelector((state) => state.cases)
 
-  const [sanctionData, setSanctionData] = useState({
-    sanctionAmount: '',
-    tenure: '',
-    interestRate: '',
-    conditions: '',
-    penalCharges: '',
-    processingFees: '',
-  })
+  // Store sanction data for each partner
+  const [partnerSanctions, setPartnerSanctions] = useState(
+    PARTNERS.reduce((acc, partner) => ({
+      ...acc,
+      [partner]: {
+        sanctionAmount: '',
+        tenure: '',
+        interestRate: '',
+        conditions: '',
+        penalCharges: '',
+        processingFees: '',
+      }
+    }), {})
+  )
 
   const [remarks, setRemarks] = useState('')
   const [docRemarks, setDocRemarks] = useState({})
@@ -45,27 +54,126 @@ const CreditCaseDetail = () => {
 
   useEffect(() => {
     if (currentCase) {
-      setSanctionData({
-        sanctionAmount: currentCase.creditSanctions?.[0]?.sanctionAmount || '',
-        tenure: currentCase.creditSanctions?.[0]?.tenure || '',
-        interestRate: currentCase.creditSanctions?.[0]?.interestRate || '',
-        conditions: currentCase.creditSanctions?.[0]?.conditions || '',
-        penalCharges: currentCase.creditSanctions?.[0]?.penalCharges || '',
-        processingFees: currentCase.creditSanctions?.[0]?.processingFees || '',
+      // Load existing sanction data for each partner from creditSanctions
+      // For backward compatibility, load from first creditSanction if available
+      const existingSanctions = currentCase.creditSanctions?.[0] || {}
+      
+      setPartnerSanctions({
+        FFPL: {
+          sanctionAmount: existingSanctions.sanctionAmount || '',
+          tenure: existingSanctions.tenure || '',
+          interestRate: existingSanctions.interestRate || '',
+          conditions: existingSanctions.conditions || '',
+          penalCharges: existingSanctions.penalCharges || '',
+          processingFees: existingSanctions.processingFees || '',
+        },
+        MFL: {
+          sanctionAmount: '',
+          tenure: '',
+          interestRate: '',
+          conditions: '',
+          penalCharges: '',
+          processingFees: '',
+        },
+        KITE: {
+          sanctionAmount: '',
+          tenure: '',
+          interestRate: '',
+          conditions: '',
+          penalCharges: '',
+          processingFees: '',
+        },
       })
-      setRemarks(currentCase.creditSanctions?.[0]?.creditRemarks || '')
+      setRemarks(existingSanctions.creditRemarks || '')
     }
   }, [currentCase])
 
+  // Define which roles can access (view and edit) sanction details
+  const CAN_VIEW_SANCTION_ROLES = ['relationship_manager', 'credit_team_l1', 'credit_team_l2', 'ceo', 'md'];
+  
+  const canAccessSanctionDetails = () => {
+    if (!user) return false;
+    const role = (user.role || '').toLowerCase();
+    return CAN_VIEW_SANCTION_ROLES.includes(role);
+  };
+  
+  // Role-based field visibility helpers for sanction fields
+  const canViewSanctionAmount = () => {
+    const role = (user?.role || '').toLowerCase();
+    return ['credit_team_l1', 'credit_team_l2', 'ceo', 'md'].includes(role);
+  };
+  
+  const canEditSanctionAmount = () => {
+    const role = (user?.role || '').toLowerCase();
+    if (!currentCase) return false;
+    const status = currentCase.status;
+    if (role === 'credit_team_l1' && (status === 'submitted' || status === 'credit_l1_review')) return true;
+    if (role === 'credit_team_l2' && (status === 'credit_l1_approved' || status === 'credit_l2_review')) return true;
+    if (role === 'ceo' && (status === 'credit_l2_approved' || status === 'ceo_review')) return true;
+    if (role === 'md' && (status === 'ceo_approved' || status === 'md_pending_terms' || status === 'md_review')) return true;
+    return false;
+  };
+  
+  const canViewROI = () => {
+    const role = (user?.role || '').toLowerCase();
+    return ['ceo', 'md'].includes(role);
+  };
+  
+  const canEditROI = () => {
+    const role = (user?.role || '').toLowerCase();
+    if (!currentCase) return false;
+    const status = currentCase.status;
+    if (role === 'ceo' && (status === 'credit_l2_approved' || status === 'ceo_review')) return true;
+    if (role === 'md' && (status === 'ceo_approved' || status === 'md_pending_terms' || status === 'md_review')) return true;
+    return false;
+  };
+  
+  const canViewTenure = () => {
+    const role = (user?.role || '').toLowerCase();
+    return ['ceo', 'md'].includes(role);
+  };
+  
+  const canEditTenure = () => {
+    const role = (user?.role || '').toLowerCase();
+    if (!currentCase) return false;
+    const status = currentCase.status;
+    if (role === 'ceo' && (status === 'credit_l2_approved' || status === 'ceo_review')) return true;
+    if (role === 'md' && (status === 'ceo_approved' || status === 'md_pending_terms' || status === 'md_review')) return true;
+    return false;
+  };
+  
   const isEditable = () => {
     if (!currentCase || !user) return false
-    const role = user.role.toLowerCase()
+    const role = (user.role || '').toLowerCase()
     const status = currentCase.status
 
-    if (role === 'credit_team_l1' && status === 'submitted') return true // RM submitted to Credit (L1 picks up)
-    if (role === 'credit_team_l1' && status === 'credit_l1_review') return true
-    if (role === 'credit_team_l2' && status === 'credit_l1_approved') return true // L1 approved, L2 picks up
-    if (role === 'credit_team_l2' && status === 'credit_l2_review') return true
+    // For Credit L1 - can edit sanction amount in submitted or credit_l1_review status
+    if (role === 'credit_team_l1' && (status === 'submitted' || status === 'credit_l1_review')) return true;
+    // For Credit L2 - can edit sanction amount in credit_l1_approved or credit_l2_review status
+    if (role === 'credit_team_l2' && (status === 'credit_l1_approved' || status === 'credit_l2_review')) return true;
+    // For CEO - can edit sanction terms in ceo_review status
+    if (role === 'ceo' && (status === 'credit_l2_approved' || status === 'ceo_review')) return true;
+    // For RM - can edit in draft status
+    if (role === 'relationship_manager' && (status === 'draft' || status === 'submitted')) return true;
+    // For MD - can edit in md_pending_terms status
+    if (role === 'md' && (status === 'ceo_approved' || status === 'md_pending_terms' || status === 'md_review')) return true;
+    
+    return false
+  }
+
+  // For backward compatibility - determine if user can take any action on the case
+  const canTakeAction = () => {
+    if (!currentCase || !user) return false
+    const role = (user.role || '').toLowerCase()
+    const status = currentCase.status
+
+    if (role === 'credit_team_l1' && (status === 'submitted' || status === 'credit_l1_review')) return true
+    if (role === 'credit_team_l2' && (status === 'credit_l1_approved' || status === 'credit_l2_review')) return true
+    if (role === 'ceo' && (status === 'credit_l2_approved' || status === 'ceo_review')) return true
+    if (role === 'md' && (status === 'ceo_approved' || status === 'md_pending_terms' || status === 'md_review')) return true
+    if (role === 'operations_team_l1' && (status === 'md_approved' || status === 'ops_l1_review')) return true
+    if (role === 'operations_head' && (status === 'ops_l1_approved' || status === 'ops_l2_review')) return true
+    if (role === 'relationship_manager' && (status === 'draft' || status === 'rejected')) return true
 
     return false
   }
@@ -130,25 +238,44 @@ const CreditCaseDetail = () => {
     setIsSubmitting(true)
     try {
       const userRole = (user?.role || '').toLowerCase()
+
+      // Build partner sanctions array - only include partners with sanction amount
+      const sanctionsArray = PARTNERS
+        .filter(partner => partnerSanctions[partner]?.sanctionAmount)
+        .map(partner => ({
+          partner,
+          sanctionAmount: parseFloat(partnerSanctions[partner].sanctionAmount) || 0,
+          tenure: parseInt(partnerSanctions[partner].tenure) || 0,
+          interestRate: parseFloat(partnerSanctions[partner].interestRate) || 0,
+          penalCharges: parseFloat(partnerSanctions[partner].penalCharges) || 0,
+          processingFees: parseFloat(partnerSanctions[partner].processingFees) || 0,
+          conditions: partnerSanctions[partner].conditions,
+        }))
+
       const sanctionPayload = {
-        customerId: id,
-        sanctionAmount: parseFloat(sanctionData.sanctionAmount) || 0,
-        tenure: parseInt(sanctionData.tenure) || 0,
-        interestRate: parseFloat(sanctionData.interestRate) || 0,
-        penalCharges: parseFloat(sanctionData.penalCharges) || 0,
-        processingFees: parseFloat(sanctionData.processingFees) || 0,
-        conditions: sanctionData.conditions,
-        creditRemarks: remarks,
+        partnerSanctions: sanctionsArray,
       }
 
       if (userRole === 'credit_team_l2') {
         // Save sanction details
-        await creditService.createSanction(sanctionPayload)
+        await creditService.createSanction({
+          customerId: id,
+          ...partnerSanctions['FFPL'],
+          creditRemarks: remarks,
+        })
         // Advance workflow to CEO
-        await workflowService.approveCreditL2(id, true, remarks, sanctionPayload)
+        await workflowService.approveCreditL2(id, true, remarks, {
+          ...partnerSanctions['FFPL'],
+        })
       } else if (userRole === 'credit_team_l1') {
-        // Credit L1 saves sanction and approves
+        // Credit L1 saves sanction and approves - send partner sanctions
         await workflowService.approveCreditL1(id, true, remarks, sanctionPayload)
+      } else if (userRole === 'ceo') {
+        // CEO approves with sanction terms
+        await workflowService.approveCEO(id, true, remarks, partnerSanctions['FFPL'])
+      } else if (userRole === 'md') {
+        // MD approves with final sanction terms
+        await workflowService.approveMD(id, true, remarks, partnerSanctions['FFPL'])
       } else {
         throw new Error('Unauthorized role for this action')
       }
@@ -352,57 +479,82 @@ const CreditCaseDetail = () => {
         </div>
 
         <div className="space-y-6">
+          {/* Only show sanction details for RM and MD roles */}
+          {canAccessSanctionDetails() && (
           <div className="card">
             <h2 className="text-xl font-semibold text-gray-900 mb-4">Sanction Details</h2>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Sanction Amount (₹)</label>
-                <input
-                  type="number"
-                  value={sanctionData.sanctionAmount}
-                  onChange={(e) => setSanctionData({ ...sanctionData, sanctionAmount: e.target.value })}
-                  className="input-field"
-                  placeholder="Enter amount"
-                  disabled={readOnly}
-                />
+            
+            {/* Show tabs for each partner when Credit L1 */}
+            {user?.role === 'credit_team_l1' && (
+              <div className="mb-4">
+                <p className="text-sm text-gray-600 mb-2">Enter sanction limits for each partner:</p>
               </div>
-              <div className="hidden">
-                <label className="block text-sm font-medium text-gray-700 mb-2">Tenor (Months)</label>
-                <input
-                  type="number"
-                  value={sanctionData.tenure}
-                  onChange={(e) => setSanctionData({ ...sanctionData, tenure: e.target.value })}
-                  className="input-field"
-                  placeholder="Enter tenor"
-                  disabled={readOnly}
-                />
+            )}
+
+            {/* Show partner-specific fields for Credit L1, or single field for Credit L2 */}
+            {(user?.role === 'credit_team_l1' ? PARTNERS : ['FFPL']).map((partner) => (
+              <div key={partner} className="mb-6 pb-6 border-b border-gray-200 last:border-0">
+                <h3 className="text-lg font-medium text-gray-800 mb-3">{partner} Sanction</h3>
+                <div className="space-y-4">
+                  {/* Sanction Amount - Visible for Credit L1/L2, CEO, MD */}
+                  {canViewSanctionAmount() && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Sanction Amount (₹)</label>
+                      <input
+                        type="number"
+                        value={partnerSanctions[partner]?.sanctionAmount || ''}
+                        onChange={(e) => setPartnerSanctions({
+                          ...partnerSanctions,
+                          [partner]: { ...partnerSanctions[partner], sanctionAmount: e.target.value }
+                        })}
+                        className="input-field"
+                        placeholder="Enter amount"
+                        disabled={readOnly || !canEditSanctionAmount()}
+                      />
+                    </div>
+                  )}
+                  
+                  {/* ROI/IRR - Visible and editable for CEO and MD only */}
+                  {canViewROI() && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">ROI / IRR (%)</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={partnerSanctions[partner]?.interestRate || ''}
+                        onChange={(e) => setPartnerSanctions({
+                          ...partnerSanctions,
+                          [partner]: { ...partnerSanctions[partner], interestRate: e.target.value }
+                        })}
+                        className="input-field"
+                        placeholder="Enter ROI %"
+                        disabled={readOnly || !canEditROI()}
+                      />
+                    </div>
+                  )}
+                  
+                  {/* Tenure - Visible and editable for CEO and MD only */}
+                  {canViewTenure() && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Tenure (Months)</label>
+                      <input
+                        type="number"
+                        value={partnerSanctions[partner]?.tenure || ''}
+                        onChange={(e) => setPartnerSanctions({
+                          ...partnerSanctions,
+                          [partner]: { ...partnerSanctions[partner], tenure: e.target.value }
+                        })}
+                        className="input-field"
+                        placeholder="Enter tenure in months"
+                        disabled={readOnly || !canEditTenure()}
+                      />
+                    </div>
+                  )}
+                </div>
               </div>
-              <div className="hidden">
-                <label className="block text-sm font-medium text-gray-700 mb-2">Proposed ROI (%)</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={sanctionData.interestRate}
-                  onChange={(e) => setSanctionData({ ...sanctionData, interestRate: e.target.value })}
-                  className="input-field"
-                  placeholder="Enter ROI"
-                  disabled={readOnly}
-                />
-              </div>
-              <div className="hidden">
-                <label className="block text-sm font-medium text-gray-700 mb-2">Processing Fee (%)</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={sanctionData.processingFees}
-                  onChange={(e) => setSanctionData({ ...sanctionData, processingFees: e.target.value })}
-                  className="input-field"
-                  placeholder="Enter fee"
-                  disabled={readOnly}
-                />
-              </div>
-            </div>
+            ))}
           </div>
+          )}
 
           {formattedApprovals.length > 0 && (
             <div className="card">

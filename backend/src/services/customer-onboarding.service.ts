@@ -8,6 +8,7 @@ import { SanctionLimitHistory } from '../entities/SanctionLimitHistory';
 import { KycOwnerType } from '../entities/KycVerificationStatus';
 import { CoApplicant } from '../entities/CoApplicant';
 import { OnboardingIntegrationService } from './onboarding-integration.service';
+import { PARTNERS } from '../config/constants';
 
 export class CustomerOnboardingService {
   private customerRepository = AppDataSource.getRepository(Customer);
@@ -19,8 +20,11 @@ export class CustomerOnboardingService {
 
   // LAN ID sequence counter - starts from 10000101 (after FFPL prefix)
   private static LAN_SEQUENCE_KEY = 'lan_sequence';
-  private static LAN_PREFIX = 'FFPL';
-  private static LAN_START_NUMBER = 10000101;
+  private static LAN_PREFIXES = {
+    'FFPL': { prefix: 'FFPL', startNumber: 10000101 },
+    'MFL': { prefix: 'MFL', startNumber: 10000101 },
+    'KITE': { prefix: 'KITE', startNumber: 10000101 }
+  };
 
   private onboardingService: OnboardingIntegrationService;
 
@@ -208,31 +212,91 @@ export class CustomerOnboardingService {
     await this.workflowRepository.save(workflow);
 
     if (approved && sanctionData) {
-      // Save or update sanction limit
-      let sanction = await this.sanctionRepository.findOne({ where: { customerId } });
-      if (!sanction) {
-        const newSanction = this.sanctionRepository.create({
-          customerId,
-          creditOfficerId: userId,
-          ...sanctionData,
-          status: 'pending' // Pending full approval
-        });
-        await this.sanctionRepository.save(newSanction);
-      } else {
-        await this.sanctionRepository.update(sanction.id, {
-          ...sanctionData,
-          creditOfficerId: userId
-        });
-      }
+      const { partnerSanctions } = sanctionData;
 
-      // Record history
-      await this.sanctionHistoryRepository.save(this.sanctionHistoryRepository.create({
-        customerId,
-        changedByUserId: userId,
-        changedByRole: 'CREDIT_L1',
-        remarks,
-        ...sanctionData
-      }));
+      // Check if we have multiple partner sanctions (new format)
+      if (partnerSanctions && Array.isArray(partnerSanctions) && partnerSanctions.length > 0) {
+        // Create separate sanction limit history records for each partner
+        for (const ps of partnerSanctions) {
+          // Generate LAN ID for this partner
+          const lanId = await this.getNextLanId(ps.partner);
+          
+          await this.sanctionHistoryRepository.save(this.sanctionHistoryRepository.create({
+            customerId,
+            changedByUserId: userId,
+            changedByRole: 'CREDIT_L1',
+            remarks,
+            lender: ps.partner,
+            lanId: lanId,
+            sanctionAmount: ps.sanctionAmount,
+            tenure: ps.tenure,
+            interestRate: ps.interestRate,
+            conditions: ps.conditions || null,
+            penalCharges: ps.penalCharges || null,
+            processingFees: ps.processingFees || null,
+          }));
+        }
+
+        // Also update/create credit_sanction table with the first partner's data for backward compatibility
+        // (This maintains the existing flow while allowing multiple partners in history)
+        const firstPartner = partnerSanctions[0];
+        let existingSanction = await this.sanctionRepository.findOne({ where: { customerId } });
+        if (!existingSanction) {
+          const newSanction = this.sanctionRepository.create({
+            customerId,
+            creditOfficerId: userId,
+            sanctionAmount: firstPartner.sanctionAmount,
+            tenure: firstPartner.tenure,
+            interestRate: firstPartner.interestRate,
+            conditions: firstPartner.conditions || null,
+            penalCharges: firstPartner.penalCharges || 0,
+            processingFees: firstPartner.processingFees || 0,
+            status: 'pending',
+          });
+          await this.sanctionRepository.save(newSanction);
+        } else {
+          await this.sanctionRepository.update(existingSanction.id, {
+            sanctionAmount: firstPartner.sanctionAmount,
+            tenure: firstPartner.tenure,
+            interestRate: firstPartner.interestRate,
+            conditions: firstPartner.conditions || null,
+            penalCharges: firstPartner.penalCharges || 0,
+            processingFees: firstPartner.processingFees || 0,
+            creditOfficerId: userId,
+          });
+        }
+      } else if (sanctionData.sanctionAmount) {
+        // Legacy format: single sanction (backward compatibility)
+        let sanction = await this.sanctionRepository.findOne({ where: { customerId } });
+        if (!sanction) {
+          const newSanction = this.sanctionRepository.create({
+            customerId,
+            creditOfficerId: userId,
+            ...sanctionData,
+            status: 'pending' // Pending full approval
+          });
+          await this.sanctionRepository.save(newSanction);
+        } else {
+          await this.sanctionRepository.update(sanction.id, {
+            ...sanctionData,
+            creditOfficerId: userId
+          });
+        }
+
+        // Generate LAN ID for legacy single partner
+        const lanId = await this.getNextLanId('FFPL');
+        
+        // Record history (legacy single partner)
+        await this.sanctionHistoryRepository.save(this.sanctionHistoryRepository.create({
+          customerId,
+          changedByUserId: userId,
+          changedByRole: 'CREDIT_L1',
+          remarks,
+          lender: 'FFPL', // Default to FFPL for legacy data
+          lanId: lanId,
+          ...sanctionData
+        }));
+      }
     }
 
     // Sync customer status
@@ -251,15 +315,36 @@ export class CustomerOnboardingService {
     return workflow;
   }
 
-  private async getNextLanId(): Promise<string> {
-    const result = await this.customerRepository
-      .createQueryBuilder('customer')
-      .select('MAX(CAST(SUBSTRING(customer.lanId, 5) AS UNSIGNED))', 'maxId')
-      .where('customer.lanId LIKE :prefix AND CAST(SUBSTRING(customer.lanId, 5) AS UNSIGNED) >= :start', { prefix: 'FFPL%', start: CustomerOnboardingService.LAN_START_NUMBER })
+  /**
+   * Get all sanction limits for a customer based on customerId
+   * Returns all available partner sanctions (FFPL, MFL, KITE) from sanction_limit_history
+   */
+  async getSanctionLimitsByCustomerId(customerId: number): Promise<SanctionLimitHistory[]> {
+    return await this.sanctionHistoryRepository.find({
+      where: { customerId },
+      order: { createdAt: 'DESC' },
+    });
+  }
+
+  private async getNextLanId(lender: string = 'FFPL'): Promise<string> {
+    const lenderConfig = CustomerOnboardingService.LAN_PREFIXES[lender as keyof typeof CustomerOnboardingService.LAN_PREFIXES];
+    if (!lenderConfig) {
+      throw new Error(`Unsupported lender: ${lender}`);
+    }
+
+    // Get the maximum lanId for this lender from sanction_limit_history table
+    const result = await this.sanctionHistoryRepository
+      .createQueryBuilder('sanction')
+      .select('MAX(CAST(SUBSTRING(sanction.lanId, :prefixLength + 1) AS UNSIGNED))', 'maxId')
+      .where('sanction.lanId LIKE :prefix AND CAST(SUBSTRING(sanction.lanId, :prefixLength + 1) AS UNSIGNED) >= :start', { 
+        prefix: `${lenderConfig.prefix}%`, 
+        prefixLength: lenderConfig.prefix.length,
+        start: lenderConfig.startNumber 
+      })
       .getRawOne();
 
-    const nextNumber = (result?.maxId || CustomerOnboardingService.LAN_START_NUMBER - 1) + 1;
-    return `${CustomerOnboardingService.LAN_PREFIX}${nextNumber.toString().padStart(8, '0')}`;
+    const nextNumber = (result?.maxId || lenderConfig.startNumber - 1) + 1;
+    return `${lenderConfig.prefix}${nextNumber.toString().padStart(8, '0')}`;
   }
 
   async creditL2Approve(customerId: number, userId: number, remarks: string, approved: boolean, sanctionData?: any) {
@@ -290,24 +375,19 @@ export class CustomerOnboardingService {
         });
       }
 
-      // Record history
-      const lanId = await this.getNextLanId();
+      // Record history with lender and LAN ID
+      // The lender counter will automatically increment based on the lender parameter
+      const lenderCode = sanctionData?.lender || 'FFPL';
+      const lanId = await this.getNextLanId(lenderCode);
       await this.sanctionHistoryRepository.save(this.sanctionHistoryRepository.create({
         customerId,
         changedByUserId: userId,
         changedByRole: 'CREDIT_L2',
         remarks,
-        lender: 'FFPL',
+        lender: lenderCode,
         lanId: lanId,
         ...sanctionData
       }));
-
-      customer.lanId = lanId;
-      // Set lender based on LAN ID prefix
-      if (lanId.startsWith('FFPL')) {
-        customer.lender = 'FFPL';
-      }
-      await this.customerRepository.save(customer);
     }
 
     workflow.currentStatus = approved ? 'credit_l2_approved' : 'rejected';
@@ -563,7 +643,8 @@ export class CustomerOnboardingService {
   async getCreditTeamPending(role: string, userId?: number) {
     const r = role.toUpperCase();
     const statusFilter = r === 'CREDIT_TEAM_L2' ? 'credit_l1_approved' : 'submitted';
-
+    console.log(r)  ; 
+     console.log(statusFilter)
     // Pending cases
     const pendingWorkflows = await this.workflowRepository.find({
       where: {
@@ -573,7 +654,7 @@ export class CustomerOnboardingService {
       },
       relations: ['customer'],
     });
-
+ console.log(pendingWorkflows)
     // Handled cases (read-only)
     let handledWorkflows: any[] = [];
     if (userId) {

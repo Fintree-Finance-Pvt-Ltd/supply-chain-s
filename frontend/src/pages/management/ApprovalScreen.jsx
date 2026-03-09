@@ -155,6 +155,12 @@ const ApprovalScreen = () => {
   }
 
   const role = (user?.role || '').toLowerCase()
+  
+  // RM, MD, and CEO can access sanction details
+  const canAccessSanctionDetails = () => {
+    return role === 'relationship_manager' || role === 'md' || role === 'ceo';
+  };
+  
   const isReadOnly = (customer.status === 'credit_l2_rejected') ||
     (customer.status === 'ceo_rejected') ||
     (customer.status === 'md_rejected') ||
@@ -184,6 +190,8 @@ const ApprovalScreen = () => {
         <div className="lg:col-span-2 space-y-6">
           <CustomerFullDetails customer={customer} />
 
+          {/* Only show sanction details for RM and MD roles */}
+          {canAccessSanctionDetails() && (
           <div className="card border-l-4 border-primary-500">
             <h2 className="text-xl font-semibold text-gray-900 mb-4">Sanction Details (Review & Revise)</h2>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
@@ -197,7 +205,9 @@ const ApprovalScreen = () => {
                   readOnly={isReadOnly}
                 />
               </div>
-              <div className={role === 'md' ? "" : "hidden"}>
+              {/* CEO and MD can see and edit Tenor */}
+              {(role === 'ceo' || role === 'md') && (
+              <div>
                 <label className="block text-xs text-gray-500 mb-1">Tenor (Months)</label>
                 <input
                   type="number"
@@ -207,7 +217,10 @@ const ApprovalScreen = () => {
                   readOnly={isReadOnly}
                 />
               </div>
-              <div className={role === 'md' ? "" : "hidden"}>
+              )}
+              {/* CEO and MD can see and edit ROI */}
+              {(role === 'ceo' || role === 'md') && (
+              <div>
                 <label className="block text-xs text-gray-500 mb-1">Proposed ROI (%)</label>
                 <input
                   type="number"
@@ -218,6 +231,7 @@ const ApprovalScreen = () => {
                   readOnly={isReadOnly}
                 />
               </div>
+              )}
               <div className={role === 'md' ? "" : "hidden"}>
                 <label className="block text-xs text-gray-500 mb-1">Penal Charges (%)</label>
                 <input
@@ -252,6 +266,7 @@ const ApprovalScreen = () => {
               </div>
             </div>
           </div>
+          )}
 
           <div className="card">
             <h2 className="text-xl font-semibold text-gray-900 mb-4">Documents for Review</h2>
