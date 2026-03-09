@@ -1377,7 +1377,7 @@ async setPassword(
           data: [],
         };
       }
-
+    console.log(lan)
       const results = await LMSDataSource.query(
         `
         SELECT 

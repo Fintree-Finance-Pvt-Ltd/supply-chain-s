@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { CustomerService } from '../services/customer.service';
+import { LMSDataSource } from '../config/lmsDatabase';
 
 export class CustomerController {
   private customerService: CustomerService;
@@ -705,18 +706,22 @@ async getLoanSchedule(req: Request, res: Response) {
    */
   getTransactionsByLan = async (req: Request, res: Response): Promise<void> => {
     try {
-      const lan = req.query.lan as string;
+      const lender = req.query.lan as string;
 
       // Basic validation: lan is required
-      if (!lan) {
+      if (!lender) {
         res.status(400).json({
           success: false,
-          message: 'LAN is required'
+          message:  'Lender is required'
         });
         return;
       }
-
-      const result = await this.customerService.getTransactionsByLan(lan);
+      const lan = await LMSDataSource.query(
+        `SELECT lan FROM supply_chain_sanctions WHERE lender = ?`,
+        [lender]
+      );
+      console.log(lan)
+      const result = await this.customerService.getTransactionsByLan(lan[0]?.lan);
 
       if (!result) {
         res.status(500).json({
