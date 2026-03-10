@@ -72,11 +72,15 @@ const ApprovalScreen = () => {
         // For CEO: load all partner sanctions from sanctionLimitHistory
         if (custResponse.data?.sanctionLimitHistory && custResponse.data.sanctionLimitHistory.length > 0) {
           const history = custResponse.data.sanctionLimitHistory;
-          // Group by lender/partner
+          // Group by lender/partner - use LATEST entry (by createdAt)
           const partnerMap = {};
           history.forEach(item => {
             const partner = item.lender || 'FFPL';
-            if (!partnerMap[partner]) {
+            const itemDate = new Date(item.createdAt || 0);
+            const existingDate = partnerMap[partner] ? new Date(partnerMap[partner].createdAt || 0) : new Date(0);
+            
+            // Always use the latest entry (most recent createdAt)
+            if (!partnerMap[partner] || itemDate > existingDate) {
               partnerMap[partner] = {
                 partner: partner,
                 sanctionAmount: item.sanctionAmount || 0,
