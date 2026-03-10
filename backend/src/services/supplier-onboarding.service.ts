@@ -6,6 +6,7 @@ import { CaseStatusHistory } from '../entities/CaseStatusHistory';
 import { SupplierBankDetail } from '../entities/SupplierBankDetail';
 import { SupplierDocument } from '../entities/SupplierDocument';
 import { SanctionLimitHistory } from '../entities/SanctionLimitHistory';
+import { LoanAccount } from '../entities/LoanAccount';
 import { ChequeParserService } from './cheque-parser.service';
 
 export class SupplierOnboardingService {
@@ -77,13 +78,14 @@ export class SupplierOnboardingService {
 
   // Ops L1 creates supplier in DRAFT status
   async createSupplierByOpsL1(data: any, opsL1UserId: number) {
-    // Check if customer has a valid LAN ID from sanction_limit_history table
-    const latestSanction = await this.sanctionHistoryRepository.findOne({
-      where: { customerId: data.customerId },
-      order: { createdAt: 'DESC' }
+    // Check if customer has a valid LAN ID from loan_accounts table
+    const loanAccountRepository = AppDataSource.getRepository(LoanAccount);
+    const activeLoanAccount = await loanAccountRepository.findOne({
+      where: { customerId: data.customerId, status: 'active' },
+      relations: ['partner'],
     });
     
-    if (!latestSanction || !latestSanction.lanId) throw new Error('Customer must be approved with LAN ID');
+    if (!activeLoanAccount || !activeLoanAccount.lanId) throw new Error('Customer must be approved with LAN ID');
 
     const supplier = this.supplierRepository.create({
       customerId: data.customerId,
@@ -274,12 +276,14 @@ export class SupplierOnboardingService {
   async getRMSupplierDashboard(rmId: number) {
     const suppliers = await this.supplierRepository.find({
       where: { createdByUserId: rmId },
-      relations: ['customer'],
+      relations: ['customer', 'customer.loanAccounts', 'customer.loanAccounts.partner'],
     });
 
     const lanWiseSuppliers: { [key: string]: any } = {};
     (suppliers || []).forEach((supplier) => {
-      const lanId = supplier.customer?.lanId || 'UNKNOWN';
+    const lanId = supplier.customer?.loanAccounts?.length > 0 
+      ? supplier.customer.loanAccounts.find(la => la.status === 'active')?.lanId || 'UNKNOWN'
+      : 'UNKNOWN';
       if (!lanWiseSuppliers[lanId]) {
         lanWiseSuppliers[lanId] = {
           customerId: supplier.customerId,
@@ -544,7 +548,7 @@ export class SupplierOnboardingService {
         { status: 'fully_onboarded' },
         { status: 'operations_approved' }
       ],
-      select: ['id', 'name', 'companyName', 'lanId', 'email', 'mobile'],
+      select: ['id', 'name', 'companyName', 'email', 'mobile'],
       order: { name: 'ASC' },
     });
   }
