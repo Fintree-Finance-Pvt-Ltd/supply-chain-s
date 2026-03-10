@@ -141,12 +141,22 @@ export const ADDRESS_TYPES = {
 } as const;
 
 // Partners/Lenders for sanction limits
-export const PARTNERS = {
+// NOTE: These are now dynamically loaded from the partners table
+// Kept for backward compatibility - default partner codes
+export const DEFAULT_PARTNER_CODES = {
   FFPL: 'FFPL',
   MFL: 'MFL',
   KITE: 'KITE',
 } as const;
 
-export type Partner = typeof PARTNERS[keyof typeof PARTNERS];
+export type PartnerCode = typeof DEFAULT_PARTNER_CODES[keyof typeof DEFAULT_PARTNER_CODES];
+
+// Partner status
+export const PARTNER_STATUS = {
+  ACTIVE: 'ACTIVE',
+  INACTIVE: 'INACTIVE',
+} as const;
+
+export type PartnerStatus = typeof PARTNER_STATUS[keyof typeof PARTNER_STATUS];
 
 

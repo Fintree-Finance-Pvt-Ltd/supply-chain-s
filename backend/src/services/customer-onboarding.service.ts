@@ -5,10 +5,11 @@ import { CaseWorkflow } from '../entities/CaseWorkflow';
 import { CaseStatusHistory } from '../entities/CaseStatusHistory';
 import { CreditSanction } from '../entities/CreditSanction';
 import { SanctionLimitHistory } from '../entities/SanctionLimitHistory';
+import { LoanAccount, LENDER } from '../entities/LoanAccount';
 import { KycOwnerType } from '../entities/KycVerificationStatus';
 import { CoApplicant } from '../entities/CoApplicant';
 import { OnboardingIntegrationService } from './onboarding-integration.service';
-import { PARTNERS } from '../config/constants';
+import { DEFAULT_PARTNER_CODES } from '../config/constants';
 
 export class CustomerOnboardingService {
   private customerRepository = AppDataSource.getRepository(Customer);
@@ -16,9 +17,11 @@ export class CustomerOnboardingService {
   private historyRepository = AppDataSource.getRepository(CaseStatusHistory);
   private sanctionRepository = AppDataSource.getRepository(CreditSanction);
   private sanctionHistoryRepository = AppDataSource.getRepository(SanctionLimitHistory);
+  private loanAccountRepository = AppDataSource.getRepository(LoanAccount);
   private coApplicantRepository = AppDataSource.getRepository(CoApplicant);
 
   // LAN ID sequence counter - starts from 10000101 (after FFPL prefix)
+  // NOTE: LAN_PREFIXES is deprecated - now uses dynamic Partner table
   private static LAN_SEQUENCE_KEY = 'lan_sequence';
   private static LAN_PREFIXES = {
     'FFPL': { prefix: 'FFPL', startNumber: 10000101 },
@@ -89,6 +92,103 @@ export class CustomerOnboardingService {
       ...(data.sanctionData || {})
     });
     return await this.historyRepository.save(history);
+  }
+
+  /**
+   * Check if financial sanction values have changed
+   * Returns true if any of these fields changed: sanctionAmount, tenure, interestRate, penalCharges, processingFees, conditions
+   */
+  private hasFinancialValuesChanged(oldValues: any, newValues: any): boolean {
+    const financialFields = ['sanctionAmount', 'tenure', 'interestRate', 'penalCharges', 'processingFees', 'conditions'];
+    
+    for (const field of financialFields) {
+      const oldValue = oldValues[field];
+      const newValue = newValues[field];
+      
+      // Handle null/undefined/empty string comparisons
+      const oldStr = oldValue === null || oldValue === undefined ? '' : String(oldValue);
+      const newStr = newValue === null || newValue === undefined ? '' : String(newValue);
+      
+      if (oldStr !== newStr) {
+        return true;
+      }
+    }
+    
+    return false;
+  }
+
+  /**
+   * Insert into sanction_limit_history ONLY if financial values changed
+   * Returns true if history was inserted, false otherwise
+   */
+  private async insertSanctionHistoryIfChanged(
+    customerId: number,
+    oldValues: any,
+    newValues: any,
+    changedByUserId: number,
+    changedByRole: string,
+    remarks?: string
+  ): Promise<boolean> {
+    // Check if financial values changed
+    if (!this.hasFinancialValuesChanged(oldValues, newValues)) {
+      console.log(`[SanctionHistory] No financial values changed for customer ${customerId}, skipping history insert`);
+      return false;
+    }
+    
+    // Insert into sanction_limit_history
+    await this.sanctionHistoryRepository.save(this.sanctionHistoryRepository.create({
+      customerId,
+      changedByUserId,
+      changedByRole,
+      remarks,
+      sanctionAmount: newValues.sanctionAmount || 0,
+      tenure: newValues.tenure || 0,
+      interestRate: newValues.interestRate || 0,
+      penalCharges: newValues.penalCharges || 0,
+      processingFees: newValues.processingFees || 0,
+      conditions: newValues.conditions || null,
+    }));
+    
+    console.log(`[SanctionHistory] Inserted history for customer ${customerId} due to financial value changes`);
+    return true;
+  }
+
+  /**
+   * Create or update loan account for a lender
+   */
+  private async upsertLoanAccount(
+    customerId: number,
+    lender: string,
+    sanctionedAmount: number
+  ): Promise<string> {
+    const lanId = await this.getNextLanId(lender);
+    
+    // Check if loan account already exists for this lender
+    const existingAccount = await this.loanAccountRepository.findOne({
+      where: { customerId, lender: lender as any }
+    });
+    
+    if (existingAccount) {
+      // Update existing account
+      await this.loanAccountRepository.update(existingAccount.id, {
+        sanctionedAmount,
+        status: 'active',
+      });
+      console.log(`[LoanAccount] Updated loan account ${existingAccount.lanId} for customer ${customerId}`);
+    } else {
+      // Create new loan account
+      await this.loanAccountRepository.save(this.loanAccountRepository.create({
+        customerId,
+        lender: lender as any,
+        lanId,
+        sanctionedAmount,
+        disbursedAmount: 0,
+        status: 'active',
+      }));
+      console.log(`[LoanAccount] Created new loan account ${lanId} for customer ${customerId}`);
+    }
+    
+    return lanId;
   }
 
 
@@ -214,34 +314,23 @@ export class CustomerOnboardingService {
     if (approved && sanctionData) {
       const { partnerSanctions } = sanctionData;
 
+      // Get existing sanction values for comparison
+      const existingSanction = await this.sanctionRepository.findOne({ where: { customerId } });
+      const oldValues = existingSanction || {};
+
       // Check if we have multiple partner sanctions (new format)
       if (partnerSanctions && Array.isArray(partnerSanctions) && partnerSanctions.length > 0) {
-        // Create separate sanction limit history records for each partner
+        // Create separate loan accounts for each partner
         for (const ps of partnerSanctions) {
-          // Generate LAN ID for this partner
-          const lanId = await this.getNextLanId(ps.partner);
-          
-          await this.sanctionHistoryRepository.save(this.sanctionHistoryRepository.create({
-            customerId,
-            changedByUserId: userId,
-            changedByRole: 'CREDIT_L1',
-            remarks,
-            lender: ps.partner,
-            lanId: lanId,
-            sanctionAmount: ps.sanctionAmount,
-            tenure: ps.tenure,
-            interestRate: ps.interestRate,
-            conditions: ps.conditions || null,
-            penalCharges: ps.penalCharges || null,
-            processingFees: ps.processingFees || null,
-          }));
+          // Create/update loan account with lender and lanId
+          await this.upsertLoanAccount(customerId, ps.partner, ps.sanctionAmount);
         }
 
         // Also update/create credit_sanction table with the first partner's data for backward compatibility
         // (This maintains the existing flow while allowing multiple partners in history)
         const firstPartner = partnerSanctions[0];
-        let existingSanction = await this.sanctionRepository.findOne({ where: { customerId } });
-        if (!existingSanction) {
+        let creditSanction = await this.sanctionRepository.findOne({ where: { customerId } });
+        if (!creditSanction) {
           const newSanction = this.sanctionRepository.create({
             customerId,
             creditOfficerId: userId,
@@ -255,7 +344,7 @@ export class CustomerOnboardingService {
           });
           await this.sanctionRepository.save(newSanction);
         } else {
-          await this.sanctionRepository.update(existingSanction.id, {
+          await this.sanctionRepository.update(creditSanction.id, {
             sanctionAmount: firstPartner.sanctionAmount,
             tenure: firstPartner.tenure,
             interestRate: firstPartner.interestRate,
@@ -265,8 +354,23 @@ export class CustomerOnboardingService {
             creditOfficerId: userId,
           });
         }
+
+        // Insert into sanction_limit_history ONLY if financial values changed
+        await this.insertSanctionHistoryIfChanged(
+          customerId,
+          oldValues,
+          firstPartner,
+          userId,
+          'CREDIT_L1',
+          remarks
+        );
       } else if (sanctionData.sanctionAmount) {
         // Legacy format: single sanction (backward compatibility)
+        const lender = sanctionData.lender || 'FFPL';
+        
+        // Create/update loan account
+        await this.upsertLoanAccount(customerId, lender, sanctionData.sanctionAmount);
+        
         let sanction = await this.sanctionRepository.findOne({ where: { customerId } });
         if (!sanction) {
           const newSanction = this.sanctionRepository.create({
@@ -283,19 +387,16 @@ export class CustomerOnboardingService {
           });
         }
 
-        // Generate LAN ID for legacy single partner
-        const lanId = await this.getNextLanId('FFPL');
-        
-        // Record history (legacy single partner)
-        await this.sanctionHistoryRepository.save(this.sanctionHistoryRepository.create({
+        // Get old values and insert history only if financial values changed
+        const oldSanction = await this.sanctionRepository.findOne({ where: { customerId } });
+        await this.insertSanctionHistoryIfChanged(
           customerId,
-          changedByUserId: userId,
-          changedByRole: 'CREDIT_L1',
-          remarks,
-          lender: 'FFPL', // Default to FFPL for legacy data
-          lanId: lanId,
-          ...sanctionData
-        }));
+          oldSanction || {},
+          sanctionData,
+          userId,
+          'CREDIT_L1',
+          remarks
+        );
       }
     }
 
@@ -332,11 +433,11 @@ export class CustomerOnboardingService {
       throw new Error(`Unsupported lender: ${lender}`);
     }
 
-    // Get the maximum lanId for this lender from sanction_limit_history table
-    const result = await this.sanctionHistoryRepository
-      .createQueryBuilder('sanction')
-      .select('MAX(CAST(SUBSTRING(sanction.lanId, :prefixLength + 1) AS UNSIGNED))', 'maxId')
-      .where('sanction.lanId LIKE :prefix AND CAST(SUBSTRING(sanction.lanId, :prefixLength + 1) AS UNSIGNED) >= :start', { 
+    // Get the maximum lanId for this lender from loan_accounts table
+    const result = await this.loanAccountRepository
+      .createQueryBuilder('loan')
+      .select('MAX(CAST(SUBSTRING(loan.lanId, :prefixLength + 1) AS UNSIGNED))', 'maxId')
+      .where('loan.lanId LIKE :prefix AND CAST(SUBSTRING(loan.lanId, :prefixLength + 1) AS UNSIGNED) >= :start', { 
         prefix: `${lenderConfig.prefix}%`, 
         prefixLength: lenderConfig.prefix.length,
         start: lenderConfig.startNumber 
@@ -357,37 +458,93 @@ export class CustomerOnboardingService {
     const previousStatus = workflow.currentStatus;
 
     if (approved && sanctionData) {
-      // Save or update sanction limit
-      let sanction = await this.sanctionRepository.findOne({ where: { customerId } });
-      if (!sanction) {
-        const newSanction = this.sanctionRepository.create({
-          customerId,
-          creditOfficerId: userId,
-          ...sanctionData,
-          status: 'approved'
-        });
-        await this.sanctionRepository.save(newSanction);
-      } else {
-        await this.sanctionRepository.update(sanction.id, {
-          ...sanctionData,
-          creditOfficerId: userId,
-          status: 'approved'
-        });
-      }
+      // Get existing sanction values for comparison
+      const existingSanction = await this.sanctionRepository.findOne({ where: { customerId } });
+      const oldValues = existingSanction || {};
 
-      // Record history with lender and LAN ID
-      // The lender counter will automatically increment based on the lender parameter
-      const lenderCode = sanctionData?.lender || 'FFPL';
-      const lanId = await this.getNextLanId(lenderCode);
-      await this.sanctionHistoryRepository.save(this.sanctionHistoryRepository.create({
-        customerId,
-        changedByUserId: userId,
-        changedByRole: 'CREDIT_L2',
-        remarks,
-        lender: lenderCode,
-        lanId: lanId,
-        ...sanctionData
-      }));
+      // Check if partnerSanctions array is provided (new format for multi-partner support)
+      if (sanctionData.partnerSanctions && Array.isArray(sanctionData.partnerSanctions)) {
+        // Save sanctions for each partner
+        for (const partnerSanction of sanctionData.partnerSanctions) {
+          const partner = partnerSanction.partner || 'FFPL';
+          
+          // Create/update loan account for this partner
+          await this.upsertLoanAccount(customerId, partner, partnerSanction.sanctionAmount);
+          
+          // Get or create credit sanction for this customer
+          let sanction = await this.sanctionRepository.findOne({ where: { customerId } });
+          if (!sanction) {
+            const newSanction = this.sanctionRepository.create({
+              customerId,
+              creditOfficerId: userId,
+              sanctionAmount: partnerSanction.sanctionAmount,
+              tenure: partnerSanction.tenure || 0,
+              interestRate: partnerSanction.interestRate || 0,
+              penalCharges: partnerSanction.penalCharges || 0,
+              processingFees: partnerSanction.processingFees || 0,
+              conditions: partnerSanction.conditions || '',
+              status: 'approved'
+            });
+            await this.sanctionRepository.save(newSanction);
+          } else {
+            // Update existing sanction with partner-specific values
+            await this.sanctionRepository.update(sanction.id, {
+              sanctionAmount: partnerSanction.sanctionAmount,
+              tenure: partnerSanction.tenure || 0,
+              interestRate: partnerSanction.interestRate || 0,
+              penalCharges: partnerSanction.penalCharges || 0,
+              processingFees: partnerSanction.processingFees || 0,
+              conditions: partnerSanction.conditions || '',
+              creditOfficerId: userId,
+              status: 'approved'
+            });
+          }
+        }
+
+        // Insert into sanction_limit_history ONLY if financial values changed
+        const firstPartner = sanctionData.partnerSanctions[0];
+        await this.insertSanctionHistoryIfChanged(
+          customerId,
+          oldValues,
+          firstPartner,
+          userId,
+          'CREDIT_L2',
+          remarks
+        );
+      } else {
+        // Legacy format: single sanction (backward compatibility)
+        // Save or update sanction limit
+        let sanction = await this.sanctionRepository.findOne({ where: { customerId } });
+        if (!sanction) {
+          const newSanction = this.sanctionRepository.create({
+            customerId,
+            creditOfficerId: userId,
+            ...sanctionData,
+            status: 'approved'
+          });
+          await this.sanctionRepository.save(newSanction);
+        } else {
+          await this.sanctionRepository.update(sanction.id, {
+            ...sanctionData,
+            creditOfficerId: userId,
+            status: 'approved'
+          });
+        }
+
+        // Legacy format: create loan account and insert history only if changed
+        const lenderCode = sanctionData?.lender || 'FFPL';
+        await this.upsertLoanAccount(customerId, lenderCode, sanctionData.sanctionAmount);
+
+        // Insert history only if financial values changed
+        await this.insertSanctionHistoryIfChanged(
+          customerId,
+          oldValues,
+          sanctionData,
+          userId,
+          'CREDIT_L2',
+          remarks
+        );
+      }
     }
 
     workflow.currentStatus = approved ? 'credit_l2_approved' : 'rejected';
@@ -419,16 +576,77 @@ export class CustomerOnboardingService {
     const previousStatus = workflow.currentStatus;
 
     if (approved && sanctionData) {
-      await this.sanctionRepository.update({ customerId }, sanctionData);
+      // Get existing sanction values for comparison
+      const existingSanction = await this.sanctionRepository.findOne({ where: { customerId } });
+      const oldValues = existingSanction || {};
 
-      // Record history
-      await this.sanctionHistoryRepository.save(this.sanctionHistoryRepository.create({
-        customerId,
-        changedByUserId: userId,
-        changedByRole: 'CEO',
-        remarks,
-        ...sanctionData
-      }));
+      // Check if partnerSanctions array is provided (new format for multi-partner support)
+      if (sanctionData.partnerSanctions && Array.isArray(sanctionData.partnerSanctions)) {
+        // Save sanctions for each partner
+        for (const partnerSanction of sanctionData.partnerSanctions) {
+          const partner = partnerSanction.partner || 'FFPL';
+          
+          // Get or create credit sanction for this customer
+          let sanction = await this.sanctionRepository.findOne({ where: { customerId } });
+          if (!sanction) {
+            const newSanction = this.sanctionRepository.create({
+              customerId,
+              creditOfficerId: userId,
+              sanctionAmount: partnerSanction.sanctionAmount,
+              tenure: partnerSanction.tenure || 0,
+              interestRate: partnerSanction.interestRate || 0,
+              penalCharges: partnerSanction.penalCharges || 0,
+              processingFees: partnerSanction.processingFees || 0,
+              conditions: partnerSanction.conditions || '',
+              status: 'approved'
+            });
+            await this.sanctionRepository.save(newSanction);
+          } else {
+            // Update existing sanction with partner-specific values
+            await this.sanctionRepository.update(sanction.id, {
+              sanctionAmount: partnerSanction.sanctionAmount,
+              tenure: partnerSanction.tenure || 0,
+              interestRate: partnerSanction.interestRate || 0,
+              penalCharges: partnerSanction.penalCharges || 0,
+              processingFees: partnerSanction.processingFees || 0,
+              conditions: partnerSanction.conditions || '',
+              status: 'approved'
+            });
+          }
+
+          // Create/update loan account for this partner
+          await this.upsertLoanAccount(customerId, partner, partnerSanction.sanctionAmount);
+        }
+
+        // Insert into sanction_limit_history ONLY if financial values changed
+        const firstPartner = sanctionData.partnerSanctions[0];
+        await this.insertSanctionHistoryIfChanged(
+          customerId,
+          oldValues,
+          firstPartner,
+          userId,
+          'CEO',
+          remarks
+        );
+      } else {
+        // Legacy format: single sanction (backward compatibility)
+        const lender = sanctionData.lender || 'FFPL';
+        
+        // Create/update loan account
+        await this.upsertLoanAccount(customerId, lender, sanctionData.sanctionAmount);
+        
+        await this.sanctionRepository.update({ customerId }, sanctionData);
+
+        // Insert history only if financial values changed
+        await this.insertSanctionHistoryIfChanged(
+          customerId,
+          oldValues,
+          sanctionData,
+          userId,
+          'CEO',
+          remarks
+        );
+      }
     }
 
     workflow.currentStatus = approved ? 'ceo_approved' : 'rejected';
@@ -502,16 +720,78 @@ export class CustomerOnboardingService {
     const previousStatus = workflow.currentStatus;
 
     if (approved && sanctionData) {
-      await this.sanctionRepository.update({ customerId }, sanctionData);
+      // Get existing sanction values for comparison
+      const existingSanction = await this.sanctionRepository.findOne({ where: { customerId } });
+      const oldValues = existingSanction || {};
 
-      // Record history
-      await this.sanctionHistoryRepository.save(this.sanctionHistoryRepository.create({
-        customerId,
-        changedByUserId: userId,
-        changedByRole: 'MD',
-        remarks,
-        ...sanctionData
-      }));
+      // Check if partnerSanctions array is provided (new format for multi-partner support)
+      if (sanctionData.partnerSanctions && Array.isArray(sanctionData.partnerSanctions)) {
+        // Save sanctions for each partner
+        for (const partnerSanction of sanctionData.partnerSanctions) {
+          const partner = partnerSanction.partner || 'FFPL';
+          
+          // Get or create credit sanction for this customer
+          let sanction = await this.sanctionRepository.findOne({ where: { customerId } });
+          if (!sanction) {
+            const newSanction = this.sanctionRepository.create({
+              customerId,
+              creditOfficerId: userId,
+              sanctionAmount: partnerSanction.sanctionAmount,
+              tenure: partnerSanction.tenure || 0,
+              interestRate: partnerSanction.interestRate || 0,
+              penalCharges: partnerSanction.penalCharges || 0,
+              processingFees: partnerSanction.processingFees || 0,
+              conditions: partnerSanction.conditions || '',
+              status: 'approved'
+            });
+            await this.sanctionRepository.save(newSanction);
+          } else {
+            // Update existing sanction with partner-specific values
+            await this.sanctionRepository.update(sanction.id, {
+              sanctionAmount: partnerSanction.sanctionAmount,
+              tenure: partnerSanction.tenure || 0,
+              interestRate: partnerSanction.interestRate || 0,
+              penalCharges: partnerSanction.penalCharges || 0,
+              processingFees: partnerSanction.processingFees || 0,
+              conditions: partnerSanction.conditions || '',
+              status: 'approved'
+            });
+          }
+
+          // Create/update loan account for this partner
+          await this.upsertLoanAccount(customerId, partner, partnerSanction.sanctionAmount);
+        }
+
+        // Insert into sanction_limit_history ONLY if financial values changed
+        const firstPartner = sanctionData.partnerSanctions[0];
+        await this.insertSanctionHistoryIfChanged(
+          customerId,
+          oldValues,
+          firstPartner,
+          userId,
+          'MD',
+          remarks
+        );
+      } else {
+        // Legacy format: single sanction (backward compatibility)
+        const lender = sanctionData.lender || 'FFPL';
+        
+        // Create/update loan account
+        await this.upsertLoanAccount(customerId, lender, sanctionData.sanctionAmount);
+        
+        await this.sanctionRepository.update({ customerId }, sanctionData);
+
+        // Insert history only if financial values changed
+        const existingSanction = await this.sanctionRepository.findOne({ where: { customerId } });
+        await this.insertSanctionHistoryIfChanged(
+          customerId,
+          existingSanction || {},
+          sanctionData,
+          userId,
+          'MD',
+          remarks
+        );
+      }
     }
 
     if (status === 'ceo_approved') {

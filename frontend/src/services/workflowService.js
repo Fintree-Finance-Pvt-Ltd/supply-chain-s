@@ -6,8 +6,14 @@ export const workflowService = {
     createCustomer: (data) => api.post(API_ENDPOINTS.WORKFLOW_CUSTOMER_CREATE, data),
     submitCustomer: (id, remarks, pushedTo) => api.post(API_ENDPOINTS.WORKFLOW_CUSTOMER_SUBMIT(id), { remarks, pushedTo }),
     approveCreditL1: (id, approved, remarks, sanctionData) => api.post(API_ENDPOINTS.WORKFLOW_CUSTOMER_CREDIT_L1(id), { approved, remarks, partnerSanctions: sanctionData?.partnerSanctions }),
-    approveCreditL2: (id, approved, remarks, sanctionData) => api.post(API_ENDPOINTS.WORKFLOW_CUSTOMER_CREDIT_L2(id), { approved, remarks, ...sanctionData }),
-    approveCEO: (id, approved, remarks, sanctionData) => api.post(API_ENDPOINTS.WORKFLOW_CUSTOMER_CEO(id), { approved, remarks, ...sanctionData }),
+    approveCreditL2: (id, approved, remarks, sanctionData) => api.post(API_ENDPOINTS.WORKFLOW_CUSTOMER_CREDIT_L2(id), { approved, remarks, partnerSanctions: sanctionData?.partnerSanctions, sanctionAmount: sanctionData?.sanctionAmount }),
+    approveCEO: (id, approved, remarks, sanctionData) => api.post(API_ENDPOINTS.WORKFLOW_CUSTOMER_CEO(id), { 
+      approved, 
+      remarks, 
+      partnerSanctions: sanctionData?.partnerSanctions, 
+      sanctionAmount: sanctionData?.sanctionAmount 
+      // CEO can only modify sanctionAmount, not tenure or interestRate
+    }),
     submitRMToMD: (id, remarks, sanctionData) => api.post(`/workflows/customers/${id}/rm-submit-md`, { remarks, ...sanctionData }),
     approveMD: (id, approved, remarks, sanctionData) => api.post(API_ENDPOINTS.WORKFLOW_CUSTOMER_MD(id), { approved, remarks, ...sanctionData }),
     submitToOperations: (id, remarks) => api.post(API_ENDPOINTS.WORKFLOW_CUSTOMER_OPS_SUBMIT(id), { remarks }),

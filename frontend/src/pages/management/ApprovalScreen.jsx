@@ -16,6 +16,8 @@ const ApprovalScreen = () => {
 
   const [customer, setCustomer] = useState(null)
   const [workflow, setWorkflow] = useState(null)
+  // For CEO: support multiple partner sanctions
+  const [partnerSanctions, setPartnerSanctions] = useState([])
   const [sanctionData, setSanctionData] = useState({
     sanctionAmount: '',
     tenure: '',
@@ -29,12 +31,66 @@ const ApprovalScreen = () => {
   const [isLoading, setIsLoading] = useState(true)
   const [previewedDocs, setPreviewedDocs] = useState(new Set())
 
+  // Known partners/lenders
+  const PARTNERS = ['FFPL', 'MFL', 'KITE'];
+
   useEffect(() => {
     const loadData = async () => {
       try {
         setIsLoading(true)
         const custResponse = await customerService.getCustomerById(id)
         setCustomer(custResponse.data)
+        
+        // For CEO: load all partner sanctions from sanctionLimitHistory
+        if (custResponse.data?.sanctionLimitHistory && custResponse.data.sanctionLimitHistory.length > 0) {
+          const history = custResponse.data.sanctionLimitHistory;
+          // Group by lender/partner
+          const partnerMap = {};
+          history.forEach(item => {
+            const partner = item.lender || 'FFPL';
+            if (!partnerMap[partner]) {
+              partnerMap[partner] = {
+                partner: partner,
+                sanctionAmount: item.sanctionAmount || 0,
+                tenure: item.tenure || 0,
+                interestRate: item.interestRate || 0,
+                lanId: item.lanId || '',
+                createdAt: item.createdAt
+              };
+            }
+          });
+          // Create array with all known partners (show at least the ones with data)
+          const partners = PARTNERS.map(p => ({
+            partner: p,
+            sanctionAmount: partnerMap[p]?.sanctionAmount || 0,
+            tenure: partnerMap[p]?.tenure || 0,
+            interestRate: partnerMap[p]?.interestRate || 0,
+            lanId: partnerMap[p]?.lanId || '',
+            hasData: !!partnerMap[p]
+          }));
+          setPartnerSanctions(partners);
+        } else if (custResponse.data?.creditSanctions?.[0]) {
+          // Fallback to creditSanctions if no history
+          const s = custResponse.data.creditSanctions[0];
+          setPartnerSanctions([{
+            partner: 'FFPL',
+            sanctionAmount: s.sanctionAmount || 0,
+            tenure: s.tenure || 0,
+            interestRate: s.interestRate || 0,
+            hasData: true
+          }]);
+        } else {
+          // Initialize with empty partners
+          setPartnerSanctions(PARTNERS.map(p => ({
+            partner: p,
+            sanctionAmount: 0,
+            tenure: 0,
+            interestRate: 0,
+            hasData: false
+          })));
+        }
+
+        // Also set the main sanction data for backward compatibility
         if (custResponse.data?.creditSanctions?.[0]) {
           const s = custResponse.data.creditSanctions[0]
           setSanctionData({
@@ -72,16 +128,31 @@ const ApprovalScreen = () => {
     setIsSubmitting(true)
     try {
       const userRole = (user?.role || '').toLowerCase()
-      const payload = {
-        approved: true,
-        remarks: comments,
-        ...sanctionData
-      }
-
+      
+      // For CEO and MD: use partnerSanctions format
       if (userRole === 'ceo') {
-        await workflowService.approveCEO(id, payload.approved, payload.remarks, payload)
+        const ceoSanctionData = {
+          partnerSanctions: partnerSanctions.map(ps => ({
+            partner: ps.partner,
+            sanctionAmount: ps.sanctionAmount || 0
+            // CEO can only modify sanctionAmount
+          }))
+        };
+        await workflowService.approveCEO(id, true, comments, { partnerSanctions: ceoSanctionData.partnerSanctions });
       } else if (userRole === 'md') {
-        await workflowService.approveMD(id, payload.approved, payload.remarks, payload)
+        // MD can modify all fields
+        const mdSanctionData = {
+          partnerSanctions: partnerSanctions.map(ps => ({
+            partner: ps.partner,
+            sanctionAmount: ps.sanctionAmount || 0,
+            tenure: ps.tenure || 0,
+            interestRate: ps.interestRate || 0,
+            penalCharges: ps.penalCharges || 0,
+            processingFees: ps.processingFees || 0,
+            conditions: ps.conditions || ''
+          }))
+        };
+        await workflowService.approveMD(id, true, comments, { partnerSanctions: mdSanctionData.partnerSanctions });
       } else {
         throw new Error('Unauthorized role for this action')
       }
@@ -194,77 +265,155 @@ const ApprovalScreen = () => {
           {canAccessSanctionDetails() && (
           <div className="card border-l-4 border-primary-500">
             <h2 className="text-xl font-semibold text-gray-900 mb-4">Sanction Details (Review & Revise)</h2>
+            
+            {/* CEO and MD see all three partner sanctions */}
+            {(role === 'ceo' || role === 'md') && (
+              <div className="space-y-4 mb-4">
+                <p className="text-sm text-gray-600 mb-2">Partner Sanctions (L1 & L2 Credits)</p>
+                {partnerSanctions.map((ps, index) => (
+                  <div key={ps.partner} className="p-3 bg-gray-50 rounded-lg border border-gray-200">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="font-bold text-primary-600">{ps.partner}</span>
+                      {ps.lanId && <span className="text-xs text-gray-500">LAN: {ps.lanId}</span>}
+                    </div>
+                    <div className="grid grid-cols-3 gap-3">
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">Sanction Amount (₹)</label>
+                        <input
+                          type="number"
+                          value={ps.sanctionAmount}
+                          onChange={(e) => {
+                            const updated = [...partnerSanctions];
+                            updated[index].sanctionAmount = parseFloat(e.target.value) || 0;
+                            setPartnerSanctions(updated);
+                          }}
+                          className="input-field text-sm"
+                          readOnly={isReadOnly}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">Tenor (Months)</label>
+                        <input
+                          type="number"
+                          value={ps.tenure}
+                          onChange={(e) => {
+                            if (role === 'md') {
+                              const updated = [...partnerSanctions];
+                              updated[index].tenure = parseInt(e.target.value) || 0;
+                              setPartnerSanctions(updated);
+                            }
+                          }}
+                          className={`input-field text-sm ${role === 'md' ? '' : 'bg-gray-100'}`}
+                          readOnly={role !== 'md' || isReadOnly}
+                        />
+                        {role !== 'md' && <span className="text-xs text-gray-400">Read-only</span>}
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">ROI (%)</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={ps.interestRate}
+                          onChange={(e) => {
+                            if (role === 'md') {
+                              const updated = [...partnerSanctions];
+                              updated[index].interestRate = parseFloat(e.target.value) || 0;
+                              setPartnerSanctions(updated);
+                            }
+                          }}
+                          className={`input-field text-sm ${role === 'md' ? '' : 'bg-gray-100'}`}
+                          readOnly={role !== 'md' || isReadOnly}
+                        />
+                        {role !== 'md' && <span className="text-xs text-gray-400">Read-only</span>}
+                      </div>
+                    </div>
+                    {/* MD can also edit penal charges, processing fees, and conditions */}
+                    {role === 'md' && (
+                      <div className="grid grid-cols-3 gap-3 mt-3">
+                        <div>
+                          <label className="block text-xs text-gray-500 mb-1">Penal Charges (%)</label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={ps.penalCharges || 0}
+                            onChange={(e) => {
+                              const updated = [...partnerSanctions];
+                              updated[index].penalCharges = parseFloat(e.target.value) || 0;
+                              setPartnerSanctions(updated);
+                            }}
+                            className="input-field text-sm"
+                            readOnly={isReadOnly}
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-gray-500 mb-1">Processing Fee (%)</label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={ps.processingFees || 0}
+                            onChange={(e) => {
+                              const updated = [...partnerSanctions];
+                              updated[index].processingFees = parseFloat(e.target.value) || 0;
+                              setPartnerSanctions(updated);
+                            }}
+                            className="input-field text-sm"
+                            readOnly={isReadOnly}
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-gray-500 mb-1">Conditions</label>
+                          <input
+                            type="text"
+                            value={ps.conditions || ''}
+                            onChange={(e) => {
+                              const updated = [...partnerSanctions];
+                              updated[index].conditions = e.target.value;
+                              setPartnerSanctions(updated);
+                            }}
+                            className="input-field text-sm"
+                            readOnly={isReadOnly}
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* RM sees read-only view */}
+            {role === 'relationship_manager' && (
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
               <div>
                 <label className="block text-xs text-gray-500 mb-1">Sanction Amount (₹)</label>
                 <input
                   type="number"
                   value={sanctionData.sanctionAmount}
-                  onChange={(e) => setSanctionData({ ...sanctionData, sanctionAmount: e.target.value })}
-                  className="input-field text-sm"
-                  readOnly={isReadOnly}
+                  className="input-field text-sm bg-gray-100"
+                  readOnly={true}
                 />
               </div>
-              {/* CEO and MD can see and edit Tenor */}
-              {(role === 'ceo' || role === 'md') && (
               <div>
                 <label className="block text-xs text-gray-500 mb-1">Tenor (Months)</label>
                 <input
                   type="number"
                   value={sanctionData.tenure}
-                  onChange={(e) => setSanctionData({ ...sanctionData, tenure: e.target.value })}
-                  className="input-field text-sm"
-                  readOnly={isReadOnly}
+                  className="input-field text-sm bg-gray-100"
+                  readOnly={true}
                 />
               </div>
-              )}
-              {/* CEO and MD can see and edit ROI */}
-              {(role === 'ceo' || role === 'md') && (
               <div>
                 <label className="block text-xs text-gray-500 mb-1">Proposed ROI (%)</label>
                 <input
                   type="number"
                   step="0.01"
                   value={sanctionData.interestRate}
-                  onChange={(e) => setSanctionData({ ...sanctionData, interestRate: e.target.value })}
-                  className="input-field text-sm"
-                  readOnly={isReadOnly}
-                />
-              </div>
-              )}
-              <div className={role === 'md' ? "" : "hidden"}>
-                <label className="block text-xs text-gray-500 mb-1">Penal Charges (%)</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={sanctionData.penalCharges}
-                  onChange={(e) => setSanctionData({ ...sanctionData, penalCharges: e.target.value })}
-                  className="input-field text-sm"
-                  readOnly={isReadOnly}
-                />
-              </div>
-              <div className={role === 'md' ? "" : "hidden"}>
-                <label className="block text-xs text-gray-500 mb-1">Processing Fee (%)</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={sanctionData.processingFees}
-                  onChange={(e) => setSanctionData({ ...sanctionData, processingFees: e.target.value })}
-                  className="input-field text-sm"
-                  readOnly={isReadOnly}
-                />
-              </div>
-              <div className={role === 'md' ? "col-span-full" : "hidden col-span-full"}>
-                <label className="block text-xs text-gray-500 mb-1">Sanction Conditions</label>
-                <textarea
-                  value={sanctionData.conditions}
-                  onChange={(e) => setSanctionData({ ...sanctionData, conditions: e.target.value })}
-                  className="input-field text-sm"
-                  rows={2}
-                  readOnly={isReadOnly}
+                  className="input-field text-sm bg-gray-100"
+                  readOnly={true}
                 />
               </div>
             </div>
+            )}
           </div>
           )}
 

@@ -201,6 +201,7 @@ export class CustomerService {
         "statusHistory",
         "statusHistory.changedByUser",
         "applicant", // <-- include applicant relation
+        "sanctionLimitHistory", // Include sanction limit history for credit team
       ],
     });
   }

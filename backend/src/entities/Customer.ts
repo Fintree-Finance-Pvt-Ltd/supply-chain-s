@@ -31,7 +31,8 @@ import { Loan } from './Loan';
 import { Drawdown } from './Drawdown';
 import { Notification } from './Notification';
 import { RefreshToken } from './RefreshToken';
-import { LoanTransaction } from './Loan';
+import { SanctionLimitHistory } from './SanctionLimitHistory';
+import { LoanAccount } from './LoanAccount';
 
 @Entity('customers')
 export class Customer {
@@ -48,9 +49,6 @@ export class Customer {
 
   @Column({ type: 'varchar', length: 20 })
   mobile: string;
-
-  @Column({ type: 'varchar', length: 255, nullable: true })
-  password: string;
 
   @Column({ type: 'varchar', length: 255, nullable: true })
   email: string;
@@ -98,12 +96,6 @@ export class Customer {
 
   @Column({ type: 'decimal', precision: 15, scale: 2, nullable: true })
   annualTurnover: number;
-
-  @Column({ type: 'varchar', length: 50, nullable: true })
-  lanId: string;
-
-  @Column({ type: 'varchar', length: 50, nullable: true })
-  lender: string;
 
   @Column({ type: 'text', nullable: true })
   rejectionReason: string;
@@ -181,6 +173,9 @@ export class Customer {
   @OneToMany(() => CreditSanction, (sanction) => sanction.customer)
   creditSanctions: CreditSanction[];
 
+  @OneToMany(() => SanctionLimitHistory, (sanctionLimit) => sanctionLimit.customer)
+  sanctionLimitHistory: SanctionLimitHistory[];
+
   @OneToMany(() => PostSanction, (postSanction) => postSanction.customer)
   postSanctions: PostSanction[];
 
@@ -220,4 +215,7 @@ export class Customer {
 
   @OneToMany(() => RefreshToken, (refreshToken) => refreshToken.customer)
   refreshTokens: RefreshToken[];
+
+  @OneToMany(() => LoanAccount, (loanAccount) => loanAccount.customer)
+  loanAccounts: LoanAccount[];
 }

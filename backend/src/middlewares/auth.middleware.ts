@@ -23,14 +23,17 @@ export const authMiddleware = async (
     const authHeader = req.headers.authorization;
 
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      console.log('[AUTH] No token provided or invalid format');
       res.status(401).json({ message: 'No token provided' });
       return;
     }
 
     const token = authHeader.substring(7); // Remove 'Bearer ' prefix
+    console.log('[AUTH] Token received, length:', token.length);
 
     // Verify token
     const decoded = verifyToken(token) as JWTPayload;
+    console.log('[AUTH] Token decoded, userId:', decoded.userId, 'role:', decoded.role);
 
     // Get user from database
     const userRepository = AppDataSource.getRepository(User);
@@ -39,6 +42,7 @@ export const authMiddleware = async (
     });
 
     if (!user) {
+      console.log('[AUTH] User not found or inactive, userId:', decoded.userId);
       res.status(401).json({ message: 'User not found or inactive' });
       return;
     }
@@ -49,7 +53,7 @@ export const authMiddleware = async (
       where: { userId: user.id, isActive: true },
       relations: ['role'],
     });
-
+    console.log('[AUTH] User roles:', userRoles);
     // Attach user to request with roles
     req.user = {
       ...user,
@@ -58,8 +62,21 @@ export const authMiddleware = async (
     req.userId = user.id;
     req.userRole = decoded.role;
 
+    console.log('[AUTH] Success, user:', user.email);
     next();
   } catch (error: any) {
-    res.status(401).json({ message: error.message || 'Invalid token' });
+    // Provide more specific error messages
+    let errorMessage = 'Invalid or expired token';
+    
+    if (error.name === 'TokenExpiredError') {
+      errorMessage = 'Token has expired. Please login again.';
+    } else if (error.name === 'JsonWebTokenError') {
+      errorMessage = 'Invalid token format. Please login again.';
+    } else if (error.message) {
+      errorMessage = error.message;
+    }
+    
+    console.log('[AUTH] Error:', errorMessage, '| Original error:', error.message);
+    res.status(401).json({ message: errorMessage });
   }
 };

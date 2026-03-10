@@ -25,17 +25,17 @@ api.interceptors.request.use(
 )
 
 // Response interceptor for error handling
-api.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
-      // Unauthorized - clear storage and redirect to login
-      storage.clear()
-      window.location.href = '/login'
-    }
-    return Promise.reject(error)
-  }
-)
+// api.interceptors.response.use(
+//   (response) => response,
+//   (error) => {
+//     if (error.response?.status === 401) {
+//       // Unauthorized - clear storage and redirect to login
+//       storage.clear()
+//       window.location.href = '/login'
+//     }
+//     return Promise.reject(error)
+//   }
+// )
 
 export default api
 

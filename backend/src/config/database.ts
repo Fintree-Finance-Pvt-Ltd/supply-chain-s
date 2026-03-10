@@ -27,6 +27,7 @@ import { Supplier } from '../entities/Supplier';
 import { Invoice } from '../entities/Invoice';
 import { CaseWorkflow } from '../entities/CaseWorkflow';
 import { SanctionLimitHistory } from '../entities/SanctionLimitHistory';
+import { LoanAccount } from '../entities/LoanAccount';
 import { ContactPerson } from '../entities/ContactPerson';
 import { CustomerAddress } from '../entities/CustomerAddress';
 import { OtpSession } from '../entities/OtpSession';
@@ -38,6 +39,8 @@ import { Drawdown } from '../entities/Drawdown';
 import { Notification } from '../entities/Notification';
 import { RefreshToken } from '../entities/RefreshToken';
 import { Applicant } from '../entities/Applicant';
+import { Partner } from '../entities/Partner';
+import { LanSequence } from '../entities/LanSequence';
 
 // Export entities array for use in DataSource
 const entities = [
@@ -62,6 +65,7 @@ const entities = [
   Invoice,
   CaseWorkflow,
   SanctionLimitHistory,
+  LoanAccount,
   ContactPerson,
   CustomerAddress,
   OtpSession,
@@ -69,6 +73,8 @@ const entities = [
   SupplierBankDetail,
   SupplierDocument,
   Loan,
+  Partner,
+  LanSequence,
   LoanSchedule,
   LoanTransaction,
   Drawdown,

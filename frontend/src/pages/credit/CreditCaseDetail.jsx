@@ -54,36 +54,53 @@ const CreditCaseDetail = () => {
 
   useEffect(() => {
     if (currentCase) {
-      // Load existing sanction data for each partner from creditSanctions
-      // For backward compatibility, load from first creditSanction if available
-      const existingSanctions = currentCase.creditSanctions?.[0] || {}
+      // Load existing sanction data for each partner from creditSanctions or sanctionLimitHistory
+      // For Credit L2, load from sanctionLimitHistory which contains all partner sanctions from L1
       
-      setPartnerSanctions({
-        FFPL: {
+      const existingSanctions = currentCase.creditSanctions?.[0] || {};
+      const sanctionHistory = currentCase.sanctionLimitHistory || [];
+      
+      // Initialize all partners with default values
+      const partnerSanctionsData = {};
+      PARTNERS.forEach(partner => {
+        partnerSanctionsData[partner] = {
+          sanctionAmount: '',
+          tenure: '',
+          interestRate: '',
+          conditions: '',
+          penalCharges: '',
+          processingFees: '',
+        };
+      });
+      
+      // Load from sanctionLimitHistory (partner-specific data from L1)
+      if (sanctionHistory && sanctionHistory.length > 0) {
+        sanctionHistory.forEach(limit => {
+          const partner = limit.lender || 'FFPL';
+          if (PARTNERS.includes(partner)) {
+            partnerSanctionsData[partner] = {
+              sanctionAmount: limit.sanctionAmount || '',
+              tenure: limit.tenure || '',
+              interestRate: limit.interestRate || '',
+              conditions: limit.conditions || '',
+              penalCharges: limit.penalCharges || '',
+              processingFees: limit.processingFees || '',
+            };
+          }
+        });
+      } else if (existingSanctions.sanctionAmount) {
+        // Fallback to creditSanctions for backward compatibility
+        partnerSanctionsData['FFPL'] = {
           sanctionAmount: existingSanctions.sanctionAmount || '',
           tenure: existingSanctions.tenure || '',
           interestRate: existingSanctions.interestRate || '',
           conditions: existingSanctions.conditions || '',
           penalCharges: existingSanctions.penalCharges || '',
           processingFees: existingSanctions.processingFees || '',
-        },
-        MFL: {
-          sanctionAmount: '',
-          tenure: '',
-          interestRate: '',
-          conditions: '',
-          penalCharges: '',
-          processingFees: '',
-        },
-        KITE: {
-          sanctionAmount: '',
-          tenure: '',
-          interestRate: '',
-          conditions: '',
-          penalCharges: '',
-          processingFees: '',
-        },
-      })
+        };
+      }
+      
+      setPartnerSanctions(partnerSanctionsData);
       setRemarks(existingSanctions.creditRemarks || '')
     }
   }, [currentCase])
@@ -107,10 +124,16 @@ const CreditCaseDetail = () => {
     const role = (user?.role || '').toLowerCase();
     if (!currentCase) return false;
     const status = currentCase.status;
+    // Credit L1 can edit in submitted or credit_l1_review status
     if (role === 'credit_team_l1' && (status === 'submitted' || status === 'credit_l1_review')) return true;
+    // Credit L2 can edit in credit_l1_approved or credit_l2_review status
     if (role === 'credit_team_l2' && (status === 'credit_l1_approved' || status === 'credit_l2_review')) return true;
+    // CEO can edit in credit_l2_approved or ceo_review status
     if (role === 'ceo' && (status === 'credit_l2_approved' || status === 'ceo_review')) return true;
+    // MD can edit in various statuses
     if (role === 'md' && (status === 'ceo_approved' || status === 'md_pending_terms' || status === 'md_review')) return true;
+    // Allow editing for credit_l2 in any status (for modification purposes)
+    if (role === 'credit_team_l2') return true;
     return false;
   };
   
@@ -123,8 +146,12 @@ const CreditCaseDetail = () => {
     const role = (user?.role || '').toLowerCase();
     if (!currentCase) return false;
     const status = currentCase.status;
+    // CEO can edit ROI in credit_l2_approved or ceo_review status
     if (role === 'ceo' && (status === 'credit_l2_approved' || status === 'ceo_review')) return true;
+    // MD can edit ROI in various statuses
     if (role === 'md' && (status === 'ceo_approved' || status === 'md_pending_terms' || status === 'md_review')) return true;
+    // Allow CEO to edit ROI always
+    if (role === 'ceo') return true;
     return false;
   };
   
@@ -137,8 +164,12 @@ const CreditCaseDetail = () => {
     const role = (user?.role || '').toLowerCase();
     if (!currentCase) return false;
     const status = currentCase.status;
+    // CEO can edit tenure in credit_l2_approved or ceo_review status
     if (role === 'ceo' && (status === 'credit_l2_approved' || status === 'ceo_review')) return true;
+    // MD can edit tenure in various statuses
     if (role === 'md' && (status === 'ceo_approved' || status === 'md_pending_terms' || status === 'md_review')) return true;
+    // Allow CEO to edit tenure always
+    if (role === 'ceo') return true;
     return false;
   };
   
@@ -150,9 +181,10 @@ const CreditCaseDetail = () => {
     // For Credit L1 - can edit sanction amount in submitted or credit_l1_review status
     if (role === 'credit_team_l1' && (status === 'submitted' || status === 'credit_l1_review')) return true;
     // For Credit L2 - can edit sanction amount in credit_l1_approved or credit_l2_review status
-    if (role === 'credit_team_l2' && (status === 'credit_l1_approved' || status === 'credit_l2_review')) return true;
-    // For CEO - can edit sanction terms in ceo_review status
-    if (role === 'ceo' && (status === 'credit_l2_approved' || status === 'ceo_review')) return true;
+    // Also allow credit_l2 to edit in other statuses for modification
+    if (role === 'credit_team_l2') return true;
+    // For CEO - can edit all sanction terms
+    if (role === 'ceo') return true;
     // For RM - can edit in draft status
     if (role === 'relationship_manager' && (status === 'draft' || status === 'submitted')) return true;
     // For MD - can edit in md_pending_terms status
@@ -257,22 +289,19 @@ const CreditCaseDetail = () => {
       }
 
       if (userRole === 'credit_team_l2') {
-        // Save sanction details
-        await creditService.createSanction({
-          customerId: id,
-          ...partnerSanctions['FFPL'],
-          creditRemarks: remarks,
-        })
-        // Advance workflow to CEO
+        // Credit L2 can modify sanctionAmount for all partners
+        // Save sanction details - send partner sanctions array
         await workflowService.approveCreditL2(id, true, remarks, {
-          ...partnerSanctions['FFPL'],
+          partnerSanctions: sanctionsArray,
         })
       } else if (userRole === 'credit_team_l1') {
         // Credit L1 saves sanction and approves - send partner sanctions
         await workflowService.approveCreditL1(id, true, remarks, sanctionPayload)
       } else if (userRole === 'ceo') {
-        // CEO approves with sanction terms
-        await workflowService.approveCEO(id, true, remarks, partnerSanctions['FFPL'])
+        // CEO approves with all partner sanction terms
+        await workflowService.approveCEO(id, true, remarks, {
+          partnerSanctions: sanctionsArray,
+        })
       } else if (userRole === 'md') {
         // MD approves with final sanction terms
         await workflowService.approveMD(id, true, remarks, partnerSanctions['FFPL'])
@@ -484,15 +513,19 @@ const CreditCaseDetail = () => {
           <div className="card">
             <h2 className="text-xl font-semibold text-gray-900 mb-4">Sanction Details</h2>
             
-            {/* Show tabs for each partner when Credit L1 */}
-            {user?.role === 'credit_team_l1' && (
+            {/* Show tabs for each partner when Credit L1, L2 or CEO */}
+            {(user?.role === 'credit_team_l1' || user?.role === 'credit_team_l2' || user?.role === 'ceo') && (
               <div className="mb-4">
-                <p className="text-sm text-gray-600 mb-2">Enter sanction limits for each partner:</p>
+                <p className="text-sm text-gray-600 mb-2">
+                  {user?.role === 'credit_team_l1' ? 'Enter sanction limits for each partner:' : 
+                   user?.role === 'credit_team_l2' ? 'View/modify sanction limits for each partner:' : 
+                   'View/modify sanction limits for each partner:'}
+                </p>
               </div>
             )}
 
-            {/* Show partner-specific fields for Credit L1, or single field for Credit L2 */}
-            {(user?.role === 'credit_team_l1' ? PARTNERS : ['FFPL']).map((partner) => (
+            {/* Show partner-specific fields for Credit L1/L2/CEO */}
+            {((user?.role === 'credit_team_l1' || user?.role === 'credit_team_l2' || user?.role === 'ceo') ? PARTNERS : ['FFPL']).map((partner) => (
               <div key={partner} className="mb-6 pb-6 border-b border-gray-200 last:border-0">
                 <h3 className="text-lg font-medium text-gray-800 mb-3">{partner} Sanction</h3>
                 <div className="space-y-4">

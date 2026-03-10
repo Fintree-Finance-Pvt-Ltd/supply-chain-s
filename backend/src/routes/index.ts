@@ -14,6 +14,7 @@ import workflowRoutes from './workflow.routes';
 import debugRoutes from './debug.routes';
 import migrationRoutes from './migration.routes';
 import onboardingRoutes from './onboarding.routes';
+import partnerRoutes from './partner.routes';
 
 const router = Router();
 
@@ -36,5 +37,6 @@ router.use('/workflows', workflowRoutes);
 router.use('/onboarding', onboardingRoutes);
 router.use('/debug', debugRoutes);
 router.use('/migration', migrationRoutes);
+router.use('/partners', partnerRoutes);
 
 export default router;

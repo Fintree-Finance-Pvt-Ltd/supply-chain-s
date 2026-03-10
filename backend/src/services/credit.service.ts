@@ -101,7 +101,8 @@ export class CreditService {
 
   /**
    * Get all sanction limits for a customer based on customerId
-   * Returns all available partner sanctions (FFPL, MFL, KITE) from sanction_limit_history
+   * Returns all available partner sanctions from sanction_limit_history
+   * Partner information is now dynamically loaded from the partners table
    */
   async getSanctionLimitsByCustomerId(customerId: number): Promise<SanctionLimitHistory[]> {
     return await this.sanctionHistoryRepository.find({

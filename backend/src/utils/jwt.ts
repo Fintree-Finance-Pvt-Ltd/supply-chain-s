@@ -39,7 +39,14 @@ export const generateToken = (payload: JWTPayload): string => {
 export const verifyToken = (token: string): JWTPayload => {
   try {
     return jwt.verify(token, JWT_SECRET) as JWTPayload;
-  } catch (error) {
+  } catch (error: any) {
+    // Provide more specific error for debugging
+    if (error.name === 'TokenExpiredError') {
+      throw new Error('Token has expired');
+    }
+    if (error.name === 'JsonWebTokenError') {
+      throw new Error('Invalid token format');
+    }
     throw new Error('Invalid or expired token');
   }
 };
