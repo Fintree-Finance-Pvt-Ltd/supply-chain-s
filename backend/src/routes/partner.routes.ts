@@ -10,7 +10,7 @@ const router = Router();
  */
 
 // Public routes (no auth for now - can be secured later)
-router.post('/', adminMiddleware, partnerController.create.bind(partnerController));
+router.post('/', partnerController.create.bind(partnerController));
 router.get('/', adminMiddleware, partnerController.getAll.bind(partnerController));
 router.get('/active', partnerController.getActive.bind(partnerController));
 router.get('/:id', adminMiddleware, partnerController.getById.bind(partnerController));

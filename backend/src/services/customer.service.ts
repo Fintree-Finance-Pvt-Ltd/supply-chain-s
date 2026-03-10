@@ -755,22 +755,7 @@ async setPassword(
         };
       }
 
-      // Check if password is set
-      if (!customer.password) {
-        return {
-          success: false,
-          message: "Password not set. Please set password first.",
-        };
-      }
-
-      // Validate password
-      const isPasswordValid = await comparePassword(
-        password,
-        customer.password,
-      );
-      if (!isPasswordValid) {
-        return { success: false, message: "Invalid password" };
-      }
+ 
 
       // Generate JWT token with partnerLoanId from LMS
       const partnerLoanId = lmsCustomer.partner_loan_id || "";

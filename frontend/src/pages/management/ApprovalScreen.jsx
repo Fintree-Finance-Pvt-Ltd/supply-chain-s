@@ -31,8 +31,36 @@ const ApprovalScreen = () => {
   const [isLoading, setIsLoading] = useState(true)
   const [previewedDocs, setPreviewedDocs] = useState(new Set())
 
-  // Known partners/lenders
-  const PARTNERS = ['FFPL', 'MFL', 'KITE'];
+  // Dynamic partners from API
+  const [partners, setPartners] = useState(['FFPL'])
+  const [partnersLoading, setPartnersLoading] = useState(true)
+
+  // Fallback to default if API fails
+  const PARTNERS = partners.length > 0 ? partners : ['FFPL'];
+
+  // Fetch partners from API
+  useEffect(() => {
+    const fetchPartners = async () => {
+      try {
+        const response = await fetch('/api/partners/active', {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          }
+        })
+        if (response.ok) {
+          const data = await response.json()
+          if (data.partners && data.partners.length > 0) {
+            setPartners(data.partners.map(p => p.code))
+          }
+        }
+      } catch (err) {
+        console.error('Failed to fetch partners:', err)
+      } finally {
+        setPartnersLoading(false)
+      }
+    }
+    fetchPartners()
+  }, [])
 
   useEffect(() => {
     const loadData = async () => {

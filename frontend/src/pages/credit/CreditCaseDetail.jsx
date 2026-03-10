@@ -13,15 +13,19 @@ import StatusBadge from '../../components/StatusBadge'
 import ApprovalTimeline from '../../components/ApprovalTimeline'
 import CustomerFullDetails from '../../components/CustomerFullDetails'
 
-// Partner list for multi-partner sanction support
-const PARTNERS = ['FFPL', 'MFL', 'KITE']
-
 const CreditCaseDetail = () => {
   const { id } = useParams()
   const navigate = useNavigate()
   const dispatch = useDispatch()
   const { user } = useSelector((state) => state.auth)
   const { currentCase, isLoading, error } = useSelector((state) => state.cases)
+
+  // Dynamic partners from API
+  const [partners, setPartners] = useState([])
+  const [partnersLoading, setPartnersLoading] = useState(true)
+
+  // Fallback to default if API fails
+  const PARTNERS = partners.length > 0 ? partners : ['FFPL']
 
   // Store sanction data for each partner
   const [partnerSanctions, setPartnerSanctions] = useState(
@@ -51,6 +55,30 @@ const CreditCaseDetail = () => {
       dispatch(clearError())
     }
   }, [id, dispatch])
+
+  // Fetch partners from API
+  useEffect(() => {
+    const fetchPartners = async () => {
+      try {
+        const response = await fetch('/api/partners/active', {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          }
+        })
+        if (response.ok) {
+          const data = await response.json()
+          if (data.partners && data.partners.length > 0) {
+            setPartners(data.partners.map(p => p.code))
+          }
+        }
+      } catch (err) {
+        console.error('Failed to fetch partners:', err)
+      } finally {
+        setPartnersLoading(false)
+      }
+    }
+    fetchPartners()
+  }, [])
 
   useEffect(() => {
     if (currentCase) {
