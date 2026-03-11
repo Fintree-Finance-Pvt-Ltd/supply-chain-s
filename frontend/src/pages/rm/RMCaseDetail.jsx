@@ -3,8 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useSelector, useDispatch } from 'react-redux'
 import { fetchCaseById } from '../../store/slices/caseSlice'
 import { workflowService } from '../../services/workflowService'
-import { customerService } from '../../services/customerService'
 import { documentService } from '../../services/documentService'
+import { partnerService } from '../../services/partnerService'
 import DocumentUploader from '../../components/DocumentUploader'
 import LoadingSpinner from '../../components/LoadingSpinner'
 import ApprovalTimeline from '../../components/ApprovalTimeline'
@@ -28,18 +28,17 @@ const RMCaseDetail = () => {
         bankType: 'savings', // Default
     })
 
-    const [sanctionData, setSanctionData] = useState({
-        sanctionAmount: '',
-        tenure: '',
-        interestRate: '',
-        penalCharges: '',
-        processingFees: '',
-        conditions: '',
-    })
-
     const [remarks, setRemarks] = useState('')
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [isUpdating, setIsUpdating] = useState(false)
+
+    // Dynamic partners from API
+    const [partners, setPartners] = useState([])
+    const [partnersLoading, setPartnersLoading] = useState(true)
+    const PARTNERS = partners
+
+    // Store sanction data for each partner
+    const [partnerSanctions, setPartnerSanctions] = useState({})
 
     // Camera/OCR State
     const [isCameraOpen, setIsCameraOpen] = useState(false)
@@ -53,6 +52,36 @@ const RMCaseDetail = () => {
         }
     }, [id, dispatch])
 
+    // Fetch partners from API
+    useEffect(() => {
+        const fetchPartners = async () => {
+            try {
+                const data = await partnerService.getActivePartners()
+                if (data.partners && data.partners.length > 0) {
+                    setPartners(data.partners)
+                    // Initialize partnerSanctions with empty values for each partner
+                    const initialSanctions = {}
+                    data.partners.forEach(partner => {
+                        initialSanctions[partner.code] = {
+                            sanctionAmount: '',
+                            tenure: '',
+                            interestRate: '',
+                            penalCharges: '',
+                            processingFees: '',
+                            conditions: '',
+                        }
+                    })
+                    setPartnerSanctions(initialSanctions)
+                }
+            } catch (err) {
+                console.error('Failed to fetch partners:', err)
+            } finally {
+                setPartnersLoading(false)
+            }
+        }
+        fetchPartners()
+    }, [])
+
     useEffect(() => {
         if (currentCase) {
             setBankDetails({
@@ -62,24 +91,70 @@ const RMCaseDetail = () => {
                 bankBranch: currentCase.bankBranch || '',
                 bankType: currentCase.bankType || 'savings',
             })
-            if (currentCase.creditSanctions?.[0]) {
-                const s = currentCase.creditSanctions[0]
-                setSanctionData({
-                    sanctionAmount: s.sanctionAmount || '',
-                    tenure: s.tenure || '',
-                    interestRate: s.interestRate || '',
-                    penalCharges: s.penalCharges || '',
-                    processingFees: s.processingFees || '',
-                    conditions: s.conditions || '',
+            
+            // Load existing sanctions from creditSanctions (supports multiple partners)
+            if (currentCase.creditSanctions && currentCase.creditSanctions.length > 0) {
+                const existingSanctions = { ...partnerSanctions }
+                currentCase.creditSanctions.forEach(sanction => {
+                    const partnerCode = sanction.partner
+                    if (partnerCode && existingSanctions[partnerCode]) {
+                        existingSanctions[partnerCode] = {
+                            sanctionAmount: sanction.sanctionAmount || '',
+                            tenure: sanction.tenure || '',
+                            interestRate: sanction.interestRate || '',
+                            penalCharges: sanction.penalCharges || '',
+                            processingFees: sanction.processingFees || '',
+                            conditions: sanction.conditions || '',
+                        }
+                    } else if (partnerCode) {
+                        // Partner not in list yet, add it
+                        existingSanctions[partnerCode] = {
+                            sanctionAmount: sanction.sanctionAmount || '',
+                            tenure: sanction.tenure || '',
+                            interestRate: sanction.interestRate || '',
+                            penalCharges: sanction.penalCharges || '',
+                            processingFees: sanction.processingFees || '',
+                            conditions: sanction.conditions || '',
+                        }
+                    }
                 })
+                setPartnerSanctions(existingSanctions)
+            } else if (currentCase.creditSanctions?.[0]) {
+                // Fallback: single sanction (legacy data)
+                const s = currentCase.creditSanctions[0]
+                const firstPartnerCode = PARTNERS[0]?.code || 'FFPL'
+                setPartnerSanctions(prev => ({
+                    ...prev,
+                    [firstPartnerCode]: {
+                        sanctionAmount: s.sanctionAmount || '',
+                        tenure: s.tenure || '',
+                        interestRate: s.interestRate || '',
+                        penalCharges: s.penalCharges || '',
+                        processingFees: s.processingFees || '',
+                        conditions: s.conditions || '',
+                    }
+                }))
             }
         }
-    }, [currentCase])
+    }, [currentCase, PARTNERS])
 
     const handleSaveBankDetails = async () => {
         setIsUpdating(true)
         try {
-            await workflowService.updateBankDetails(id, { ...bankDetails, sanctionData })
+            // Build partner sanctions array
+            const sanctionsArray = PARTNERS
+                .filter(partner => partnerSanctions[partner.code]?.sanctionAmount)
+                .map(partner => ({
+                    partner: partner.code,
+                    sanctionAmount: parseFloat(partnerSanctions[partner.code].sanctionAmount) || 0,
+                    tenure: parseInt(partnerSanctions[partner.code].tenure) || 0,
+                    interestRate: parseFloat(partnerSanctions[partner.code].interestRate) || 0,
+                    penalCharges: parseFloat(partnerSanctions[partner.code].penalCharges) || 0,
+                    processingFees: parseFloat(partnerSanctions[partner.code].processingFees) || 0,
+                    conditions: partnerSanctions[partner.code].conditions || '',
+                }))
+            
+            await workflowService.updateBankDetails(id, { ...bankDetails, partnerSanctions: sanctionsArray })
             alert('Details saved successfully')
             dispatch(fetchCaseById(id))
         } catch (error) {
@@ -116,7 +191,20 @@ const RMCaseDetail = () => {
     const handleSubmitToMD = async () => {
         setIsSubmitting(true)
         try {
-            await workflowService.submitRMToMD(id, "Final terms confirmed by RM", sanctionData)
+            // Build partner sanctions array
+            const sanctionsArray = PARTNERS
+                .filter(partner => partnerSanctions[partner.code]?.sanctionAmount)
+                .map(partner => ({
+                    partner: partner.code,
+                    sanctionAmount: parseFloat(partnerSanctions[partner.code].sanctionAmount) || 0,
+                    tenure: parseInt(partnerSanctions[partner.code].tenure) || 0,
+                    interestRate: parseFloat(partnerSanctions[partner.code].interestRate) || 0,
+                    penalCharges: parseFloat(partnerSanctions[partner.code].penalCharges) || 0,
+                    processingFees: parseFloat(partnerSanctions[partner.code].processingFees) || 0,
+                    conditions: partnerSanctions[partner.code].conditions || '',
+                }))
+            
+            await workflowService.submitRMToMD(id, "Final terms confirmed by RM", { partnerSanctions: sanctionsArray })
             toast.success('Case submitted to MD successfully')
             dispatch(fetchCaseById(id))
             navigate('/rm/dashboard')
@@ -288,61 +376,92 @@ const RMCaseDetail = () => {
                             <h2 className="text-xl font-semibold text-gray-900">Final Sanction Terms</h2>
                             <FiSend className="text-primary-500" title="RM can now edit sanction details if required" />
                         </div>
-                        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                            <div className="p-3 bg-indigo-50 rounded-lg">
-                                <label className="block text-[10px] text-indigo-600 uppercase font-bold mb-1">Sanction Amount</label>
-                                <input
-                                    type="number"
-                                    value={sanctionData.sanctionAmount}
-                                    onChange={(e) => setSanctionData({ ...sanctionData, sanctionAmount: e.target.value })}
-                                    className="w-full bg-transparent border-none p-0 text-lg font-bold focus:ring-0"
-                                    readOnly={isReadOnly || isStage2}
-                                />
-                            </div>
-                            <div className="p-3 bg-indigo-50 rounded-lg">
-                                <label className="block text-[10px] text-indigo-600 uppercase font-bold mb-1">Tenure (Months)</label>
-                                <input
-                                    type="number"
-                                    value={sanctionData.tenure}
-                                    onChange={(e) => setSanctionData({ ...sanctionData, tenure: e.target.value })}
-                                    className="w-full bg-transparent border-none p-0 text-lg font-bold focus:ring-0"
-                                    readOnly={isReadOnly || isStage2}
-                                />
-                            </div>
-                            <div className="p-3 bg-indigo-50 rounded-lg">
-                                <label className="block text-[10px] text-indigo-600 uppercase font-bold mb-1">Interest Rate (%)</label>
-                                <input
-                                    type="number"
-                                    step="0.01"
-                                    value={sanctionData.interestRate}
-                                    onChange={(e) => setSanctionData({ ...sanctionData, interestRate: e.target.value })}
-                                    className="w-full bg-transparent border-none p-0 text-lg font-bold focus:ring-0"
-                                    readOnly={isReadOnly || isStage2}
-                                />
-                            </div>
-                            <div className="p-3 bg-indigo-50 rounded-lg">
-                                <label className="block text-[10px] text-indigo-600 uppercase font-bold mb-1">Penal Charges (%)</label>
-                                <input
-                                    type="number"
-                                    step="0.01"
-                                    value={sanctionData.penalCharges}
-                                    onChange={(e) => setSanctionData({ ...sanctionData, penalCharges: e.target.value })}
-                                    className="w-full bg-transparent border-none p-0 text-lg font-bold focus:ring-0"
-                                    readOnly={isReadOnly || isStage2}
-                                />
-                            </div>
-                            <div className="p-3 bg-indigo-50 rounded-lg">
-                                <label className="block text-[10px] text-indigo-600 uppercase font-bold mb-1">Processing Fees (%)</label>
-                                <input
-                                    type="number"
-                                    step="0.01"
-                                    value={sanctionData.processingFees}
-                                    onChange={(e) => setSanctionData({ ...sanctionData, processingFees: e.target.value })}
-                                    className="w-full bg-transparent border-none p-0 text-lg font-bold focus:ring-0"
-                                    readOnly={isReadOnly || isStage2}
-                                />
-                            </div>
-                        </div>
+                        
+                        {/* Show all partners when loading */}
+                        {partnersLoading ? (
+                            <div className="text-center py-4 text-gray-500">Loading partners...</div>
+                        ) : partners.length === 0 ? (
+                            <div className="text-center py-4 text-gray-500">No active partners found</div>
+                        ) : (
+                            /* Show tabs/sections for each partner */
+                            PARTNERS.map((partner) => (
+                                <div key={partner.id} className="mb-6 pb-6 border-b border-gray-200 last:border-0 last:mb-0 last:pb-0">
+                                    <h3 className="text-lg font-medium text-gray-800 mb-3">
+                                        {partner.name || partner.code} ({partner.code})
+                                    </h3>
+                                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                                        <div className="p-3 bg-indigo-50 rounded-lg">
+                                            <label className="block text-[10px] text-indigo-600 uppercase font-bold mb-1">Sanction Amount</label>
+                                            <input
+                                                type="number"
+                                                value={partnerSanctions[partner.code]?.sanctionAmount || ''}
+                                                onChange={(e) => setPartnerSanctions({
+                                                    ...partnerSanctions,
+                                                    [partner.code]: { ...partnerSanctions[partner.code], sanctionAmount: e.target.value }
+                                                })}
+                                                className="w-full bg-transparent border-none p-0 text-lg font-bold focus:ring-0"
+                                                readOnly={isReadOnly || isStage2}
+                                            />
+                                        </div>
+                                        <div className="p-3 bg-indigo-50 rounded-lg">
+                                            <label className="block text-[10px] text-indigo-600 uppercase font-bold mb-1">Tenure (Months)</label>
+                                            <input
+                                                type="number"
+                                                value={partnerSanctions[partner.code]?.tenure || ''}
+                                                onChange={(e) => setPartnerSanctions({
+                                                    ...partnerSanctions,
+                                                    [partner.code]: { ...partnerSanctions[partner.code], tenure: e.target.value }
+                                                })}
+                                                className="w-full bg-transparent border-none p-0 text-lg font-bold focus:ring-0"
+                                                readOnly={isReadOnly || isStage2}
+                                            />
+                                        </div>
+                                        <div className="p-3 bg-indigo-50 rounded-lg">
+                                            <label className="block text-[10px] text-indigo-600 uppercase font-bold mb-1">Interest Rate (%)</label>
+                                            <input
+                                                type="number"
+                                                step="0.01"
+                                                value={partnerSanctions[partner.code]?.interestRate || ''}
+                                                onChange={(e) => setPartnerSanctions({
+                                                    ...partnerSanctions,
+                                                    [partner.code]: { ...partnerSanctions[partner.code], interestRate: e.target.value }
+                                                })}
+                                                className="w-full bg-transparent border-none p-0 text-lg font-bold focus:ring-0"
+                                                readOnly={isReadOnly || isStage2}
+                                            />
+                                        </div>
+                                        <div className="p-3 bg-indigo-50 rounded-lg">
+                                            <label className="block text-[10px] text-indigo-600 uppercase font-bold mb-1">Penal Charges (%)</label>
+                                            <input
+                                                type="number"
+                                                step="0.01"
+                                                value={partnerSanctions[partner.code]?.penalCharges || ''}
+                                                onChange={(e) => setPartnerSanctions({
+                                                    ...partnerSanctions,
+                                                    [partner.code]: { ...partnerSanctions[partner.code], penalCharges: e.target.value }
+                                                })}
+                                                className="w-full bg-transparent border-none p-0 text-lg font-bold focus:ring-0"
+                                                readOnly={isReadOnly || isStage2}
+                                            />
+                                        </div>
+                                        <div className="p-3 bg-indigo-50 rounded-lg">
+                                            <label className="block text-[10px] text-indigo-600 uppercase font-bold mb-1">Processing Fees (%)</label>
+                                            <input
+                                                type="number"
+                                                step="0.01"
+                                                value={partnerSanctions[partner.code]?.processingFees || ''}
+                                                onChange={(e) => setPartnerSanctions({
+                                                    ...partnerSanctions,
+                                                    [partner.code]: { ...partnerSanctions[partner.code], processingFees: e.target.value }
+                                                })}
+                                                className="w-full bg-transparent border-none p-0 text-lg font-bold focus:ring-0"
+                                                readOnly={isReadOnly || isStage2}
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+                            ))
+                        )}
                     </div>
 
                     {/* Stage 1 Actions */}

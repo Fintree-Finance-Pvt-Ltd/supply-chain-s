@@ -4,6 +4,8 @@ import { CustomerOnboardingService } from '../services/customer-onboarding.servi
 import { SupplierOnboardingService } from '../services/supplier-onboarding.service';
 import { InvoiceDiscountingService } from '../services/invoice-discounting.service';
 import { DocumentService } from '../services/document.service';
+import { AppDataSource } from '../config/database';
+import { Partner, PARTNER_STATUS } from '../entities/Partner';
 import multer from 'multer';
 import path from 'path';
 const router = Router();
@@ -269,9 +271,46 @@ router.post('/customers/:customerId/credit-l2', checkRole(['credit_team_l2']), a
     // Check if user is trying to modify sanction data
     const isModifyingSanctions = approved && (sanctionAmount || partnerSanctions);
     
-    // Credit team can only modify sanctionAmount (not tenure, ROI, etc.)
+    // Validate that all active partners have sanction amounts when Credit L2 approves
+    if (approved && isModifyingSanctions && partnerSanctions && Array.isArray(partnerSanctions)) {
+      // Fetch all active partners
+      const partnerRepository = AppDataSource.getRepository(Partner);
+      const activePartners = await partnerRepository.find({ where: { status: PARTNER_STATUS.ACTIVE } });
+      
+      // Get the list of partners that have sanction amounts
+      const partnersWithSanction = partnerSanctions
+        .filter((ps: any) => ps.partner && ps.sanctionAmount && ps.sanctionAmount > 0)
+        .map((ps: any) => ps.partner.toUpperCase());
+      
+      // Check if all active partners have sanction amounts
+      const missingPartners = activePartners.filter(
+        (p) => !partnersWithSanction.includes(p.code.toUpperCase())
+      );
+      
+      if (missingPartners.length > 0) {
+        res.status(400).json({
+          success: false,
+          message: `Please fill sanction amount for all partners. Missing: ${missingPartners.map(p => p.code).join(', ')}`,
+        });
+        return;
+      }
+    }
+    
+    // Credit L2 can only modify sanctionAmount (not tenure, ROI, etc.)
     // But can modify sanctionAmount for all partners via partnerSanctions
     if (isModifyingSanctions && userRole === 'credit_team_l2') {
+      // If using partnerSanctions format, validate each entry
+      if (partnerSanctions && Array.isArray(partnerSanctions)) {
+        for (const ps of partnerSanctions) {
+          if (ps.tenure || ps.interestRate || ps.penalCharges || ps.processingFees || ps.conditions) {
+            res.status(403).json({
+              success: false,
+              message: 'Credit L2 can only modify sanctionAmount. ROI, Tenure, and other terms cannot be edited.',
+            });
+            return;
+          }
+        }
+      }
       // If using old format (single sanction), check for forbidden fields
       if (sanctionAmount && (tenure || interestRate || penalCharges || processingFees || conditions)) {
         res.status(403).json({
@@ -376,10 +415,19 @@ router.post('/customers/:customerId/ceo-approve', checkRole(['ceo']), async (req
 router.post('/customers/:customerId/rm-submit-md', checkRole(['relationship_manager']), async (req: Request, res: Response) => {
   try {
     const { customerId } = req.params;
-    const { remarks, sanctionAmount, tenure, interestRate, conditions, penalCharges, processingFees } = req.body;
+    const { remarks, partnerSanctions, sanctionAmount, tenure, interestRate, conditions, penalCharges, processingFees } = req.body;
     const user = (req as any).user;
 
-    const sanctionData = sanctionAmount ? { sanctionAmount, tenure, interestRate, conditions, penalCharges, processingFees } : undefined;
+    let sanctionData;
+    
+    // Support both single sanction and partner-specific sanctions
+    if (partnerSanctions && Array.isArray(partnerSanctions) && partnerSanctions.length > 0) {
+      // RM is providing partner-specific sanctions
+      sanctionData = { partnerSanctions };
+    } else if (sanctionAmount) {
+      // Legacy single sanction format
+      sanctionData = { sanctionAmount, tenure, interestRate, conditions, penalCharges, processingFees };
+    }
 
     const workflow = await customerOnboardingService.rmSubmitToMD(
       parseInt(customerId),

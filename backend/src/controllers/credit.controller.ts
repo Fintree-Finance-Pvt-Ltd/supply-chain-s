@@ -94,6 +94,33 @@ export class CreditController {
       });
     }
   };
+
+  getSanctionsByCustomerId = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { customerId } = req.params;
+      const sanctions = await this.creditService.getSanctionsByCustomerId(Number(customerId));
+
+      // Return in the format expected by the frontend
+      const response = {
+        sanctions: sanctions.map(s => ({
+          partner: s.partner,
+          sanction_limit: s.sanctionAmount,
+          roi: s.interestRate,
+          tenor: s.tenure,
+          conditions: s.conditions,
+          penalCharges: s.penalCharges,
+          processingFees: s.processingFees,
+        })),
+      };
+
+      res.json(response);
+    } catch (error: any) {
+      res.status(500).json({
+        success: false,
+        message: error.message || 'Failed to fetch sanctions',
+      });
+    }
+  };
 }
 
 

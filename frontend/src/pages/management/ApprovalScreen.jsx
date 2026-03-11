@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useSelector } from 'react-redux'
 import { workflowService } from '../../services/workflowService'
 import { customerService } from '../../services/customerService'
+import { partnerService } from '../../services/partnerService'
 import ApprovalTimeline from '../../components/ApprovalTimeline'
 import LoadingSpinner from '../../components/LoadingSpinner'
 import CustomerFullDetails from '../../components/CustomerFullDetails'
@@ -32,26 +33,19 @@ const ApprovalScreen = () => {
   const [previewedDocs, setPreviewedDocs] = useState(new Set())
 
   // Dynamic partners from API
-  const [partners, setPartners] = useState(['FFPL'])
+  const [partners, setPartners] = useState([])
   const [partnersLoading, setPartnersLoading] = useState(true)
 
   // Fallback to default if API fails
   const PARTNERS = partners.length > 0 ? partners : ['FFPL'];
 
-  // Fetch partners from API
+  // Fetch partners from API - use partnerService
   useEffect(() => {
     const fetchPartners = async () => {
       try {
-        const response = await fetch('/api/partners/active', {
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token')}`
-          }
-        })
-        if (response.ok) {
-          const data = await response.json()
-          if (data.partners && data.partners.length > 0) {
-            setPartners(data.partners.map(p => p.code))
-          }
+        const data = await partnerService.getActivePartners()
+        if (data.partners && data.partners.length > 0) {
+          setPartners(data.partners.map(p => p.code))
         }
       } catch (err) {
         console.error('Failed to fetch partners:', err)
@@ -69,13 +63,46 @@ const ApprovalScreen = () => {
         const custResponse = await customerService.getCustomerById(id)
         setCustomer(custResponse.data)
         
-        // For CEO: load all partner sanctions from sanctionLimitHistory
-        if (custResponse.data?.sanctionLimitHistory && custResponse.data.sanctionLimitHistory.length > 0) {
+        // For CEO: load all partner sanctions from credit_sanctions table
+        // This is the correct source of truth - use partner field for mapping
+        const sanctions = custResponse.data?.creditSanctions || [];
+        
+        if (sanctions.length > 0) {
+          // Build partner map from credit_sanctions using 'partner' field
+          const partnerMap = {};
+          sanctions.forEach(item => {
+            const partner = item.partner;
+            partnerMap[partner] = {
+              partner: partner,
+              sanctionAmount: item.sanctionAmount || 0,
+              tenure: item.tenure || 0,
+              interestRate: item.interestRate || 0,
+              penalCharges: item.penalCharges || 0,
+              processingFees: item.processingFees || 0,
+              conditions: item.conditions || '',
+              hasData: true
+            };
+          });
+          
+          // Create array with all known partners, using data from credit_sanctions
+          const partners = PARTNERS.map(p => ({
+            partner: p,
+            sanctionAmount: partnerMap[p]?.sanctionAmount || 0,
+            tenure: partnerMap[p]?.tenure || 0,
+            interestRate: partnerMap[p]?.interestRate || 0,
+            penalCharges: partnerMap[p]?.penalCharges || 0,
+            processingFees: partnerMap[p]?.processingFees || 0,
+            conditions: partnerMap[p]?.conditions || '',
+            hasData: !!partnerMap[p]
+          }));
+          setPartnerSanctions(partners);
+        } else if (custResponse.data?.sanctionLimitHistory && custResponse.data.sanctionLimitHistory.length > 0) {
+          // Fallback to sanctionLimitHistory only if no credit_sanctions exist
           const history = custResponse.data.sanctionLimitHistory;
           // Group by lender/partner - use LATEST entry (by createdAt)
           const partnerMap = {};
           history.forEach(item => {
-            const partner = item.lender || 'FFPL';
+            const partner = item.lender || PARTNERS[0] || '';
             const itemDate = new Date(item.createdAt || 0);
             const existingDate = partnerMap[partner] ? new Date(partnerMap[partner].createdAt || 0) : new Date(0);
             
@@ -101,16 +128,6 @@ const ApprovalScreen = () => {
             hasData: !!partnerMap[p]
           }));
           setPartnerSanctions(partners);
-        } else if (custResponse.data?.creditSanctions?.[0]) {
-          // Fallback to creditSanctions if no history
-          const s = custResponse.data.creditSanctions[0];
-          setPartnerSanctions([{
-            partner: 'FFPL',
-            sanctionAmount: s.sanctionAmount || 0,
-            tenure: s.tenure || 0,
-            interestRate: s.interestRate || 0,
-            hasData: true
-          }]);
         } else {
           // Initialize with empty partners
           setPartnerSanctions(PARTNERS.map(p => ({
@@ -149,7 +166,7 @@ const ApprovalScreen = () => {
     if (id) {
       loadData()
     }
-  }, [id])
+  }, [id, PARTNERS])
 
   const handleApprove = async () => {
     if (!comments.trim()) {

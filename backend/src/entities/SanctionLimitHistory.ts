@@ -17,6 +17,9 @@ export class SanctionLimitHistory {
     @Column({ type: 'int' })
     customerId: number;
 
+    @Column({ type: 'varchar', length: 20, nullable: true })
+    partner: string; // Partner code (FFPL, KF, MFL, KITE, etc.)
+
     @Column({ type: 'decimal', precision: 15, scale: 2 })
     sanctionAmount: number;
 

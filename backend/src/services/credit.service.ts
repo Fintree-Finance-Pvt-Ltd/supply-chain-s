@@ -110,6 +110,17 @@ export class CreditService {
       order: { createdAt: 'DESC' },
     });
   }
+
+  /**
+   * Get all credit sanctions for a customer by customerId
+   * Returns partner-specific sanctions from credit_sanctions table
+   */
+  async getSanctionsByCustomerId(customerId: number): Promise<CreditSanction[]> {
+    return await this.creditSanctionRepository.find({
+      where: { customerId },
+      order: { createdAt: 'DESC' },
+    });
+  }
 }
 
 

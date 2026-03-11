@@ -5,7 +5,7 @@ import roleRoutes from './role.routes';
 import customersRoutes from './customer.routes';
 import customerAPKRoutes from './customerAPK.routes';
 import kycRoutes from './kyc.routes';
-import creditRoutes from './credit.routes';
+import creditRoutes, { creditController } from './credit.routes';
 import approvalRoutes from './approval.routes';
 import documentRoutes from './document.routes';
 import operationsRoutes from './operations.routes';
@@ -15,6 +15,7 @@ import debugRoutes from './debug.routes';
 import migrationRoutes from './migration.routes';
 import onboardingRoutes from './onboarding.routes';
 import partnerRoutes from './partner.routes';
+import { authMiddleware } from '../middlewares/auth.middleware';
 
 const router = Router();
 
@@ -29,6 +30,10 @@ router.use('/lms-customers', customerAPKRoutes);  // Customer APK routes (custom
 
 router.use('/kyc', kycRoutes);
 router.use('/credit', creditRoutes);
+
+// Sanctions endpoint - for fetching credit sanctions by customerId at /api/sanctions/:customerId
+router.get('/sanctions/:customerId', authMiddleware, creditController.getSanctionsByCustomerId);
+
 router.use('/approvals', approvalRoutes);
 router.use('/documents', documentRoutes);
 router.use('/operations', operationsRoutes);

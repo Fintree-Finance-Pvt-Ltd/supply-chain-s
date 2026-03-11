@@ -7,18 +7,23 @@ import {
   ManyToOne,
   OneToMany,
   JoinColumn,
+  Unique,
 } from 'typeorm';
 import { Customer } from './Customer';
 import { User } from './User';
 import { ApprovalInstance } from './ApprovalInstance';
 
 @Entity('credit_sanctions')
+@Unique(['customerId', 'partner']) // Each partner can have one sanction per customer
 export class CreditSanction {
   @PrimaryGeneratedColumn('increment')
   id: number;
 
   @Column({ type: 'int' })
   customerId: number;
+
+  @Column({ type: 'varchar', length: 20, nullable: true })
+  partner: string; // Partner code (FFPL, KF, MFL, etc.)
 
   @Column({ type: 'decimal', precision: 15, scale: 2 })
   sanctionAmount: number;
