@@ -156,31 +156,43 @@ export class CustomerOnboardingService {
     lender: string,
     sanctionedAmount: number
   ): Promise<string> {
+    // Fetch partner from partners table to get partnerId
+    const partner = await this.partnerRepository.findOne({
+      where: { code: lender.toUpperCase() }
+    });
+    
+    if (!partner) {
+      console.warn(`[LoanAccount] Partner not found for code ${lender}, using null partnerId`);
+    }
+    
+    const partnerId = partner?.id || null;
     const lanId = await this.getNextLanId(lender);
     
-    // Check if loan account already exists for this lender
+    // Check if loan account already exists for this customer and partner
     const existingAccount = await this.loanAccountRepository.findOne({
       where: { customerId, lender: lender as any }
     });
     
     if (existingAccount) {
-      // Update existing account
+      // Update existing account with partnerId if not set
       await this.loanAccountRepository.update(existingAccount.id, {
         sanctionedAmount,
         status: 'active',
+        partnerId: existingAccount.partnerId || partnerId, // Set partnerId if not already set
       });
       console.log(`[LoanAccount] Updated loan account ${existingAccount.lanId} for customer ${customerId}`);
     } else {
-      // Create new loan account
+      // Create new loan account with partnerId
       await this.loanAccountRepository.save(this.loanAccountRepository.create({
         customerId,
+        partnerId,
         lender: lender as any,
         lanId,
         sanctionedAmount,
         disbursedAmount: 0,
         status: 'active',
       }));
-      console.log(`[LoanAccount] Created new loan account ${lanId} for customer ${customerId}`);
+      console.log(`[LoanAccount] Created new loan account ${lanId} for customer ${customerId} with partnerId ${partnerId}`);
     }
     
     return lanId;
@@ -470,33 +482,51 @@ export class CustomerOnboardingService {
     return historySanctions;
   }
 
-  private async getNextLanId(lender: string = 'FFPL'): Promise<string> {
-    // Look up partner dynamically from database
-    const partner = await this.partnerRepository.findOne({
-      where: { code: lender.toUpperCase() }
-    });
-    
-    if (!partner) {
-      throw new Error(`Unsupported lender: ${lender}`);
-    }
+private async getNextLanId(lender:any): Promise<string> {
 
-    const prefix = partner.lanPrefix || partner.code;
-    const startNumber = 10000101; // Default start number
+  if(!lender){
+    throw new Error('Lender is required to generate LAN ID');
+  }
+  const partner = await this.partnerRepository.findOne({
+    where: { code: lender.toUpperCase() }
+  });
 
-    // Get the maximum lanId for this lender from loan_accounts table
-    const result = await this.loanAccountRepository
+  if (!partner) {
+    throw new Error(`Unsupported lender: ${lender}`);
+  }
+
+  const prefix = partner.lanPrefix || partner.code;
+  const startNumber = 10000101;
+
+  // Use transaction with pessimistic write lock (SELECT FOR UPDATE) to prevent race conditions
+  // This locks the rows being read to ensure no concurrent transaction can modify them
+  const lanId = await AppDataSource.transaction(async (manager) => {
+    // Get the loan account repository within this transaction
+    const loanRepo = manager.getRepository(LoanAccount);
+
+    // Use REPLACE to safely remove the prefix - more reliable than SUBSTRING math
+    // REPLACE removes all occurrences of the prefix, giving us just the numeric part
+    // Using setLock for pessimistic write to prevent race conditions
+    const result = await loanRepo
       .createQueryBuilder('loan')
-      .select('MAX(CAST(SUBSTRING(loan.lanId, :prefixLength + 1) AS UNSIGNED))', 'maxId')
-      .where('loan.lanId LIKE :prefix AND CAST(SUBSTRING(loan.lanId, :prefixLength + 1) AS UNSIGNED) >= :start', { 
-        prefix: `${prefix}%`, 
-        prefixLength: prefix.length,
-        start: startNumber 
-      })
+      .setLock('pessimistic_write')
+      .select('MAX(CAST(REPLACE(loan.lanId, :prefix, \'\') AS UNSIGNED))', 'maxId')
+      .where('loan.lanId LIKE :prefix', { prefix: `${prefix}%` })
+      .setParameters({ prefix })
       .getRawOne();
 
-    const nextNumber = (result?.maxId || startNumber - 1) + 1;
+    // Calculate next number: if maxId exists, use maxId + 1, otherwise start from startNumber
+    // Handle null/undefined maxId properly
+    const currentMaxId = result?.maxId ? parseInt(result.maxId, 10) : 0;
+    const nextNumber = currentMaxId > 0 ? currentMaxId + 1 : startNumber;
+
+    // Generate LAN with prefix + 8-digit padded number
+    // This ensures: FFPL10000101, FFPL10000102, etc. (always 8 digits)
     return `${prefix}${nextNumber.toString().padStart(8, '0')}`;
-  }
+  });
+
+  return lanId;
+}
 
   async creditL2Approve(customerId: number, userId: number, remarks: string, approved: boolean, sanctionData?: any) {
     const customer = await this.customerRepository.findOne({ where: { id: customerId } });

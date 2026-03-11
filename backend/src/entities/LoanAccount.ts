@@ -6,6 +6,7 @@ import {
   ManyToOne,
   JoinColumn,
   OneToMany,
+  Unique,
 } from 'typeorm';
 import { Customer } from './Customer';
 import { Partner } from './Partner';
@@ -21,6 +22,7 @@ export enum LENDER {
  */
 
 @Entity('loan_accounts')
+@Unique('unique_customer_lender', ['customerId', 'lender'])
 export class LoanAccount {
   @PrimaryGeneratedColumn('increment')
   id: number;
@@ -29,13 +31,14 @@ export class LoanAccount {
   customerId: number;
 
   @Column({ type: 'int', nullable: true })
-  partnerId: number;
+  partnerId: number | null;
 
   /**
    * @deprecated Use partner relation instead. Kept for backward compatibility.
+   * Stores partner code like 'FFPL', 'KF', 'MF', etc.
    */
-  @Column({ type: 'enum', enum: LENDER, nullable: true })
-  lender: LENDER;
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  lender: string;
 
   @Column({ type: 'varchar', length: 50, unique: true })
   lanId: string; // Loan Account Number (auto-generated)
