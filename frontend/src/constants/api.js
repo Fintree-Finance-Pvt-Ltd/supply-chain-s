@@ -85,6 +85,28 @@ export const API_ENDPOINTS = {
   WORKFLOW_INVOICE_OPS_HEAD: (id) => `/workflows/invoices/${id}/ops-head`,
   WORKFLOW_INVOICE_CEO: (id) => `/workflows/invoices/${id}/ceo-review`,
   WORKFLOW_INVOICE_MD: (id) => `/workflows/invoices/${id}/md-approve`,
+  WORKFLOW_INVOICE_DISBURSE: (id) => `/workflows/invoices/${id}/disburse`,
+  WORKFLOW_INVOICE_FINAL_OPS_L2: (id) => `/workflows/invoices/${id}/final-ops-l2`,
+  
+  // Invoice Discounting - Customer Mobile App
+  WORKFLOW_INVOICE_CUSTOMER_APPROVE: (id) => `/workflows/invoices/${id}/customer-approve`,
+  WORKFLOW_INVOICE_CUSTOMER_DETAILS: (id) => `/workflows/invoices/${id}/customer-details`,
+  WORKFLOW_INVOICE_CUSTOMER_PENDING: '/workflows/invoices/pending/customer',
+  
+  // Invoice Discounting - Dashboard Endpoints
+  WORKFLOW_INVOICE_OPS_L1_PENDING: '/workflows/invoices/pending/ops-l1',
+  WORKFLOW_INVOICE_OPS_L2_PENDING: '/workflows/invoices/pending/ops-l2',
+  WORKFLOW_INVOICE_MD_PENDING: '/workflows/invoices/pending/md',
+  WORKFLOW_INVOICE_OPS_HEAD_PENDING: '/workflows/invoices/pending/ops-head',
+  WORKFLOW_INVOICE_DISBURSEMENT_ENTRY_PENDING: '/workflows/invoices/pending/disbursement-entry',
+  WORKFLOW_INVOICE_FINAL_OPS_L2_PENDING: '/workflows/invoices/pending/final-ops-l2',
+  WORKFLOW_INVOICE_ACTIVE: '/workflows/invoices/active',
+  
+  // Invoice Discounting - RM endpoints
+  WORKFLOW_INVOICE_GET_CUSTOMERS: '/workflows/invoices/customers',
+  WORKFLOW_INVOICE_GET_LANS: (customerId) => `/workflows/invoices/customers/${customerId}/lans`,
+  WORKFLOW_INVOICE_GET_SUPPLIERS: (customerId) => `/workflows/invoices/customers/${customerId}/suppliers`,
+  WORKFLOW_INVOICE_GET_SUPPLIER_BANK: (supplierId) => `/workflows/invoices/suppliers/${supplierId}/bank-details`,
 
   // Dashboards
   DASHBOARD_RM_CUSTOMERS: '/workflows/customers/dashboard/rm',

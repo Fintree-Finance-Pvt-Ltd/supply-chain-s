@@ -31,6 +31,11 @@ router.use('/lms-customers', customerAPKRoutes);  // Customer APK routes (custom
 router.use('/kyc', kycRoutes);
 router.use('/credit', creditRoutes);
 
+// Dedicated API for fetching all sanctions for a customer (for non-CREDIT_L1 roles)
+// This API returns all sanctions without filtering by partner active status
+// IMPORTANT: Must be defined BEFORE /sanctions/:customerId to avoid route conflicts
+router.get('/sanctions/customer/:customerId', authMiddleware, creditController.getSanctionsByCustomerIdSimple);
+
 // Sanctions endpoint - for fetching credit sanctions by customerId at /api/sanctions/:customerId
 router.get('/sanctions/:customerId', authMiddleware, creditController.getSanctionsByCustomerId);
 

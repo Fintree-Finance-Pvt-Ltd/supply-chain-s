@@ -47,9 +47,11 @@ export class SanctionService {
   }
 
   /**
-   * Validate partner is active
+   * Validate partner is active (for new sanctions by CREDIT_L1)
+   * @param partnerCode - Partner code to validate
+   * @param checkActive - Whether to check if partner is active (default true)
    */
-  private async validatePartner(partnerCode: string): Promise<Partner> {
+  private async validatePartner(partnerCode: string, checkActive: boolean = true): Promise<Partner> {
     const partner = await this.partnerRepository.findOne({
       where: { code: partnerCode.toUpperCase() }
     });
@@ -58,11 +60,23 @@ export class SanctionService {
       throw new Error(`Partner not found: ${partnerCode}`);
     }
     
-    if (partner.status !== PARTNER_STATUS.ACTIVE) {
+    // Only check active status for new sanctions (CREDIT_L1)
+    // For existing sanctions (CREDIT_L2, CEO, MD), allow deactivated partners
+    if (checkActive && partner.status !== PARTNER_STATUS.ACTIVE) {
       throw new Error(`Partner is not active: ${partnerCode}`);
     }
     
     return partner;
+  }
+
+  /**
+   * Find partner by code without checking status
+   * Used for existing sanctions where partner might be deactivated
+   */
+  private async findPartnerByCode(partnerCode: string): Promise<Partner | null> {
+    return await this.partnerRepository.findOne({
+      where: { code: partnerCode.toUpperCase() }
+    });
   }
 
   /**
@@ -174,12 +188,27 @@ export class SanctionService {
       // ========================================
       // Process sanction data and generate LAN
       // ========================================
+      // Only validate partner is active for CREDIT_L1 (new sanctions)
+      // For other roles (CREDIT_L2, CEO, MD), use partner from existing sanctions
+      const isNewSanction = role === 'CREDIT_L1' || role === 'CREDIT_TEAM_L1';
+      
       if (approved && sanctionData) {
         // Handle multi-partner sanctions
         if (sanctionData.partnerSanctions && sanctionData.partnerSanctions.length > 0) {
           for (const ps of sanctionData.partnerSanctions) {
-            // Validate partner is active
-            const partner = await this.validatePartner(ps.partner);
+            // For new sanctions (CREDIT_L1), validate partner is active
+            // For existing sanctions (CREDIT_L2, CEO, MD), find partner without checking status
+            let partner: Partner;
+            if (isNewSanction) {
+              partner = await this.validatePartner(ps.partner, true);
+            } else {
+              // For existing sanctions, find partner but don't require active status
+              // This allows viewing/editing sanctions even if partner was later deactivated
+              partner = await this.findPartnerByCode(ps.partner) as Partner;
+              if (!partner) {
+                throw new Error(`Partner not found: ${ps.partner}`);
+              }
+            }
             
             // Generate LAN using transaction-safe service
             const lanId = await this.lanGenerator.getNextLanId(partner.code);
@@ -218,7 +247,8 @@ export class SanctionService {
                 ps.penalCharges,
                 ps.processingFees,
                 ps.conditions,
-                role === 'MD' ? 'approved' : 'pending'
+                role === 'MD' ? 'approved' : 'pending',
+                ps.partner // Store partner code in credit_sanctions table
               );
             }
 
@@ -237,14 +267,28 @@ export class SanctionService {
             }));
           }
         } else if (sanctionData.sanctionAmount) {
-          // Legacy single sanction format - use default partner
-          const defaultPartner = await this.getDefaultPartner();
-          const lender = defaultPartner.code;
+          // Legacy single sanction format - determine partner based on role
+          let partner: Partner;
+          let lender: string;
+          
+          if (isNewSanction) {
+            // For new sanctions, use default partner and validate it's active
+            partner = await this.getDefaultPartner();
+            lender = partner.code;
+          } else {
+            // For existing sanctions, try to find existing partner or use default
+            partner = await this.findPartnerByCode('FFPL') as Partner;
+            if (!partner) {
+              partner = await this.getDefaultPartner();
+            }
+            lender = partner.code;
+          }
+          
           const lanId = await this.lanGenerator.getNextLanId(lender);
 
           // Upsert loan account with partner relation
           const existingAccount = await loanAccountRepo.findOne({
-            where: { customerId, partnerId: defaultPartner.id },
+            where: { customerId, partnerId: partner.id },
           });
 
           if (existingAccount) {
@@ -255,7 +299,7 @@ export class SanctionService {
           } else {
             await loanAccountRepo.save(loanAccountRepo.create({
               customerId,
-              partnerId: defaultPartner.id,
+              partnerId: partner.id,
               lender: lender as any, // Keep for backward compatibility
               lanId,
               sanctionedAmount: sanctionData.sanctionAmount,
@@ -275,7 +319,8 @@ export class SanctionService {
             sanctionData.penalCharges,
             sanctionData.processingFees,
             sanctionData.conditions,
-            role === 'MD' ? 'approved' : 'pending'
+            role === 'MD' ? 'approved' : 'pending',
+            lender
           );
 
           // Insert into sanction_limit_history
@@ -361,7 +406,8 @@ export class SanctionService {
     penalCharges?: number,
     processingFees?: number,
     conditions?: string,
-    status?: string
+    status?: string,
+    partner?: string // Partner code to store in credit_sanctions table
   ): Promise<void> {
     const existing = await repo.findOne({ where: { customerId } });
     if (existing) {
@@ -374,6 +420,7 @@ export class SanctionService {
         conditions: conditions || null,
         creditOfficerId,
         status: status || 'pending',
+        partner: partner || existing.partner, // Preserve existing partner if not provided
       });
     } else {
       await repo.save(repo.create({
@@ -386,6 +433,7 @@ export class SanctionService {
         processingFees: processingFees || 0,
         conditions: conditions || null,
         status: status || 'pending',
+        partner: partner || null,
       }));
     }
   }

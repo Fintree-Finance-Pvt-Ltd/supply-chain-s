@@ -12,6 +12,7 @@ import { Customer } from './Customer';
 import { Supplier } from './Supplier';
 import { User } from './User';
 import { CaseStatusHistory } from './CaseStatusHistory';
+import { LoanAccount } from './LoanAccount';
 
 @Entity('invoices')
 export class Invoice {
@@ -21,17 +22,23 @@ export class Invoice {
   @Column({ type: 'int' })
   customerId: number;
 
+  @Column({ type: 'int', nullable: true })
+  loanAccountId: number; // LAN reference
+
   @Column({ type: 'int' })
   supplierId: number;
 
   @Column({ type: 'varchar', length: 50, unique: true })
   invoiceNumber: string;
 
+  @Column({ type: 'date' })
+  invoiceDate: Date;
+
   @Column({ type: 'decimal', precision: 15, scale: 2 })
   invoiceAmount: number;
 
-  @Column({ type: 'date' })
-  invoiceDate: Date;
+  @Column({ type: 'decimal', precision: 15, scale: 2, nullable: true })
+  disbursementAmount: number;
 
   @Column({ type: 'date', nullable: true })
   dueDate: Date;
@@ -47,6 +54,15 @@ export class Invoice {
     enum: [
       'DRAFT', 
       'SUBMITTED', 
+      'PENDING_CUSTOMER_APPROVAL',
+      'REJECTED_BY_CUSTOMER',
+      'PENDING_OPS_L1_APPROVAL',
+      'PENDING_OPS_L2_APPROVAL',
+      'PENDING_MD_APPROVAL',
+      'PENDING_OPS_HEAD_APPROVAL',
+      'DISBURSEMENT_DATA_ENTRY',
+      'PENDING_FINAL_OPS_L2_APPROVAL',
+      'ACTIVE',
       'OPS_L1_VERIFIED', 
       'OPS_L2_VERIFIED', 
       'OPS_HEAD_APPROVED', 
@@ -58,6 +74,39 @@ export class Invoice {
     default: 'DRAFT' 
   })
   status: string;
+
+  // Disbursement Details
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  disbursementUtr: string;
+
+  @Column({ type: 'date', nullable: true })
+  disbursementDate: Date;
+
+  @Column({ type: 'date', nullable: true })
+  invoiceDueDate: Date;
+
+  // ROI Details (fetched from credit_sanction based on LAN)
+  @Column({ type: 'decimal', precision: 5, scale: 2, nullable: true })
+  roiPercentage: number;
+
+  @Column({ type: 'decimal', precision: 15, scale: 2, nullable: true })
+  roiAmount: number;
+
+  @Column({ type: 'decimal', precision: 15, scale: 2, nullable: true })
+  emiAmount: number;
+
+  // Customer Approval Fields
+  @Column({ type: 'enum', enum: ['pending', 'approved', 'rejected'], nullable: true })
+  customerApprovalStatus: string;
+
+  @Column({ type: 'text', nullable: true })
+  customerRemarks: string;
+
+  @Column({ type: 'datetime', nullable: true })
+  customerApprovedAt: Date;
+
+  @Column({ type: 'int', nullable: true })
+  approvedByCustomerId: number;
 
   @Column({ type: 'decimal', precision: 15, scale: 2, nullable: true })
   disbursedAmount: number;
@@ -84,6 +133,10 @@ export class Invoice {
   @ManyToOne(() => Customer, customer => customer.invoices)
   @JoinColumn({ name: 'customerId' })
   customer: Customer;
+
+  @ManyToOne(() => LoanAccount, loanAccount => loanAccount.invoices, { nullable: true })
+  @JoinColumn({ name: 'loanAccountId' })
+  loanAccount: LoanAccount;
 
   @ManyToOne(() => Supplier, supplier => supplier.invoices)
   @JoinColumn({ name: 'supplierId' })

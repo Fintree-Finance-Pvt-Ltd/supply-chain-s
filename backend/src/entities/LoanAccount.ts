@@ -10,6 +10,7 @@ import {
 } from 'typeorm';
 import { Customer } from './Customer';
 import { Partner } from './Partner';
+import { Invoice } from './Invoice';
 
 export enum LENDER {
   KITE = 'KITE',
@@ -63,4 +64,7 @@ export class LoanAccount {
   @ManyToOne(() => Partner, (partner) => partner.loanAccounts)
   @JoinColumn({ name: 'partnerId' })
   partner: Partner;
+
+  @OneToMany(() => Invoice, (invoice) => invoice.loanAccount)
+  invoices: Invoice[];
 }

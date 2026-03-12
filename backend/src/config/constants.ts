@@ -36,6 +36,17 @@ export const CASE_STATUS = {
   POST_SANCTION_PENDING: 'md_approved',
   POST_SANCTION_COMPLETED: 'ops_l1_approved',
   FULLY_ONBOARDED: 'completed',
+
+  // Invoice Discounting Workflow Statuses
+  INVOICE_PENDING_CUSTOMER_APPROVAL: 'invoice_pending_customer_approval',
+  INVOICE_REJECTED_BY_CUSTOMER: 'invoice_rejected_by_customer',
+  INVOICE_PENDING_OPS_L1_APPROVAL: 'invoice_pending_ops_l1_approval',
+  INVOICE_PENDING_OPS_L2_APPROVAL: 'invoice_pending_ops_l2_approval',
+  INVOICE_PENDING_MD_APPROVAL: 'invoice_pending_md_approval',
+  INVOICE_PENDING_OPS_HEAD_APPROVAL: 'invoice_pending_ops_head_approval',
+  INVOICE_DISBURSEMENT_DATA_ENTRY: 'invoice_disbursement_data_entry',
+  INVOICE_PENDING_FINAL_OPS_L2_APPROVAL: 'invoice_pending_final_ops_l2_approval',
+  INVOICE_ACTIVE: 'invoice_active',
 } as const;
 
 export type CaseStatus = typeof CASE_STATUS[keyof typeof CASE_STATUS];

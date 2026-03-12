@@ -33,13 +33,46 @@ export const workflowService = {
 
     // Invoice Discounting
     createInvoice: (data) => api.post(API_ENDPOINTS.WORKFLOW_INVOICE_CREATE, data),
-    submitInvoice: (id, remarks) => api.post(API_ENDPOINTS.WORKFLOW_INVOICE_SUBMIT(id), { remarks }),
+    submitInvoice: (id, data) => api.post(API_ENDPOINTS.WORKFLOW_INVOICE_SUBMIT(id), data),
+    opsL1Approve: (id, remarks) => api.post(API_ENDPOINTS.WORKFLOW_INVOICE_OPS_L1(id), { approved: true, remarks }),
+    opsL1Reject: (id, remarks) => api.post(API_ENDPOINTS.WORKFLOW_INVOICE_OPS_L1(id), { approved: false, remarks }),
+    opsL2Approve: (id, remarks) => api.post(API_ENDPOINTS.WORKFLOW_INVOICE_OPS_L2(id), { approved: true, remarks }),
+    opsL2Reject: (id, remarks) => api.post(API_ENDPOINTS.WORKFLOW_INVOICE_OPS_L2(id), { approved: false, remarks }),
+    opsHeadApprove: (id, remarks) => api.post(API_ENDPOINTS.WORKFLOW_INVOICE_OPS_HEAD(id), { approved: true, remarks }),
+    opsHeadReject: (id, remarks) => api.post(API_ENDPOINTS.WORKFLOW_INVOICE_OPS_HEAD(id), { approved: false, remarks }),
+    mdApprove: (id, remarks) => api.post(API_ENDPOINTS.WORKFLOW_INVOICE_MD(id), { approved: true, remarks }),
+    mdReject: (id, remarks) => api.post(API_ENDPOINTS.WORKFLOW_INVOICE_MD(id), { approved: false, remarks }),
     verifyInvoiceOpsL1: (id, approved, remarks) => api.post(API_ENDPOINTS.WORKFLOW_INVOICE_OPS_L1(id), { approved, remarks }),
     validateInvoiceOpsL2: (id, approved, remarks) => api.post(API_ENDPOINTS.WORKFLOW_INVOICE_OPS_L2(id), { approved, remarks }),
-    approveInvoiceOpsHead: (id, remarks) => api.post(API_ENDPOINTS.WORKFLOW_INVOICE_OPS_HEAD(id), { remarks }),
+    approveInvoiceOpsHead: (id, approved, remarks) => api.post(API_ENDPOINTS.WORKFLOW_INVOICE_OPS_HEAD(id), { approved, remarks }),
     reviewInvoiceCEO: (id, approved, remarks) => api.post(API_ENDPOINTS.WORKFLOW_INVOICE_CEO(id), { approved, remarks }),
-    approveInvoiceMD: (id, approved, remarks, disbursedAmount) =>
-        api.post(API_ENDPOINTS.WORKFLOW_INVOICE_MD(id), { approved, remarks, disbursedAmount }),
+    approveInvoiceMD: (id, approved, remarks) => api.post(API_ENDPOINTS.WORKFLOW_INVOICE_MD(id), { approved, remarks }),
+    disburseInvoice: (id, data) => api.post(API_ENDPOINTS.WORKFLOW_INVOICE_DISBURSE(id), data),
+    finalVerifyOpsL2: (id, approved, remarks) => api.post(API_ENDPOINTS.WORKFLOW_INVOICE_FINAL_OPS_L2(id), { approved, remarks }),
+
+    // Invoice Discounting - Customer Mobile App
+    customerApproveInvoice: (id, approved, remarks) => api.post(API_ENDPOINTS.WORKFLOW_INVOICE_CUSTOMER_APPROVE(id), { approved, remarks }),
+    customerApprove: (id, remarks) => api.post(API_ENDPOINTS.WORKFLOW_INVOICE_CUSTOMER_APPROVE(id), { approved: true, remarks }),
+    customerReject: (id, remarks) => api.post(API_ENDPOINTS.WORKFLOW_INVOICE_CUSTOMER_APPROVE(id), { approved: false, remarks }),
+    getCustomerInvoiceDetails: (id) => api.get(API_ENDPOINTS.WORKFLOW_INVOICE_CUSTOMER_DETAILS(id)),
+    getCustomerPendingInvoices: () => api.get(API_ENDPOINTS.WORKFLOW_INVOICE_CUSTOMER_PENDING),
+
+    // Invoice Discounting - Dashboard endpoints
+    getOPS1PendingInvoices: () => api.get(API_ENDPOINTS.WORKFLOW_INVOICE_OPS_L1_PENDING),
+    getOPS2PendingInvoices: () => api.get(API_ENDPOINTS.WORKFLOW_INVOICE_OPS_L2_PENDING),
+    getMDPendingInvoices: () => api.get(API_ENDPOINTS.WORKFLOW_INVOICE_MD_PENDING),
+    getOPSHeadPendingInvoices: () => api.get(API_ENDPOINTS.WORKFLOW_INVOICE_OPS_HEAD_PENDING),
+    getDisbursementEntryPendingInvoices: () => api.get(API_ENDPOINTS.WORKFLOW_INVOICE_DISBURSEMENT_ENTRY_PENDING),
+    getDisbursementEntryInvoices: () => api.get(API_ENDPOINTS.WORKFLOW_INVOICE_DISBURSEMENT_ENTRY_PENDING),
+    getFinalOPS2PendingInvoices: () => api.get(API_ENDPOINTS.WORKFLOW_INVOICE_FINAL_OPS_L2_PENDING),
+    getActiveInvoices: () => api.get(API_ENDPOINTS.WORKFLOW_INVOICE_ACTIVE),
+
+    // Invoice Discounting - RM endpoints
+    getCustomersForRM: () => api.get(API_ENDPOINTS.WORKFLOW_INVOICE_GET_CUSTOMERS),
+    getCustomersByRM: () => api.get(API_ENDPOINTS.WORKFLOW_INVOICE_GET_CUSTOMERS),
+    getLANsByCustomer: (customerId) => api.get(API_ENDPOINTS.WORKFLOW_INVOICE_GET_LANS(customerId)),
+    getSuppliersByCustomer: (customerId) => api.get(API_ENDPOINTS.WORKFLOW_INVOICE_GET_SUPPLIERS(customerId)),
+    getSupplierBankDetails: (supplierId) => api.get(API_ENDPOINTS.WORKFLOW_INVOICE_GET_SUPPLIER_BANK(supplierId)),
 
     // Document Verification
     verifyDocument: (documentId, status, remarks) =>
@@ -49,6 +82,7 @@ export const workflowService = {
     getRMDashboard: () => api.get(API_ENDPOINTS.DASHBOARD_RM_CUSTOMERS),
     getRMSupplierDashboard: () => api.get(API_ENDPOINTS.DASHBOARD_RM_SUPPLIERS),
     getRMInvoiceDashboard: () => api.get(API_ENDPOINTS.DASHBOARD_RM_INVOICES),
+    getRMInvoices: () => api.get('/workflows/invoices/dashboard/rm'),
     getCreditDashboard: (level) => api.get(API_ENDPOINTS.DASHBOARD_CREDIT_PENDING(level)),
     getExecutiveDashboard: () => api.get(API_ENDPOINTS.DASHBOARD_EXECUTIVE_PENDING),
     getOperationsDashboard: () => api.get(API_ENDPOINTS.DASHBOARD_OPERATIONS_PENDING),

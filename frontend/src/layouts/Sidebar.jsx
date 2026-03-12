@@ -10,6 +10,7 @@ import {
   FiUserPlus,
   FiShield,
   FiGitBranch,
+  FiFileText,
 } from 'react-icons/fi'
 
 const Sidebar = () => {
@@ -35,6 +36,7 @@ const Sidebar = () => {
         return [
           { path: '/rm/dashboard', label: 'Dashboard', icon: FiHome },
           { path: '/rm/customer/new', label: 'New Customer', icon: FiUserPlus },
+          { path: '/invoice-discounting/rm', label: 'Invoice Discounting', icon: FiFileText },
         ]
 
       case ROLES.CREDIT_TEAM_L1:
@@ -45,12 +47,25 @@ const Sidebar = () => {
         ]
 
       case ROLES.OPERATIONS_TEAM_L1:
+        return [
+          { path: '/operations/dashboard', label: 'Ops Dashboard', icon: FiHome },
+          { path: '/operations/pending', label: 'Pending Checks', icon: FiCheckCircle },
+           { path: '/operations/suppliers', label: 'Supplier Onboarding', icon: FiUserPlus },
+           { path: '/invoice-discounting/ops-l1', label: 'Invoice Discounting', icon: FiFileText },
+        ]
       case ROLES.OPERATIONS_TEAM_L2:
+        return [
+          { path: '/operations/dashboard', label: 'Ops Dashboard', icon: FiHome },
+          { path: '/operations/pending', label: 'Pending Checks', icon: FiCheckCircle },
+           { path: '/operations/suppliers', label: 'Supplier Onboarding', icon: FiUserPlus },
+           { path: '/invoice-discounting/ops-l2', label: 'Invoice Discounting', icon: FiFileText },
+        ]
       case ROLES.OPERATIONS_HEAD:
         return [
           { path: '/operations/dashboard', label: 'Ops Dashboard', icon: FiHome },
           { path: '/operations/pending', label: 'Pending Checks', icon: FiCheckCircle },
            { path: '/operations/suppliers', label: 'Supplier Onboarding', icon: FiUserPlus },
+           { path: '/invoice-discounting/ops-head', label: 'Invoice Discounting', icon: FiFileText },
         ]
 
       case ROLES.CEO:
@@ -59,6 +74,7 @@ const Sidebar = () => {
         return [
           { path: '/management/dashboard', label: 'Management Dashboard', icon: FiHome },
           { path: '/management/approvals', label: 'Pending Approvals', icon: FiCheckCircle },
+          { path: '/invoice-discounting/md', label: 'Invoice Discounting', icon: FiFileText },
         ]
 
       default:

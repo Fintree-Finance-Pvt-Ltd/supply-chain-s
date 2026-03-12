@@ -990,29 +990,31 @@ router.post('/invoices/create', checkRole(['relationship_manager']), async (req:
   try {
     const {
       customerId,
+      loanAccountId,
       supplierId,
       invoiceNumber,
       invoiceAmount,
       invoiceDate,
-      dueDate,
+      disbursementAmount,
     } = req.body;
     const user = (req as any).user;
 
-    if (!customerId || !supplierId || !invoiceNumber || !invoiceAmount) {
+    if (!customerId || !loanAccountId || !supplierId || !invoiceNumber || !invoiceAmount) {
       return res.status(400).json({
         success: false,
-        message: 'Missing required fields',
+        message: 'Missing required fields: customerId, loanAccountId, supplierId, invoiceNumber, invoiceAmount are mandatory',
       });
     }
 
     const invoice = await invoiceDiscountingService.createInvoice(
       {
         customerId,
+        loanAccountId,
         supplierId,
         invoiceNumber,
         invoiceAmount,
         invoiceDate,
-        dueDate,
+        disbursementAmount,
       },
       user.id,
     );
@@ -1069,7 +1071,7 @@ router.post('/invoices/:invoiceId/ops-l1', checkRole(['operations_team_l1']), as
     const { approved, remarks } = req.body;
     const user = (req as any).user;
 
-    const workflow = await invoiceDiscountingService.opsL1Verify(
+    const workflow = await invoiceDiscountingService.opsL1Verification(
       parseInt(invoiceId),
       user.id,
       remarks || '',
@@ -1099,7 +1101,7 @@ router.post('/invoices/:invoiceId/ops-l2', checkRole(['operations_team_l2']), as
     const { approved, remarks } = req.body;
     const user = (req as any).user;
 
-    const workflow = await invoiceDiscountingService.opsL2Validate(
+    const workflow = await invoiceDiscountingService.opsL2Verification(
       parseInt(invoiceId),
       user.id,
       remarks || '',
@@ -1129,7 +1131,7 @@ router.post('/invoices/:invoiceId/ops-head', checkRole(['operations_head']), asy
     const { remarks } = req.body;
     const user = (req as any).user;
 
-    const workflow = await invoiceDiscountingService.opsHeadApprove(
+    const workflow = await invoiceDiscountingService.opsHeadApproval(
       parseInt(invoiceId),
       user.id,
       remarks || '',
@@ -1158,11 +1160,11 @@ router.post('/invoices/:invoiceId/ceo', checkRole(['ceo']), async (req: Request,
     const { approved, remarks } = req.body;
     const user = (req as any).user;
 
-    const workflow = await invoiceDiscountingService.ceoReview(
+    const workflow = await invoiceDiscountingService.opsHeadApproval(
       parseInt(invoiceId),
       user.id,
+      approved ? 'approve' : 'reject',
       remarks || '',
-      approved,
     );
 
     res.json({
@@ -1195,12 +1197,11 @@ router.post('/invoices/:invoiceId/md-disburse', checkRole(['md']), async (req: R
       });
     }
 
-    const workflow = await invoiceDiscountingService.mdFinalApprove(
+    const workflow = await invoiceDiscountingService.mdApproval(
       parseInt(invoiceId),
       user.id,
+      approved ? 'approve' : 'reject',
       remarks || '',
-      approved,
-      disbursedAmount,
     );
 
     res.json({
@@ -1220,7 +1221,7 @@ router.post('/invoices/:invoiceId/md-disburse', checkRole(['md']), async (req: R
  * GET /api/workflows/invoices/dashboard/rm
  * RM Dashboard
  */
-router.get('/invoices/dashboard/rm', checkRole(['RM']), async (req: Request, res: Response) => {
+router.get('/invoices/dashboard/rm', checkRole(['relationship_manager']), async (req: Request, res: Response) => {
   try {
     const user = (req as any).user;
     const dashboard = await invoiceDiscountingService.getRMInvoiceDashboard(user.id);
@@ -1531,6 +1532,287 @@ router.post('/suppliers/rm/create', checkRole(['relationship_manager']), async (
     );
 
     res.status(201).json({ success: true, message: 'Supplier created successfully', data: result });
+  } catch (error: any) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+});
+
+// ============================================
+// INVOICE DISCOUNTING - ADDITIONAL ROUTES
+// ============================================
+
+/**
+ * GET /api/workflows/invoices/customers
+ * Get all approved customers for RM to select
+ */
+router.get('/invoices/customers', checkRole(['relationship_manager']), async (req, res) => {
+  try {
+    const customers = await invoiceDiscountingService.getCustomersForRM();
+    res.json({ success: true, data: customers });
+  } catch (error: any) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+});
+
+/**
+ * GET /api/workflows/invoices/customers/:customerId/lans
+ * Get LANs for a specific customer
+ */
+router.get('/invoices/customers/:customerId/lans', checkRole(['relationship_manager']), async (req, res) => {
+  try {
+    const { customerId } = req.params;
+    const lans = await invoiceDiscountingService.getLANsByCustomer(parseInt(customerId));
+    res.json({ success: true, data: lans });
+  } catch (error: any) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+});
+
+/**
+ * GET /api/workflows/invoices/customers/:customerId/suppliers
+ * Get suppliers for a specific customer
+ */
+router.get('/invoices/customers/:customerId/suppliers', checkRole(['relationship_manager']), async (req, res) => {
+  try {
+    const { customerId } = req.params;
+    const suppliers = await invoiceDiscountingService.getSuppliersByCustomer(parseInt(customerId));
+    res.json({ success: true, data: suppliers });
+  } catch (error: any) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+});
+
+/**
+ * GET /api/workflows/invoices/suppliers/:supplierId/bank-details
+ * Get bank details for a specific supplier
+ */
+router.get('/invoices/suppliers/:supplierId/bank-details', async (req, res) => {
+  try {
+    const { supplierId } = req.params;
+    const bankDetails = await invoiceDiscountingService.getSupplierBankDetails(parseInt(supplierId));
+    res.json({ success: true, data: bankDetails });
+  } catch (error: any) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+});
+
+/**
+ * GET /api/workflows/invoices/pending/customer
+ * Get invoices pending customer approval
+ * Optional: customerId query param to filter by specific customer
+ */
+router.get('/invoices/pending/customer', async (req, res) => {
+  try {
+    const { customerId } = req.query;
+    const invoices = await invoiceDiscountingService.getCustomerPendingInvoices(
+      customerId ? parseInt(customerId as string) : undefined
+    );
+    res.json({ success: true, data: invoices });
+  } catch (error: any) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+});
+
+/**
+ * POST /api/workflows/invoices/:invoiceId/customer-approve
+ * Customer approves or rejects invoice
+ */
+router.post('/invoices/:invoiceId/customer-approve', async (req, res) => {
+  try {
+    const { invoiceId } = req.params;
+    const { approved, remarks, customerId } = req.body;
+    
+    if (approved === undefined) {
+      return res.status(400).json({ success: false, message: 'approved field is required' });
+    }
+    
+    // If customerId not provided in body, get it from the invoice
+    let finalCustomerId = customerId;
+    if (!finalCustomerId) {
+      // Try to get from authenticated user
+      finalCustomerId = (req as any).user?.customerId;
+      
+      // If still not available, fetch the invoice to get customerId
+      if (!finalCustomerId) {
+        const invoice = await invoiceDiscountingService.getInvoiceById(parseInt(invoiceId));
+        if (invoice) {
+          finalCustomerId = invoice.customerId;
+        }
+      }
+    }
+    
+    // Convert approved boolean to action string
+    const action = approved ? 'approve' : 'reject';
+    
+    const workflow = await invoiceDiscountingService.customerApproval(
+      parseInt(invoiceId),
+      finalCustomerId,
+      action,
+      remarks || ''
+    );
+    
+    res.json({
+      success: true,
+      message: approved ? 'Invoice approved by customer' : 'Invoice rejected by customer',
+      data: workflow,
+    });
+  } catch (error: any) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+});
+
+/**
+ * GET /api/workflows/invoices/pending/ops-l1
+ * Get invoices pending OPS L1 verification
+ */
+router.get('/invoices/pending/ops-l1', checkRole(['operations_team_l1']), async (req, res) => {
+  try {
+    const invoices = await invoiceDiscountingService.getOPS1PendingInvoices();
+    res.json({ success: true, data: invoices });
+  } catch (error: any) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+});
+
+/**
+ * GET /api/workflows/invoices/pending/ops-l2
+ * Get invoices pending OPS L2 verification
+ */
+router.get('/invoices/pending/ops-l2', checkRole(['operations_team_l2']), async (req, res) => {
+  try {
+    const invoices = await invoiceDiscountingService.getOPS2PendingInvoices();
+    res.json({ success: true, data: invoices });
+  } catch (error: any) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+});
+
+/**
+ * GET /api/workflows/invoices/pending/md
+ * Get invoices pending MD approval
+ */
+router.get('/invoices/pending/md', checkRole(['md']), async (req, res) => {
+  try {
+    const invoices = await invoiceDiscountingService.getMDPendingInvoices();
+    res.json({ success: true, data: invoices });
+  } catch (error: any) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+});
+
+/**
+ * GET /api/workflows/invoices/pending/ops-head
+ * Get invoices pending OPS Head approval
+ */
+router.get('/invoices/pending/ops-head', checkRole(['operations_head']), async (req, res) => {
+  try {
+    const invoices = await invoiceDiscountingService.getOPSHeadPendingInvoices();
+    res.json({ success: true, data: invoices });
+  } catch (error: any) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+});
+
+/**
+ * GET /api/workflows/invoices/pending/disbursement-entry
+ * Get invoices pending disbursement data entry
+ */
+router.get('/invoices/pending/disbursement-entry', checkRole(['operations_team_l1']), async (req, res) => {
+  try {
+    const invoices = await invoiceDiscountingService.getDisbursementEntryInvoices();
+    res.json({ success: true, data: invoices });
+  } catch (error: any) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+});
+
+/**
+ * GET /api/workflows/invoices/pending/final-ops-l2
+ * Get invoices pending final OPS L2 verification
+ */
+router.get('/invoices/pending/final-ops-l2', checkRole(['operations_team_l2']), async (req, res) => {
+  try {
+    const invoices = await invoiceDiscountingService.getFinalVerificationInvoices();
+    res.json({ success: true, data: invoices });
+  } catch (error: any) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+});
+
+/**
+ * GET /api/workflows/invoices/active
+ * Get all active invoices
+ */
+router.get('/invoices/active', async (req, res) => {
+  try {
+    const invoices = await invoiceDiscountingService.getActiveInvoices();
+    res.json({ success: true, data: invoices });
+  } catch (error: any) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+});
+
+/**
+ * POST /api/workflows/invoices/:invoiceId/disburse
+ * OPS L1 enters disbursement data
+ */
+router.post('/invoices/:invoiceId/disburse', checkRole(['operations_team_l1']), async (req, res) => {
+  try {
+    const { invoiceId } = req.params;
+    const { disbursementUtr, disbursementDate, invoiceDueDate, loanAccountId } = req.body;
+    const user = (req as any).user;
+
+    if (!disbursementUtr || !disbursementDate) {
+      return res.status(400).json({ success: false, message: 'disbursementUtr and disbursementDate are required' });
+    }
+
+    const workflow = await invoiceDiscountingService.enterDisbursementData(
+      parseInt(invoiceId),
+      user.id,
+      {
+        disbursementUtr,
+        disbursementDate,
+        invoiceDueDate,
+        loanAccountId: parseInt(loanAccountId),
+      }
+    );
+
+    res.json({
+      success: true,
+      message: 'Disbursement data entered successfully',
+      data: workflow,
+    });
+  } catch (error: any) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+});
+
+/**
+ * POST /api/workflows/invoices/:invoiceId/final-ops-l2
+ * OPS L2 final verification
+ */
+router.post('/invoices/:invoiceId/final-ops-l2', checkRole(['operations_team_l2']), async (req, res) => {
+  try {
+    const { invoiceId } = req.params;
+    const { approved, remarks } = req.body;
+    const user = (req as any).user;
+
+    if (approved === undefined) {
+      return res.status(400).json({ success: false, message: 'approved field is required' });
+    }
+
+    const workflow = await invoiceDiscountingService.finalOPS2Verification(
+      parseInt(invoiceId),
+      user.id,
+      approved,
+      remarks || ''
+    );
+
+    res.json({
+      success: true,
+      message: approved ? 'Invoice finalized and activated' : 'Invoice rejected at final verification',
+      data: workflow,
+    });
   } catch (error: any) {
     res.status(400).json({ success: false, message: error.message });
   }

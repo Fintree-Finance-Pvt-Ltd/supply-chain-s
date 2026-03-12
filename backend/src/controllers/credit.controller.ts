@@ -121,6 +121,32 @@ export class CreditController {
       });
     }
   };
+
+  // Dedicated API for fetching all sanctions for a customer (for non-CREDIT_L1 roles)
+  // Returns all sanctions without filtering by partner active status
+  getSanctionsByCustomerIdSimple = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { customerId } = req.params;
+      const sanctions = await this.creditService.getSanctionsByCustomerIdSimple(Number(customerId));
+
+      // Return in simple format with all required fields
+      const response = sanctions.map(s => ({
+        customerId: s.customerId,
+        partner: s.partner,
+        sanctionAmount: s.sanctionAmount,
+        status: s.status,
+        createdAt: s.createdAt,
+        updatedAt: s.updatedAt,
+      }));
+
+      res.json(response);
+    } catch (error: any) {
+      res.status(500).json({
+        success: false,
+        message: error.message || 'Failed to fetch sanctions',
+      });
+    }
+  };
 }
 
 

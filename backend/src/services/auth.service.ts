@@ -19,13 +19,13 @@ export class AuthService {
     });
 
     if (!user) {
-      throw new Error('Invalid credentials');
+      throw new Error('Invalid Email');
     }
 console.log('USER FOUND:',user);
     const isPasswordValid = await comparePassword(password, user.password);
     console.log("isPasswordValid:", isPasswordValid);
     if (!isPasswordValid) {
-      throw new Error('Invalid credentials');
+      throw new Error('Invalid Password');
     }
 
     // Get user roles

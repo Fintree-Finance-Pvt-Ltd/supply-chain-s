@@ -11,6 +11,7 @@ export const ROLES = {
   CEO: 'ceo',
   CFO: 'cfo',
   MD: 'md',
+  CUSTOMER: 'customer',
 }
 
 export const ROLE_LABELS = {
@@ -26,6 +27,7 @@ export const ROLE_LABELS = {
   [ROLES.CEO]: 'CEO',
   [ROLES.CFO]: 'CFO',
   [ROLES.MD]: 'Managing Director',
+  [ROLES.CUSTOMER]: 'Customer',
 }
 
 export const MANAGEMENT_ROLES = [ROLES.CEO, ROLES.CFO, ROLES.MD]

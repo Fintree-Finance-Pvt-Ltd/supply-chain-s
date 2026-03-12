@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useSelector } from 'react-redux'
 import { workflowService } from '../../services/workflowService'
 import { customerService } from '../../services/customerService'
 import { partnerService } from '../../services/partnerService'
+import api from '../../services/api'
 import ApprovalTimeline from '../../components/ApprovalTimeline'
 import LoadingSpinner from '../../components/LoadingSpinner'
 import CustomerFullDetails from '../../components/CustomerFullDetails'
@@ -36,11 +37,25 @@ const ApprovalScreen = () => {
   const [partners, setPartners] = useState([])
   const [partnersLoading, setPartnersLoading] = useState(true)
 
-  // Fallback to default if API fails
+  // Fallback to default if API fails or for non-credit_team_l1 roles
+  // For CEO/MD roles: they don't fetch from API, so use fallback
   const PARTNERS = partners.length > 0 ? partners : ['FFPL'];
 
-  // Fetch partners from API - use partnerService
+  // Get user role (lowercase for comparison)
+  const userRole = (user?.role || '').toLowerCase()
+  
+  // Fetch partners from API - role-based logic
+  // credit_l1: fetch from partners table (for new sanctions)
+  // other roles (ceo, md, credit_l2, etc.): DO NOT fetch from partners table - use partners from sanction records
   useEffect(() => {
+    // EARLY RETURN: Only credit_team_l1 should fetch from partners table
+    // All other roles (ceo, md, credit_l2, etc.) should get partners from sanction records
+    if (userRole !== 'credit_team_l1') {
+      console.log('fetchPartners: Skipping - userRole is', userRole, '(not credit_team_l1)')
+      setPartnersLoading(false)
+      return
+    }
+    
     const fetchPartners = async () => {
       try {
         const data = await partnerService.getActivePartners()
@@ -53,20 +68,43 @@ const ApprovalScreen = () => {
         setPartnersLoading(false)
       }
     }
+    
     fetchPartners()
-  }, [])
+  }, [userRole])
+
+  // Track if initial data load is done (useRef to persist across renders)
+  const dataLoadedRef = useRef(false)
 
   useEffect(() => {
+    // Reset dataLoadedRef when id changes
+    dataLoadedRef.current = false
+    
     const loadData = async () => {
+      // Prevent multiple calls - only load once
+      if (dataLoadedRef.current) {
+        return
+      }
+      
+      // For credit_team_l1, wait for partners to load first (they come from partners table)
+      if (userRole === 'credit_team_l1' && partnersLoading) {
+        console.log('loadData: credit_team_l1 waiting for partners to load')
+        return
+      }
+      
       try {
         setIsLoading(true)
+        
+        // Fetch customer details and sanctions separately (like credit L2)
         const custResponse = await customerService.getCustomerById(id)
         setCustomer(custResponse.data)
         
+        // Fetch sanctions using the dedicated API (like credit L2 for non-CREDIT_L1 roles)
+        const sanctionsResponse = await api.get(`/sanctions/customer/${id}`)
+        const sanctionsData = sanctionsResponse.data
+        const sanctions = Array.isArray(sanctionsData) ? sanctionsData : (sanctionsData.sanctions || [])
+        
         // For CEO: load all partner sanctions from credit_sanctions table
         // This is the correct source of truth - use partner field for mapping
-        const sanctions = custResponse.data?.creditSanctions || [];
-        
         if (sanctions.length > 0) {
           // Build partner map from credit_sanctions using 'partner' field
           const partnerMap = {};
@@ -84,8 +122,11 @@ const ApprovalScreen = () => {
             };
           });
           
-          // Create array with all known partners, using data from credit_sanctions
-          const partners = PARTNERS.map(p => ({
+          // Get all unique partners from sanctions
+          const uniquePartners = Object.keys(partnerMap);
+          
+          // Create array with ALL partners from sanctions data
+          const partners = uniquePartners.map(p => ({
             partner: p,
             sanctionAmount: partnerMap[p]?.sanctionAmount || 0,
             tenure: partnerMap[p]?.tenure || 0,
@@ -93,7 +134,7 @@ const ApprovalScreen = () => {
             penalCharges: partnerMap[p]?.penalCharges || 0,
             processingFees: partnerMap[p]?.processingFees || 0,
             conditions: partnerMap[p]?.conditions || '',
-            hasData: !!partnerMap[p]
+            hasData: true
           }));
           setPartnerSanctions(partners);
         } else if (custResponse.data?.sanctionLimitHistory && custResponse.data.sanctionLimitHistory.length > 0) {
@@ -102,7 +143,7 @@ const ApprovalScreen = () => {
           // Group by lender/partner - use LATEST entry (by createdAt)
           const partnerMap = {};
           history.forEach(item => {
-            const partner = item.lender || PARTNERS[0] || '';
+            const partner = item.lender || '';
             const itemDate = new Date(item.createdAt || 0);
             const existingDate = partnerMap[partner] ? new Date(partnerMap[partner].createdAt || 0) : new Date(0);
             
@@ -118,8 +159,10 @@ const ApprovalScreen = () => {
               };
             }
           });
-          // Create array with all known partners (show at least the ones with data)
-          const partners = PARTNERS.map(p => ({
+          // Get all unique partners from history
+          const uniquePartners = Object.keys(partnerMap);
+          // Create array with ALL partners from history data
+          const partners = uniquePartners.map(p => ({
             partner: p,
             sanctionAmount: partnerMap[p]?.sanctionAmount || 0,
             tenure: partnerMap[p]?.tenure || 0,
@@ -160,13 +203,14 @@ const ApprovalScreen = () => {
         console.error('Error loading approval data:', error)
       } finally {
         setIsLoading(false)
+        dataLoadedRef.current = true
       }
     }
 
     if (id) {
       loadData()
     }
-  }, [id, PARTNERS])
+  }, [id, partnersLoading])
 
   const handleApprove = async () => {
     if (!comments.trim()) {

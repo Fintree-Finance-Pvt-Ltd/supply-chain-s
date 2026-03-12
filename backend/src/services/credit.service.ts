@@ -121,6 +121,17 @@ export class CreditService {
       order: { createdAt: 'DESC' },
     });
   }
+
+  /**
+   * Get all credit sanctions for a customer by customerId (simple version for non-CREDIT_L1 roles)
+   * Returns all sanctions without filtering by partner active status
+   */
+  async getSanctionsByCustomerIdSimple(customerId: number): Promise<CreditSanction[]> {
+    return await this.creditSanctionRepository.find({
+      where: { customerId },
+      order: { createdAt: 'DESC' },
+    });
+  }
 }
 
 

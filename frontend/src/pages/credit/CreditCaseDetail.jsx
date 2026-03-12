@@ -4,6 +4,7 @@ import { useDispatch, useSelector } from 'react-redux'
 import { fetchCaseById, clearCurrentCase, clearError } from '../../store/slices/caseSlice'
 import { creditService } from '../../services/creditService'
 import { partnerService } from '../../services/partnerService'
+import api from '../../services/api'
 import DocumentUploader from '../../components/DocumentUploader'
 import LoadingSpinner from '../../components/LoadingSpinner'
 import { formatDate, formatCurrency } from '../../utils/format'
@@ -43,6 +44,9 @@ const CreditCaseDetail = () => {
     }), {})
   )
 
+  // Store raw sanctions data from API for UI condition checking
+  const [sanctionsData, setSanctionsData] = useState([])
+
   // Track if we've loaded sanctions from API
   const [sanctionsLoadedFromApi, setSanctionsLoadedFromApi] = useState(false)
 
@@ -60,43 +64,124 @@ const CreditCaseDetail = () => {
     }
   }, [id, dispatch])
 
-  // Fetch partners from API - use partnerService
+  // Get user role (lowercase for comparison)
+  const userRole = (user?.role || '').toLowerCase()
+  
+  // Fetch partners from API - role-based logic
+  // credit_l1: fetch from partners table (for new sanctions)
+  // other roles: DO NOT fetch from partners table - use partners from sanction records
   useEffect(() => {
+    // EARLY RETURN: Only credit_team_l1 should fetch from partners table
+    // All other roles (ceo, md, credit_l2, etc.) should get partners from sanction records
+    if (userRole !== 'credit_team_l1') {
+      console.log('fetchPartners: Skipping - userRole is', userRole, '(not credit_team_l1)')
+      setPartnersLoading(false)
+      return
+    }
+    
     const fetchPartners = async () => {
       try {
+        console.log('fetchPartners: Loading from partners table for credit_team_l1')
         const data = await partnerService.getActivePartners()
-        // Store full partner objects, not just codes
+        // Store full partner objects
         if (data.partners && data.partners.length > 0) {
           setPartners(data.partners)
+          console.log('fetchPartners: Set', data.partners.length, 'partners from API')
         }
+        // Set loading to false after partners are loaded
+        setPartnersLoading(false)
       } catch (err) {
-        console.error('Failed to fetch partners:', err)
-      } finally {
+        console.error('fetchPartners: Failed to fetch partners:', err)
         setPartnersLoading(false)
       }
     }
+    
     fetchPartners()
-  }, [])
+  }, [userRole, id])
 
   // Fetch existing sanctions from credit_sanctions table
+  // This runs for ALL roles - partners from sanctions are used for non-CREDIT_L1 roles
   useEffect(() => {
-    if (!id || PARTNERS.length === 0) return
-
     const fetchSanctions = async () => {
+      // Skip if no id
+      if (!id) {
+        console.log('fetchSanctions: No id, skipping')
+        return
+      }
+      
+      // For credit_l1, wait for partners to load first (they come from partners table)
+      if (userRole === 'credit_team_l1' && partnersLoading) {
+        console.log('fetchSanctions: credit_l1 waiting for partners to load')
+        return
+      }
+      
+      // For credit_l1, if partners were loaded from partners table, we don't need to fetch from sanctions
+      // (unless they want to see existing sanctions)
+      // But let's fetch anyway to get the latest sanction data
+      
       try {
-        const response = await fetch(`/api/sanctions/${id}`, {
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token')}`
-          }
-        })
-        const data = await response.json()
+        console.log('fetchSanctions: Calling API with id:', id, 'userRole:', userRole)
+        
+        // For non-CREDIT_L1 roles, use the dedicated sanctions API
+        // This API returns all sanctions without filtering by partner active status
+        const apiEndpoint = userRole === 'credit_team_l1' 
+          ? `/sanctions/${id}` 
+          : `/sanctions/customer/${id}`
+        
+        // Use api client which has auth interceptor
+        const response = await api.get(apiEndpoint)
+        const data = response.data
+        console.log('Sanctions API response:', data)
 
-        if (data.sanctions && data.sanctions.length > 0) {
+        // Handle both API response formats:
+        // 1. Old format: { sanctions: [...] }
+        // 2. New format (for non-CREDIT_L1): [...] direct array
+        const sanctionsArray = Array.isArray(data) ? data : (data.sanctions || [])
+
+        if (sanctionsArray.length > 0) {
+          console.log('Found sanctions:', sanctionsArray)
+          
+          // Store raw sanctions data for UI condition checking
+          setSanctionsData(sanctionsArray)
+          
+          // Extract partners from existing sanctions - for ALL roles
+          // Handle both 'partner' and 'partner_code' field names
+          const existingPartners = sanctionsArray.map(s => ({
+            id: s.partner || s.partner_code,
+            code: s.partner || s.partner_code,
+            name: s.partner || s.partner_code
+          }))
+          console.log('Extracted partners:', existingPartners)
+          
+          // For credit_team_l1: merge partners from partners table with partners from sanctions
+          // For other roles: use partners from sanctions only
+          if (userRole === 'credit_team_l1') {
+            // Use functional update to get the current partners state from partners table
+            setPartners(currentPartners => {
+              // Merge: add sanction partners that don't exist in the current partners list
+              const currentPartnerCodes = new Set(currentPartners.map(p => p.code))
+              const sanctionPartnerCodes = existingPartners.map(p => p.code).filter(code => code && !currentPartnerCodes.has(code))
+              const newPartnersFromSanctions = sanctionPartnerCodes.map(code => ({
+                id: code,
+                code: code,
+                name: code
+              }))
+              const mergedPartners = [...currentPartners, ...newPartnersFromSanctions]
+              console.log('Merged partners:', mergedPartners)
+              return mergedPartners
+            })
+          } else {
+            // For other roles, use partners from sanctions only
+            setPartners(existingPartners)
+          }
+          // Set partnersLoading to false after partners are loaded from sanctions
+          setPartnersLoading(false)
+          
           // Create a map of partner code to sanction data
           const sanctionMap = {}
-          data.sanctions.forEach(s => {
-            sanctionMap[s.partner] = {
-              sanctionAmount: s.sanction_limit || '',
+          sanctionsArray.forEach(s => {
+            sanctionMap[s.partner || s.partner_code] = {
+              sanctionAmount: s.sanction_limit || s.sanctionAmount || '',
               tenor: s.tenor || '',
               roi: s.roi || '',
               conditions: s.conditions || '',
@@ -106,14 +191,25 @@ const CreditCaseDetail = () => {
           })
 
           // Update partnerSanctions with fetched data
+          // Include partners from sanctions even if they weren't in the initial PARTNERS list
           setPartnerSanctions(prev => {
             const updated = { ...prev }
+            // First, add all sanction partners to the object if they don't exist
             Object.keys(sanctionMap).forEach(partnerCode => {
-              if (updated[partnerCode]) {
+              if (!updated[partnerCode]) {
                 updated[partnerCode] = {
-                  ...updated[partnerCode],
-                  ...sanctionMap[partnerCode]
+                  sanctionAmount: '',
+                  tenor: '',
+                  roi: '',
+                  conditions: '',
+                  penalCharges: '',
+                  processingFees: '',
                 }
+              }
+              // Then update with sanction data
+              updated[partnerCode] = {
+                ...updated[partnerCode],
+                ...sanctionMap[partnerCode]
               }
             })
             return updated
@@ -121,14 +217,21 @@ const CreditCaseDetail = () => {
           
           // Mark as loaded from API
           setSanctionsLoadedFromApi(true)
+        } else {
+          console.log('No sanctions found in response')
+          // No sanctions found - set loading to false and clear sanctions data
+          setSanctionsData([])
+          setPartnersLoading(false)
         }
       } catch (err) {
         console.error('Failed to fetch sanctions:', err)
+        // Set loading to false on error
+        setPartnersLoading(false)
       }
     }
 
     fetchSanctions()
-  }, [id, PARTNERS.length])
+  }, [id, userRole, partnersLoading])
 
   useEffect(() => {
     // Skip if we already loaded data from the API (credit_sanctions table)
@@ -327,8 +430,6 @@ const CreditCaseDetail = () => {
 
   const handleUpdateDocType = async (docId, newType) => {
     try {
-      // Assuming metadata update handles documentType change or we strictly need a specific endpoint.
-      // Since documentService.updateDocumentMetadata takes (docId, meta), we try passing documentType.
       await documentService.updateDocumentMetadata(docId, { documentType: newType })
       alert('Document type updated')
       dispatch(fetchCaseById(id))
@@ -339,11 +440,6 @@ const CreditCaseDetail = () => {
 
   const handleVerifyDocument = async (docId, status) => {
     const remark = docRemarks[docId] || ''
-    // Remarks made optional as per requirement
-    // if (!remark.trim()) {
-    //   alert('Please add remarks for verification')
-    //   return
-    // }
     try {
       await workflowService.verifyDocument(docId, status, remark)
       alert('Document status updated')
@@ -353,10 +449,8 @@ const CreditCaseDetail = () => {
     }
   }
 
-  // ... (handleSaveSanction remains similar but checks readOnly implied by disabling button)
   const handleSaveSanction = async () => {
     if (readOnly) return;
-    // ... rest of logic
     setIsSubmitting(true)
     try {
       const userRole = (user?.role || '').toLowerCase()
@@ -367,7 +461,6 @@ const CreditCaseDetail = () => {
         .map(partner => ({
           partner: partner.code,
           sanctionAmount: parseFloat(partnerSanctions[partner.code].sanctionAmount) || 0,
-          // Map frontend fields to database fields
           tenure: parseInt(partnerSanctions[partner.code].tenor) || 0,
           interestRate: parseFloat(partnerSanctions[partner.code].roi) || 0,
           penalCharges: parseFloat(partnerSanctions[partner.code].penalCharges) || 0,
@@ -380,21 +473,16 @@ const CreditCaseDetail = () => {
       }
 
       if (userRole === 'credit_team_l2') {
-        // Credit L2 can modify sanctionAmount for all partners
-        // Save sanction details - send partner sanctions array
         await workflowService.approveCreditL2(id, true, remarks, {
           partnerSanctions: sanctionsArray,
         })
       } else if (userRole === 'credit_team_l1') {
-        // Credit L1 saves sanction and approves - send partner sanctions
         await workflowService.approveCreditL1(id, true, remarks, sanctionPayload)
       } else if (userRole === 'ceo') {
-        // CEO approves with all partner sanction terms
         await workflowService.approveCEO(id, true, remarks, {
           partnerSanctions: sanctionsArray,
         })
       } else if (userRole === 'md') {
-        // MD approves with final sanction terms - use first partner
         const mdPartner = PARTNERS[0]?.code || 'FFPL';
         await workflowService.approveMD(id, true, remarks, partnerSanctions[mdPartner])
       } else {
@@ -528,7 +616,6 @@ const CreditCaseDetail = () => {
                       </div>
                     </div>
 
-                    {/* Metadata View (Issue/Expiry) */}
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mt-2">
                       <div>
                         <p className="text-[10px] text-gray-400 uppercase font-bold">Issue Date</p>
@@ -600,12 +687,10 @@ const CreditCaseDetail = () => {
         </div>
 
         <div className="space-y-6">
-          {/* Only show sanction details for RM and MD roles */}
           {canAccessSanctionDetails() && (
           <div className="card">
             <h2 className="text-xl font-semibold text-gray-900 mb-4">Sanction Details</h2>
             
-            {/* Show tabs for each partner when Credit L1, L2 or CEO */}
             {(user?.role === 'credit_team_l1' || user?.role === 'credit_team_l2' || user?.role === 'ceo') && (
               <div className="mb-4">
                 <p className="text-sm text-gray-600 mb-2">
@@ -616,20 +701,18 @@ const CreditCaseDetail = () => {
               </div>
             )}
 
-            {/* Show partner-specific fields for Credit L1/L2/CEO */}
             {partnersLoading ? (
               <div className="text-center py-4 text-gray-500">Loading partners...</div>
-            ) : partners.length === 0 ? (
-              <div className="text-center py-4 text-gray-500">No active partners found</div>
+            ) : (PARTNERS.length === 0) ? (
+              <div className="text-center py-4 text-gray-500">No partners found</div>
             ) : (
               PARTNERS.map((partner) => (
                 <div key={partner.id} className="mb-6 pb-6 border-b border-gray-200 last:border-0">
                   <h3 className="text-lg font-medium text-gray-800 mb-3">{partner.name}</h3>
                   <div className="space-y-4">
-                    {/* Sanction Amount - Visible for Credit L1/L2, CEO, MD */}
                     {canViewSanctionAmount() && (
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Sanction Amount (₹)</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Sanction Amount</label>
                         <input
                           type="number"
                           value={partnerSanctions[partner.code]?.sanctionAmount || ''}
@@ -644,7 +727,6 @@ const CreditCaseDetail = () => {
                       </div>
                     )}
                     
-                    {/* ROI/IRR - Visible and editable for CEO and MD only */}
                     {canViewROI() && (
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">ROI / IRR (%)</label>
@@ -663,7 +745,6 @@ const CreditCaseDetail = () => {
                       </div>
                     )}
                     
-                    {/* Tenure - Visible and editable for CEO and MD only */}
                     {canViewTenure() && (
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">Tenure (Months)</label>
@@ -710,7 +791,7 @@ const CreditCaseDetail = () => {
           </button>
         </div>
       </div>
-    </div >
+    </div>
   )
 }
 

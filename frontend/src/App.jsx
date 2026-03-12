@@ -43,6 +43,14 @@ import SupplierDetail from './pages/supplier/SupplierDetail'
 // Common
 import Unauthorized from './pages/common/Unauthorized'
 
+// Invoice Discounting Pages
+import InvoiceDiscountingRM from './pages/invoice-discounting/InvoiceDiscountingRM'
+import InvoiceDiscountingCustomer from './pages/invoice-discounting/InvoiceDiscountingCustomer'
+import InvoiceDiscountingOPS1 from './pages/invoice-discounting/InvoiceDiscountingOPS1'
+import InvoiceDiscountingOPS2 from './pages/invoice-discounting/InvoiceDiscountingOPS2'
+import InvoiceDiscountingMD from './pages/invoice-discounting/InvoiceDiscountingMD'
+import InvoiceDiscountingOPSHead from './pages/invoice-discounting/InvoiceDiscountingOPSHead'
+
 function App() {
   const dispatch = useDispatch()
 
@@ -254,6 +262,67 @@ function App() {
             element={
               <ProtectedRoute allowedRoles={[ROLES.RELATIONSHIP_MANAGER, ROLES.OPERATIONS_TEAM_L1, ROLES.OPERATIONS_HEAD]}>
                 <SupplierDetail />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Invoice Discounting Routes */}
+          {/* RM - Create Invoice */}
+          <Route
+            path="invoice-discounting/rm"
+            element={
+              <ProtectedRoute allowedRoles={[ROLES.RELATIONSHIP_MANAGER]}>
+                <InvoiceDiscountingRM />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Customer - Mobile App Approval */}
+          <Route
+            path="invoice-discounting/customer"
+            element={
+              <ProtectedRoute allowedRoles={[ROLES.CUSTOMER]}>
+                <InvoiceDiscountingCustomer />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* OPS L1 - Verification & Disbursement Entry */}
+          <Route
+            path="invoice-discounting/ops-l1"
+            element={
+              <ProtectedRoute allowedRoles={[ROLES.OPERATIONS_TEAM_L1]}>
+                <InvoiceDiscountingOPS1 />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* OPS L2 - Verification */}
+          <Route
+            path="invoice-discounting/ops-l2"
+            element={
+              <ProtectedRoute allowedRoles={[ROLES.OPERATIONS_TEAM_L2]}>
+                <InvoiceDiscountingOPS2 />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* MD - Approval */}
+          <Route
+            path="invoice-discounting/md"
+            element={
+              <ProtectedRoute allowedRoles={[ROLES.MD]}>
+                <InvoiceDiscountingMD />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* OPS Head - Final Approval */}
+          <Route
+            path="invoice-discounting/ops-head"
+            element={
+              <ProtectedRoute allowedRoles={[ROLES.OPERATIONS_HEAD]}>
+                <InvoiceDiscountingOPSHead />
               </ProtectedRoute>
             }
           />
