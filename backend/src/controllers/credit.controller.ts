@@ -129,10 +129,11 @@ export class CreditController {
       const { customerId } = req.params;
       const sanctions = await this.creditService.getSanctionsByCustomerIdSimple(Number(customerId));
 
-      // Return in simple format with all required fields
+      // Return in simple format with all required fields including partnerName
       const response = sanctions.map(s => ({
         customerId: s.customerId,
         partner: s.partner,
+        partnerName: s.partnerName,
         sanctionAmount: s.sanctionAmount,
         status: s.status,
         createdAt: s.createdAt,

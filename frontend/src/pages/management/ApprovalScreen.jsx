@@ -359,8 +359,38 @@ const ApprovalScreen = () => {
           <div className="card border-l-4 border-primary-500">
             <h2 className="text-xl font-semibold text-gray-900 mb-4">Sanction Details (Review & Revise)</h2>
             
-            {/* CEO and MD see all three partner sanctions */}
-            {(role === 'ceo' || role === 'md') && (
+            {/* CEO sees only sanction amount, MD sees all fields */}
+            {role === 'ceo' && (
+              <div className="space-y-4 mb-4">
+                <p className="text-sm text-gray-600 mb-2">Partner Sanctions (L1 & L2 Credits)</p>
+                {partnerSanctions.map((ps, index) => (
+                  <div key={ps.partner} className="p-3 bg-gray-50 rounded-lg border border-gray-200">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="font-bold text-primary-600">{ps.partner}</span>
+                      {ps.lanId && <span className="text-xs text-gray-500">LAN: {ps.lanId}</span>}
+                    </div>
+                    <div className="grid grid-cols-1 gap-3">
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">Sanction Amount (₹)</label>
+                        <input
+                          type="number"
+                          value={ps.sanctionAmount}
+                          onChange={(e) => {
+                            const updated = [...partnerSanctions];
+                            updated[index].sanctionAmount = parseFloat(e.target.value) || 0;
+                            setPartnerSanctions(updated);
+                          }}
+                          className="input-field text-sm"
+                          readOnly={isReadOnly}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {role === 'md' && (
               <div className="space-y-4 mb-4">
                 <p className="text-sm text-gray-600 mb-2">Partner Sanctions (L1 & L2 Credits)</p>
                 {partnerSanctions.map((ps, index) => (
@@ -390,16 +420,13 @@ const ApprovalScreen = () => {
                           type="number"
                           value={ps.tenure}
                           onChange={(e) => {
-                            if (role === 'md') {
-                              const updated = [...partnerSanctions];
-                              updated[index].tenure = parseInt(e.target.value) || 0;
-                              setPartnerSanctions(updated);
-                            }
+                            const updated = [...partnerSanctions];
+                            updated[index].tenure = parseInt(e.target.value) || 0;
+                            setPartnerSanctions(updated);
                           }}
-                          className={`input-field text-sm ${role === 'md' ? '' : 'bg-gray-100'}`}
-                          readOnly={role !== 'md' || isReadOnly}
+                          className="input-field text-sm"
+                          readOnly={isReadOnly}
                         />
-                        {role !== 'md' && <span className="text-xs text-gray-400">Read-only</span>}
                       </div>
                       <div>
                         <label className="block text-xs text-gray-500 mb-1">ROI (%)</label>
@@ -408,67 +435,62 @@ const ApprovalScreen = () => {
                           step="0.01"
                           value={ps.interestRate}
                           onChange={(e) => {
-                            if (role === 'md') {
-                              const updated = [...partnerSanctions];
-                              updated[index].interestRate = parseFloat(e.target.value) || 0;
-                              setPartnerSanctions(updated);
-                            }
+                            const updated = [...partnerSanctions];
+                            updated[index].interestRate = parseFloat(e.target.value) || 0;
+                            setPartnerSanctions(updated);
                           }}
-                          className={`input-field text-sm ${role === 'md' ? '' : 'bg-gray-100'}`}
-                          readOnly={role !== 'md' || isReadOnly}
+                          className="input-field text-sm"
+                          readOnly={isReadOnly}
                         />
-                        {role !== 'md' && <span className="text-xs text-gray-400">Read-only</span>}
                       </div>
                     </div>
                     {/* MD can also edit penal charges, processing fees, and conditions */}
-                    {role === 'md' && (
-                      <div className="grid grid-cols-3 gap-3 mt-3">
-                        <div>
-                          <label className="block text-xs text-gray-500 mb-1">Penal Charges (%)</label>
-                          <input
-                            type="number"
-                            step="0.01"
-                            value={ps.penalCharges || 0}
-                            onChange={(e) => {
-                              const updated = [...partnerSanctions];
-                              updated[index].penalCharges = parseFloat(e.target.value) || 0;
-                              setPartnerSanctions(updated);
-                            }}
-                            className="input-field text-sm"
-                            readOnly={isReadOnly}
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs text-gray-500 mb-1">Processing Fee (%)</label>
-                          <input
-                            type="number"
-                            step="0.01"
-                            value={ps.processingFees || 0}
-                            onChange={(e) => {
-                              const updated = [...partnerSanctions];
-                              updated[index].processingFees = parseFloat(e.target.value) || 0;
-                              setPartnerSanctions(updated);
-                            }}
-                            className="input-field text-sm"
-                            readOnly={isReadOnly}
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs text-gray-500 mb-1">Conditions</label>
-                          <input
-                            type="text"
-                            value={ps.conditions || ''}
-                            onChange={(e) => {
-                              const updated = [...partnerSanctions];
-                              updated[index].conditions = e.target.value;
-                              setPartnerSanctions(updated);
-                            }}
-                            className="input-field text-sm"
-                            readOnly={isReadOnly}
-                          />
-                        </div>
+                    <div className="grid grid-cols-3 gap-3 mt-3">
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">Penal Charges (%)</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={ps.penalCharges || 0}
+                          onChange={(e) => {
+                            const updated = [...partnerSanctions];
+                            updated[index].penalCharges = parseFloat(e.target.value) || 0;
+                            setPartnerSanctions(updated);
+                          }}
+                          className="input-field text-sm"
+                          readOnly={isReadOnly}
+                        />
                       </div>
-                    )}
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">Processing Fee (%)</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={ps.processingFees || 0}
+                          onChange={(e) => {
+                            const updated = [...partnerSanctions];
+                            updated[index].processingFees = parseFloat(e.target.value) || 0;
+                            setPartnerSanctions(updated);
+                          }}
+                          className="input-field text-sm"
+                          readOnly={isReadOnly}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">Conditions</label>
+                        <input
+                          type="text"
+                          value={ps.conditions || ''}
+                          onChange={(e) => {
+                            const updated = [...partnerSanctions];
+                            updated[index].conditions = e.target.value;
+                            setPartnerSanctions(updated);
+                          }}
+                          className="input-field text-sm"
+                          readOnly={isReadOnly}
+                        />
+                      </div>
+                    </div>
                   </div>
                 ))}
               </div>

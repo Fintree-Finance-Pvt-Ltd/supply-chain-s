@@ -149,7 +149,7 @@ const CreditCaseDetail = () => {
           const existingPartners = sanctionsArray.map(s => ({
             id: s.partner || s.partner_code,
             code: s.partner || s.partner_code,
-            name: s.partner || s.partner_code
+            name: s.partnerName || s.partner
           }))
           console.log('Extracted partners:', existingPartners)
           
@@ -334,8 +334,8 @@ const CreditCaseDetail = () => {
   
   const canViewROI = () => {
     const role = (user?.role || '').toLowerCase();
-    // All roles in credit workflow can view ROI
-    return ['relationship_manager', 'credit_team_l1', 'credit_team_l2', 'ceo', 'md'].includes(role);
+    // Only MD can view ROI - credit_l1, credit_l2, and CEO should only see sanction amount
+    return ['md'].includes(role);
   };
   
   const canEditROI = () => {
@@ -351,8 +351,8 @@ const CreditCaseDetail = () => {
   
   const canViewTenure = () => {
     const role = (user?.role || '').toLowerCase();
-    // All roles in credit workflow can view tenor
-    return ['relationship_manager', 'credit_team_l1', 'credit_team_l2', 'ceo', 'md'].includes(role);
+    // Only MD can view tenure - credit_l1, credit_l2, and CEO should only see sanction amount
+    return ['md'].includes(role);
   };
   
   const canEditTenure = () => {

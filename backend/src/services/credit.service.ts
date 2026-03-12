@@ -1,5 +1,5 @@
 import { AppDataSource } from '../config/database';
-import { CreditSanction, Customer, SanctionLimitHistory } from '../entities';
+import { CreditSanction, Customer, SanctionLimitHistory, Partner } from '../entities';
 import { ApprovalService } from './approval.service';
 import { CustomerService } from './customer.service';
 import { CASE_STATUS, APPROVAL_FLOW_TYPES } from '../config/constants';
@@ -8,12 +8,14 @@ import { Repository } from 'typeorm';
 export class CreditService {
   private creditSanctionRepository: Repository<CreditSanction>;
   private sanctionHistoryRepository: Repository<SanctionLimitHistory>;
+  private partnerRepository: Repository<Partner>;
   private approvalService: ApprovalService;
   private customerService: CustomerService;
 
   constructor() {
     this.creditSanctionRepository = AppDataSource.getRepository(CreditSanction);
     this.sanctionHistoryRepository = AppDataSource.getRepository(SanctionLimitHistory);
+    this.partnerRepository = AppDataSource.getRepository(Partner);
     this.approvalService = new ApprovalService();
     this.customerService = new CustomerService();
   }
@@ -125,12 +127,31 @@ export class CreditService {
   /**
    * Get all credit sanctions for a customer by customerId (simple version for non-CREDIT_L1 roles)
    * Returns all sanctions without filtering by partner active status
+   * Includes partner name from partners table
    */
-  async getSanctionsByCustomerIdSimple(customerId: number): Promise<CreditSanction[]> {
-    return await this.creditSanctionRepository.find({
+  async getSanctionsByCustomerIdSimple(customerId: number): Promise<(CreditSanction & { partnerName?: string })[]> {
+    // First get all sanctions
+    const sanctions = await this.creditSanctionRepository.find({
       where: { customerId },
       order: { createdAt: 'DESC' },
     });
+
+    // Get all unique partner codes from sanctions
+    const partnerCodes = [...new Set(sanctions.map(s => s.partner).filter(Boolean))];
+    
+    // Fetch partner names from partners table
+    const partners = await this.partnerRepository.find({
+      where: partnerCodes.map(code => ({ code })) as any,
+    });
+
+    // Create a map of partner code to name
+    const partnerMap = new Map(partners.map(p => [p.code, p.name]));
+
+    // Add partnerName to each sanction
+    return sanctions.map(s => ({
+      ...s,
+      partnerName: s.partner ? partnerMap.get(s.partner) : undefined,
+    }));
   }
 }
 
