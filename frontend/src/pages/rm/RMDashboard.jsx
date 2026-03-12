@@ -13,11 +13,17 @@ const RMDashboard = () => {
   const navigate = useNavigate()
   const dispatch = useDispatch()
   const { cases, isLoading } = useSelector((state) => state.cases)
+  const { user } = useSelector((state) => state.auth)
   const [activeTab, setActiveTab] = useState('all')
 
   useEffect(() => {
-    dispatch(fetchCases())
-  }, [dispatch])
+    // Pass the logged-in RM's ID to filter only their onboarded customers
+    if (user && user.id) {
+      dispatch(fetchCases({ rmId: user.id }))
+    } else {
+      dispatch(fetchCases())
+    }
+  }, [dispatch, user])
 
   const tabs = [
     { id: 'all', label: 'All Cases' },
