@@ -91,7 +91,7 @@ export const AppDataSource = new DataSource({
   username: process.env.DB_USERNAME || 'root',
   password: process.env.DB_PASSWORD || '',
   database: process.env.DB_DATABASE || 'supplychainnew',
-
+  synchronize: false, // Disable in production, use migrations instead
 
   // Use explicitly imported entities instead of glob pattern
   // This ensures TypeORM can find all entity metadata
