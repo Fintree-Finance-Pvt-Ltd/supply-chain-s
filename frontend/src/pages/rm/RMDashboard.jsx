@@ -285,11 +285,7 @@ const RMDashboard = () => {
             <div
               key={card.label}
               onClick={() => card.label === 'Pending Terms' && setActiveTab('md_pending_terms')}
-              className={`relative rounded-xl p-5 border transition-all duration-200 ${
-                card.highlight
-                  ? 'bg-amber-50 border-amber-300 cursor-pointer hover:bg-amber-100 pending-card'
-                  : 'bg-white border-gray-200 hover:border-gray-300'
-              }`
+              className={`relative rounded-xl p-5 border transition-all duration-200 `
             }
             >
               <div className={`inline-flex p-2.5 rounded-lg mb-3 ${
