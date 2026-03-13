@@ -4,7 +4,7 @@ import { useSelector, useDispatch } from 'react-redux'
 import { fetchCaseById } from '../../store/slices/caseSlice'
 import { workflowService } from '../../services/workflowService'
 import { documentService } from '../../services/documentService'
-import { partnerService } from '../../services/partnerService'
+import api from '../../services/api'
 import DocumentUploader from '../../components/DocumentUploader'
 import LoadingSpinner from '../../components/LoadingSpinner'
 import ApprovalTimeline from '../../components/ApprovalTimeline'
@@ -52,35 +52,60 @@ const RMCaseDetail = () => {
         }
     }, [id, dispatch])
 
-    // Fetch partners from API
+    // Initialize partners - will be populated from sanctions API response
+    // No longer fetching from /api/partners/active endpoint
+
+    // Fetch sanctions from dedicated API (/sanctions/customer/:customerId)
+    // This is the same endpoint used by credit_l2, CEO, and MD roles
     useEffect(() => {
-        const fetchPartners = async () => {
+        const fetchSanctionsAndPartners = async () => {
+            if (!id) return
+            
             try {
-                const data = await partnerService.getActivePartners()
-                if (data.partners && data.partners.length > 0) {
-                    setPartners(data.partners)
-                    // Initialize partnerSanctions with empty values for each partner
+                console.log('RMCaseDetail: Fetching from /sanctions/customer/' + id)
+                const response = await api.get(`/sanctions/customer/${id}`)
+                const data = response.data
+                const sanctions = Array.isArray(data) ? data : data.sanctions || []
+                
+                if (sanctions.length > 0) {
+                    console.log('RMCaseDetail: Found sanctions:', sanctions)
+                    
+                    // Extract unique partners from sanctions
+                    const uniquePartners = []
+                    const partnerMap = {}
+                    sanctions.forEach(s => {
+                        if (s.partner && !partnerMap[s.partner]) {
+                            partnerMap[s.partner] = true
+                            uniquePartners.push({ code: s.partner, name: s.partnerName || s.partner })
+                        }
+                    })
+                    setPartners(uniquePartners)
+                    
+                    // Initialize partnerSanctions with data from API
                     const initialSanctions = {}
-                    data.partners.forEach(partner => {
-                        initialSanctions[partner.code] = {
-                            sanctionAmount: '',
-                            tenure: '',
-                            interestRate: '',
-                            penalCharges: '',
-                            processingFees: '',
-                            conditions: '',
+                    sanctions.forEach(s => {
+                        if (s.partner) {
+                            initialSanctions[s.partner] = {
+                                sanctionAmount: s.sanctionAmount || s.sanction_limit || '',
+                                tenure: s.tenure || s.tenor || '',
+                                interestRate: s.interestRate || s.roi || '',
+                                penalCharges: s.penalCharges || '',
+                                processingFees: s.processingFees || '',
+                                conditions: s.conditions || '',
+                            }
                         }
                     })
                     setPartnerSanctions(initialSanctions)
                 }
+                setPartnersLoading(false)
             } catch (err) {
-                console.error('Failed to fetch partners:', err)
-            } finally {
+                console.error('RMCaseDetail: Failed to fetch from API:', err)
                 setPartnersLoading(false)
             }
         }
-        fetchPartners()
-    }, [])
+        
+        fetchSanctionsAndPartners()
+    }, [id])
 
     useEffect(() => {
         if (currentCase) {
@@ -91,52 +116,8 @@ const RMCaseDetail = () => {
                 bankBranch: currentCase.bankBranch || '',
                 bankType: currentCase.bankType || 'savings',
             })
-            
-            // Load existing sanctions from creditSanctions (supports multiple partners)
-            if (currentCase.creditSanctions && currentCase.creditSanctions.length > 0) {
-                const existingSanctions = { ...partnerSanctions }
-                currentCase.creditSanctions.forEach(sanction => {
-                    const partnerCode = sanction.partner
-                    if (partnerCode && existingSanctions[partnerCode]) {
-                        existingSanctions[partnerCode] = {
-                            sanctionAmount: sanction.sanctionAmount || '',
-                            tenure: sanction.tenure || '',
-                            interestRate: sanction.interestRate || '',
-                            penalCharges: sanction.penalCharges || '',
-                            processingFees: sanction.processingFees || '',
-                            conditions: sanction.conditions || '',
-                        }
-                    } else if (partnerCode) {
-                        // Partner not in list yet, add it
-                        existingSanctions[partnerCode] = {
-                            sanctionAmount: sanction.sanctionAmount || '',
-                            tenure: sanction.tenure || '',
-                            interestRate: sanction.interestRate || '',
-                            penalCharges: sanction.penalCharges || '',
-                            processingFees: sanction.processingFees || '',
-                            conditions: sanction.conditions || '',
-                        }
-                    }
-                })
-                setPartnerSanctions(existingSanctions)
-            } else if (currentCase.creditSanctions?.[0]) {
-                // Fallback: single sanction (legacy data)
-                const s = currentCase.creditSanctions[0]
-                const firstPartnerCode = PARTNERS[0]?.code || 'FFPL'
-                setPartnerSanctions(prev => ({
-                    ...prev,
-                    [firstPartnerCode]: {
-                        sanctionAmount: s.sanctionAmount || '',
-                        tenure: s.tenure || '',
-                        interestRate: s.interestRate || '',
-                        penalCharges: s.penalCharges || '',
-                        processingFees: s.processingFees || '',
-                        conditions: s.conditions || '',
-                    }
-                }))
-            }
         }
-    }, [currentCase, PARTNERS])
+    }, [currentCase])
 
     const handleSaveBankDetails = async () => {
         setIsUpdating(true)
