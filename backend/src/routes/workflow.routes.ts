@@ -1074,8 +1074,8 @@ router.post('/invoices/:invoiceId/ops-l1', checkRole(['operations_team_l1']), as
     const workflow = await invoiceDiscountingService.opsL1Verification(
       parseInt(invoiceId),
       user.id,
+      approved ? 'approve' : 'reject',
       remarks || '',
-      approved,
     );
 
     res.json({
@@ -1104,8 +1104,8 @@ router.post('/invoices/:invoiceId/ops-l2', checkRole(['operations_team_l2']), as
     const workflow = await invoiceDiscountingService.opsL2Verification(
       parseInt(invoiceId),
       user.id,
+      approved ? 'approve' : 'reject',
       remarks || '',
-      approved,
     );
 
     res.json({
@@ -1128,18 +1128,19 @@ router.post('/invoices/:invoiceId/ops-l2', checkRole(['operations_team_l2']), as
 router.post('/invoices/:invoiceId/ops-head', checkRole(['operations_head']), async (req: Request, res: Response) => {
   try {
     const { invoiceId } = req.params;
-    const { remarks } = req.body;
+    const { approved, remarks } = req.body;
     const user = (req as any).user;
 
     const workflow = await invoiceDiscountingService.opsHeadApproval(
       parseInt(invoiceId),
       user.id,
+      approved ? 'approve' : 'reject',
       remarks || '',
     );
 
     res.json({
       success: true,
-      message: 'Invoice approved by Operations Head',
+      message: approved ? 'Invoice approved by Operations Head' : 'Invoice rejected by Operations Head',
       data: workflow,
     });
   } catch (error: any) {
@@ -1170,6 +1171,36 @@ router.post('/invoices/:invoiceId/ceo', checkRole(['ceo']), async (req: Request,
     res.json({
       success: true,
       message: approved ? 'Invoice approved by CEO' : 'Invoice rejected by CEO',
+      data: workflow,
+    });
+  } catch (error: any) {
+    res.status(400).json({
+      success: false,
+      message: error.message,
+    });
+  }
+});
+
+/**
+ * POST /api/workflows/invoices/:invoiceId/md-approve
+ * MD approves or rejects invoice (without disbursement)
+ */
+router.post('/invoices/:invoiceId/md-approve', checkRole(['md']), async (req: Request, res: Response) => {
+  try {
+    const { invoiceId } = req.params;
+    const { approved, remarks } = req.body;
+    const user = (req as any).user;
+
+    const workflow = await invoiceDiscountingService.mdApproval(
+      parseInt(invoiceId),
+      user.id,
+      approved ? 'approve' : 'reject',
+      remarks || '',
+    );
+
+    res.json({
+      success: true,
+      message: approved ? 'Invoice approved by MD' : 'Invoice rejected by MD',
       data: workflow,
     });
   } catch (error: any) {

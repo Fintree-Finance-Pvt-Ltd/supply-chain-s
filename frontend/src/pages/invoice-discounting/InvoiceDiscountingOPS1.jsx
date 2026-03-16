@@ -33,9 +33,9 @@ export default function InvoiceDiscountingOPS1() {
         workflowService.getOPS1PendingInvoices(),
         workflowService.getDisbursementEntryInvoices(),
       ]);
-      // Ensure data is always an array
-      setPendingInvoices(Array.isArray(pendingRes?.data) ? pendingRes.data : []);
-      setDisbursementInvoices(Array.isArray(disbursementRes?.data) ? disbursementRes.data : []);
+      // Backend returns { success: true, data: [...] }
+      setPendingInvoices(Array.isArray(pendingRes?.data?.data) ? pendingRes.data.data : []);
+      setDisbursementInvoices(Array.isArray(disbursementRes?.data?.data) ? disbursementRes.data.data : []);
     } catch (error) {
       console.error('Error loading data:', error);
       setPendingInvoices([]);

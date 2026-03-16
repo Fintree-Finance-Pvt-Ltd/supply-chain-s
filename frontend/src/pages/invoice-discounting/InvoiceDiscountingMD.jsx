@@ -20,7 +20,8 @@ export default function InvoiceDiscountingMD() {
     try {
       setLoading(true);
       const response = await workflowService.getMDPendingInvoices();
-      setPendingInvoices(response.data || []);
+      // Backend returns { success: true, data: [...] }
+      setPendingInvoices(response?.data?.data || []);
     } catch (error) {
       console.error('Error loading data:', error);
     } finally {

@@ -49,6 +49,8 @@ export const workflowService = {
     approveInvoiceMD: (id, approved, remarks) => api.post(API_ENDPOINTS.WORKFLOW_INVOICE_MD(id), { approved, remarks }),
     disburseInvoice: (id, data) => api.post(API_ENDPOINTS.WORKFLOW_INVOICE_DISBURSE(id), data),
     finalVerifyOpsL2: (id, approved, remarks) => api.post(API_ENDPOINTS.WORKFLOW_INVOICE_FINAL_OPS_L2(id), { approved, remarks }),
+    finalOpsL2Approve: (id, remarks) => api.post(API_ENDPOINTS.WORKFLOW_INVOICE_FINAL_OPS_L2(id), { approved: true, remarks }),
+    finalOpsL2Reject: (id, remarks) => api.post(API_ENDPOINTS.WORKFLOW_INVOICE_FINAL_OPS_L2(id), { approved: false, remarks }),
 
     // Invoice Discounting - Customer Mobile App
     customerApproveInvoice: (id, approved, remarks) => api.post(API_ENDPOINTS.WORKFLOW_INVOICE_CUSTOMER_APPROVE(id), { approved, remarks }),

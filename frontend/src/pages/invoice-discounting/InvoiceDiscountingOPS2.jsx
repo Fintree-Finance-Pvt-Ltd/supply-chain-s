@@ -25,8 +25,9 @@ export default function InvoiceDiscountingOPS2() {
         workflowService.getOPS2PendingInvoices(),
         workflowService.getFinalOPS2PendingInvoices(),
       ]);
-      setPendingL1Invoices(l1Res.data || []);
-      setPendingFinalInvoices(finalRes.data || []);
+      // Backend returns { success: true, data: [...] }
+      setPendingL1Invoices(l1Res?.data?.data || []);
+      setPendingFinalInvoices(finalRes?.data?.data || []);
     } catch (error) {
       console.error('Error loading data:', error);
     } finally {
@@ -59,7 +60,7 @@ export default function InvoiceDiscountingOPS2() {
       loadData();
     } catch (error) {
       console.error('Error processing invoice:', error);
-      alert('Error processing invoice');
+      alert('Error processing invoice: ' + (error?.message || error?.response?.data?.message || 'Unknown error'));
     } finally {
       setLoading(false);
     }
