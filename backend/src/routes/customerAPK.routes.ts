@@ -2,9 +2,11 @@ import { Router, Request, Response } from 'express';
 import { CustomerController } from '../controllers/customer.controller';
 import { customerAuthMiddleware } from '../middlewares/customerAuth';
 import { validateBody, sanitizeQueryParams } from '../middlewares/validation.middleware';
+import { InvoiceDiscountingService } from '../services/invoice-discounting.service';
 
 const router = Router();
 const customerController = new CustomerController();
+const invoiceDiscountingService = new InvoiceDiscountingService();
 
 // =====================================================
 // 🔹 CUSTOMER APK ROUTES
@@ -52,6 +54,136 @@ router.put('/notifications/:id/read', (req: Request, res: Response) => customerC
 router.put('/notifications/read-all', (req: Request, res: Response) => customerController.markAllNotificationsAsRead(req, res));
 
 router.get('/profile/bank-details', (req: Request, res: Response) => customerController.getBankDetails(req, res));
+
+// =====================================================
+// 🔹 INVOICE APPROVAL ROUTES (Customer APK)
+// These routes are for customers to approve invoices after RM fills them
+// =====================================================
+
+/**
+ * GET /api/customer-apk/invoices/pending-approval
+ * Get invoices pending customer approval
+ * Requires customer authentication
+ */
+router.get('/invoices/pending-approval', async (req: Request, res: Response) => {
+  try {
+    const customerId = req.partnerLoanId;
+    console.log(customerId)
+    if (!customerId) {
+      res.status(401).json({ success: false, message: 'Customer authentication required' });
+      return;
+    }
+    
+    const invoices = await invoiceDiscountingService.getCustomerPendingInvoices(Number(customerId));
+    res.json({ success: true, data: invoices });
+  } catch (error: any) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+});
+
+/**
+ * GET /api/customer-apk/invoices/:invoiceId
+ * Get invoice details for customer approval
+ * Requires customer authentication
+ */
+router.get('/invoices/:invoiceId', async (req: Request, res: Response) => {
+  try {
+    const { invoiceId } = req.params;
+    const customerId = req.partnerLoanId;
+    console.log(customerId, invoiceId)
+    if (!customerId) {
+      res.status(401).json({ success: false, message: 'Customer authentication required' });
+      return;
+    }
+    
+    const invoice = await invoiceDiscountingService.getInvoiceById(parseInt(invoiceId));
+    if (!invoice) {
+      res.status(404).json({ success: false, message: 'Invoice not found' });
+      return;
+    }
+    
+    // Verify the invoice belongs to this customer
+    if (invoice.customerId !== Number(customerId)) {
+      res.status(403).json({ success: false, message: 'Access denied' });
+      return;
+    }
+    
+    res.json({ success: true, data: invoice });
+  } catch (error: any) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+});
+
+/**
+ * POST /api/customer-apk/invoices/:invoiceId/approve
+ * Customer approves an invoice
+ * Requires customer authentication
+ */
+router.post('/invoices/:invoiceId/approve', async (req: Request, res: Response) => {
+  try {
+    const { invoiceId } = req.params;
+    const { remarks } = req.body;
+    const customerId = req.customerId;
+    
+    if (!customerId) {
+      res.status(401).json({ success: false, message: 'Customer authentication required' });
+      return;
+    }
+    
+    const result = await invoiceDiscountingService.customerApproval(
+      parseInt(invoiceId),
+      customerId,
+      'approve',
+      remarks || ''
+    );
+    
+    res.json({
+      success: true,
+      message: 'Invoice approved successfully',
+      data: result,
+    });
+  } catch (error: any) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+});
+
+/**
+ * POST /api/customer-apk/invoices/:invoiceId/reject
+ * Customer rejects an invoice
+ * Requires customer authentication
+ */
+router.post('/invoices/:invoiceId/reject', async (req: Request, res: Response) => {
+  try {
+    const { invoiceId } = req.params;
+    const { remarks } = req.body;
+    const customerId = req.customerId;
+    
+    if (!customerId) {
+      res.status(401).json({ success: false, message: 'Customer authentication required' });
+      return;
+    }
+    
+    if (!remarks) {
+      res.status(400).json({ success: false, message: 'Rejection reason is required' });
+      return;
+    }
+    
+    const result = await invoiceDiscountingService.customerApproval(
+      parseInt(invoiceId),
+      customerId,
+      'reject',
+      remarks
+    );
+    
+    res.json({
+      success: true,
+      message: 'Invoice rejected successfully',
+      data: result,
+    });
+  } catch (error: any) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+});
 
 // =====================================================
 // 🔹 ROUTES WITH :id PARAM (must be after specific routes)
