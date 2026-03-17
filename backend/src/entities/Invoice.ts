@@ -108,6 +108,22 @@ export class Invoice {
   @Column({ type: 'int', nullable: true })
   approvedByCustomerId: number;
 
+  // Email Approval Fields
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  approvalToken: string;
+
+  @Column({ type: 'datetime', nullable: true })
+  approvalTokenExpiry: Date;
+
+  @Column({ type: 'enum', enum: ['mobile', 'email'], nullable: true })
+  approvedVia: string;
+
+  @Column({ type: 'boolean', default: false })
+  emailApprovalSent: boolean;
+
+  @Column({ type: 'datetime', nullable: true })
+  emailApprovalSentAt: Date;
+
   @Column({ type: 'decimal', precision: 15, scale: 2, nullable: true })
   disbursedAmount: number;
 

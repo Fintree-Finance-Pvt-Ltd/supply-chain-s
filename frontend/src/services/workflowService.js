@@ -58,6 +58,7 @@ export const workflowService = {
     customerReject: (id, remarks) => api.post(API_ENDPOINTS.WORKFLOW_INVOICE_CUSTOMER_APPROVE(id), { approved: false, remarks }),
     getCustomerInvoiceDetails: (id) => api.get(API_ENDPOINTS.WORKFLOW_INVOICE_CUSTOMER_DETAILS(id)),
     getCustomerPendingInvoices: () => api.get(API_ENDPOINTS.WORKFLOW_INVOICE_CUSTOMER_PENDING),
+    sendCustomerApprovalEmail: (id, baseUrl) => api.post(API_ENDPOINTS.WORKFLOW_INVOICE_SEND_CUSTOMER_EMAIL(id), { baseUrl }),
 
     // Invoice Discounting - Dashboard endpoints
     getOPS1PendingInvoices: () => api.get(API_ENDPOINTS.WORKFLOW_INVOICE_OPS_L1_PENDING),

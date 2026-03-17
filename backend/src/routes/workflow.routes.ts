@@ -1645,6 +1645,30 @@ router.get('/invoices/pending/customer', async (req, res) => {
 });
 
 /**
+ * POST /api/workflows/invoices/:invoiceId/send-customer-email
+ * Send approval email to customer for invoice
+ * This can be triggered by RM or automatically when invoice is ready for customer approval
+ */
+router.post('/invoices/:invoiceId/send-customer-email', async (req, res) => {
+  try {
+    const { invoiceId } = req.params;
+    const { baseUrl } = req.body;
+    
+    const result = await invoiceDiscountingService.sendApprovalEmail(
+      parseInt(invoiceId),
+      baseUrl
+    );
+    
+    res.json({
+      success: result.success,
+      message: result.message,
+    });
+  } catch (error: any) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+});
+
+/**
  * POST /api/workflows/invoices/:invoiceId/customer-approve
  * Customer approves or rejects invoice
  */

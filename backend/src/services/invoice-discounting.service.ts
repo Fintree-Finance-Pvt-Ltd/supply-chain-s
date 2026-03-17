@@ -8,6 +8,8 @@ import { CaseStatusHistory } from "../entities/CaseStatusHistory";
 import { LoanAccount } from "../entities/LoanAccount";
 import { CreditSanction } from "../entities/CreditSanction";
 import { Notification } from "../entities/Notification";
+import { NodemailerProvider } from "../integrations/notifications/email/nodemailer.provider";
+import crypto from "crypto";
 
 export class InvoiceDiscountingService {
   private invoiceRepository = AppDataSource.getRepository(Invoice);
@@ -21,6 +23,225 @@ export class InvoiceDiscountingService {
   private creditSanctionRepository =
     AppDataSource.getRepository(CreditSanction);
   private notificationRepository = AppDataSource.getRepository(Notification);
+  private emailProvider = new NodemailerProvider({
+    host: process.env.SMTP_HOST!,
+    port: Number(process.env.SMTP_PORT),
+    user: process.env.SMTP_USER!,
+    pass: process.env.SMTP_PASS!,
+    fromName: process.env.SMTP_FROM_NAME!,
+    fromEmail: process.env.SMTP_FROM_EMAIL!,
+  });
+
+  // Generate a secure random token
+  private generateApprovalToken(): string {
+    return crypto.randomBytes(32).toString('hex');
+  }
+
+  // Send approval email to customer
+  async sendApprovalEmail(invoiceId: number, baseUrl?: string): Promise<{ success: boolean; message: string }> {
+    const invoice = await this.invoiceRepository.findOne({
+      where: { id: invoiceId },
+      relations: ["customer", "supplier", "loanAccount"],
+    });
+
+    if (!invoice) {
+      throw new Error("Invoice not found");
+    }
+
+    if (invoice.status !== "PENDING_CUSTOMER_APPROVAL") {
+      throw new Error("Invoice is not pending customer approval");
+    }
+
+    if (!invoice.customerId || !invoice.customer) {
+      throw new Error("Customer not found for this invoice");
+    }
+
+    // Get customer email - check multiple possible fields
+    const customerEmail = (invoice.customer as any).email || 
+                         (invoice.customer as any).emailId || 
+                         (invoice.customer as any).registeredEmail;
+
+    if (!customerEmail) {
+      throw new Error("Customer email not found");
+    }
+
+    // Generate approval token
+    const approvalToken = this.generateApprovalToken();
+    const tokenExpiry = new Date();
+    tokenExpiry.setHours(tokenExpiry.getHours() + 48); // Token valid for 48 hours
+
+    // Save token to invoice
+    invoice.approvalToken = approvalToken;
+    invoice.approvalTokenExpiry = tokenExpiry;
+    invoice.emailApprovalSent = true;
+    invoice.emailApprovalSentAt = new Date();
+    await this.invoiceRepository.save(invoice);
+
+    // Build approval URLs
+    const approveUrl = `${baseUrl || ''}/api/customer-apk/invoices/email-approve?token=${approvalToken}&action=approve`;
+    const rejectUrl = `${baseUrl || ''}/api/customer-apk/invoices/email-approve?token=${approvalToken}&action=reject`;
+
+    // Build email HTML
+    const htmlContent = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: #333;">Invoice Approval Required</h2>
+        <p>Dear Customer,</p>
+        <p>Your invoice requires your approval. Please review the details below:</p>
+        
+        <div style="background: #f5f5f5; padding: 15px; border-radius: 8px; margin: 20px 0;">
+          <p><strong>Invoice Number:</strong> ${invoice.invoiceNumber}</p>
+          <p><strong>Invoice Date:</strong> ${invoice.invoiceDate ? new Date(invoice.invoiceDate).toLocaleDateString() : 'N/A'}</p>
+          <p><strong>Invoice Amount:</strong> ₹${invoice.invoiceAmount?.toLocaleString() || '0'}</p>
+          <p><strong>Supplier:</strong> ${invoice.supplier?.supplierName || 'N/A'}</p>
+          <p><strong>Due Date:</strong> ${invoice.dueDate ? new Date(invoice.dueDate).toLocaleDateString() : 'N/A'}</p>
+        </div>
+        
+        <p>Please click one of the buttons below to approve or reject this invoice:</p>
+        
+        <div style="margin: 30px 0;">
+          <a href="${approveUrl}" style="background: #28a745; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; margin-right: 10px; display: inline-block;">Approve Invoice</a>
+          <a href="${rejectUrl}" style="background: #dc3545; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; display: inline-block;">Reject Invoice</a>
+        </div>
+        
+        <p style="color: #666; font-size: 12px;">
+          This approval link will expire in 48 hours.
+          You can also approve/reject this invoice through the mobile app.
+        </p>
+        
+        <p style="color: #666; font-size: 12px;">
+          If you did not expect this email, please ignore it or contact support.
+        </p>
+      </div>
+    `;
+
+    const textContent = `
+      Invoice Approval Required
+      
+      Dear Customer,
+      
+      Your invoice requires your approval. Please review the details below:
+      
+      Invoice Number: ${invoice.invoiceNumber}
+      Invoice Date: ${invoice.invoiceDate ? new Date(invoice.invoiceDate).toLocaleDateString() : 'N/A'}
+      Invoice Amount: ₹${invoice.invoiceAmount?.toLocaleString() || '0'}
+      Supplier: ${invoice.supplier?.supplierName || 'N/A'}
+      Due Date: ${invoice.dueDate ? new Date(invoice.dueDate).toLocaleDateString() : 'N/A'}
+      
+      Please approve or reject this invoice by clicking the link in the email.
+      This approval link will expire in 48 hours.
+    `;
+
+    try {
+      await this.emailProvider.sendEmail(
+        customerEmail,
+        `Invoice Approval Required - ${invoice.invoiceNumber}`,
+        htmlContent,
+        textContent
+      );
+
+      return {
+        success: true,
+        message: `Approval email sent successfully to ${customerEmail}`
+      };
+    } catch (error: any) {
+      console.error("Error sending approval email:", error);
+      throw new Error(`Failed to send approval email: ${error.message}`);
+    }
+  }
+
+  // Handle email-based approval
+  async processEmailApproval(
+    token: string,
+    action: "approve" | "reject",
+    remarks?: string
+  ): Promise<{ success: boolean; message: string; invoice?: Invoice }> {
+    // Find invoice by token
+    const invoice = await this.invoiceRepository.findOne({
+      where: { approvalToken: token },
+      relations: ["customer", "supplier"],
+    });
+
+    if (!invoice) {
+      return { success: false, message: "Invalid approval token" };
+    }
+
+    // Check if already approved/rejected
+    if (invoice.customerApprovalStatus === "approved") {
+      return { 
+        success: false, 
+        message: "This invoice has already been approved",
+        invoice 
+      };
+    }
+
+    if (invoice.customerApprovalStatus === "rejected") {
+      return { 
+        success: false, 
+        message: "This invoice has already been rejected",
+        invoice 
+      };
+    }
+
+    // Check token expiry
+    if (invoice.approvalTokenExpiry && new Date() > invoice.approvalTokenExpiry) {
+      return { success: false, message: "Approval token has expired" };
+    }
+
+    // Check if invoice is still pending customer approval
+    if (invoice.status !== "PENDING_CUSTOMER_APPROVAL") {
+      return { 
+        success: false, 
+        message: `Invoice is not pending customer approval. Current status: ${invoice.status}`,
+        invoice 
+      };
+    }
+
+    const previousStatus = invoice.status;
+    
+    if (action === "approve") {
+      invoice.status = "PENDING_OPS_L1_APPROVAL";
+      invoice.customerApprovalStatus = "approved";
+      invoice.customerApprovedAt = new Date();
+      invoice.approvedVia = "email";
+    } else {
+      invoice.status = "REJECTED_BY_CUSTOMER";
+      invoice.customerApprovalStatus = "rejected";
+      invoice.approvedVia = "email";
+    }
+
+    invoice.customerRemarks = remarks || "";
+    invoice.approvedByCustomerId = invoice.customerId;
+
+    await this.invoiceRepository.save(invoice);
+
+    // Update workflow
+    const workflow = await this.createOrGetWorkflow(invoice.id);
+    workflow.currentStatus = invoice.status;
+    workflow.currentApproverRoleName = this.getApproverForStatus(invoice.status);
+    if (action === "reject") {
+      workflow.isRejected = true;
+    }
+    workflow.remarks = remarks || `Invoice ${action}d via email`;
+    await this.workflowRepository.save(workflow);
+
+    // Log history
+    await this.logHistory({
+      customerId: invoice.customerId,
+      supplierId: invoice.supplierId,
+      invoiceId: invoice.id,
+      caseWorkflowId: workflow.id,
+      status: invoice.status,
+      previousStatus,
+      changedBy: invoice.customerId,
+      remarks: remarks || `Invoice ${action}d by customer via email`,
+    });
+
+    return {
+      success: true,
+      message: `Invoice ${action}d successfully via email`,
+      invoice
+    };
+  }
 
   private getApproverForStatus(status: string): string {
     switch (status) {
@@ -330,6 +551,15 @@ export class InvoiceDiscountingService {
     if (!customer) {
       throw new Error(`Customer not found for ID ${invoice.customerId}`);
     }
+
+    // Check if already approved/rejected (from email or mobile)
+    if (invoice.customerApprovalStatus === "approved") {
+      throw new Error("This invoice has already been approved");
+    }
+    if (invoice.customerApprovalStatus === "rejected") {
+      throw new Error("This invoice has already been rejected");
+    }
+
     if (invoice.status !== "PENDING_CUSTOMER_APPROVAL") {
       throw new Error("Invoice is not pending customer approval");
     }
@@ -339,11 +569,16 @@ export class InvoiceDiscountingService {
       invoice.status = "PENDING_OPS_L1_APPROVAL";
       invoice.customerApprovalStatus = "approved";
       invoice.customerApprovedAt = new Date();
+      invoice.approvedVia = "mobile";
     } else {
       invoice.status = "REJECTED_BY_CUSTOMER";
       invoice.customerApprovalStatus = "rejected";
+      invoice.approvedVia = "mobile";
     }
     invoice.customerRemarks = remarks || "";
+
+    // Store customer approval info
+    invoice.approvedByCustomerId = invoice.customerId;
 
     await this.invoiceRepository.save(invoice);
 
@@ -358,6 +593,8 @@ export class InvoiceDiscountingService {
     workflow.remarks = remarks || "";
     await this.workflowRepository.save(workflow);
 
+    // Use RM's user ID for changedBy (foreign key references users table)
+    // The customer.rmId is the Relationship Manager's user ID
     await this.logHistory({
       customerId: invoice.customerId,
       supplierId: invoice.supplierId,
@@ -365,7 +602,7 @@ export class InvoiceDiscountingService {
       caseWorkflowId: workflow.id,
       status: invoice.status,
       previousStatus,
-      changedBy: invoice.customerId, // Use invoice's customerId for audit trail
+      changedBy: customer.rmId,
       remarks: remarks || `Invoice ${action}d by customer`,
     });
 

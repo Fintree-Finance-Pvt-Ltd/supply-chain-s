@@ -92,6 +92,7 @@ export const API_ENDPOINTS = {
   WORKFLOW_INVOICE_CUSTOMER_APPROVE: (id) => `/workflows/invoices/${id}/customer-approve`,
   WORKFLOW_INVOICE_CUSTOMER_DETAILS: (id) => `/workflows/invoices/${id}/customer-details`,
   WORKFLOW_INVOICE_CUSTOMER_PENDING: '/workflows/invoices/pending/customer',
+  WORKFLOW_INVOICE_SEND_CUSTOMER_EMAIL: (id) => `/workflows/invoices/${id}/send-customer-email`,
   
   // Invoice Discounting - Dashboard Endpoints
   WORKFLOW_INVOICE_OPS_L1_PENDING: '/workflows/invoices/pending/ops-l1',

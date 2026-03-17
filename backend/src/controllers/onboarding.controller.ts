@@ -96,7 +96,8 @@ export class OnboardingController {
       res.json({ success: true, message: "Email OTP sent successfully", coApplicantId: result?.coApplicantId });
 
     } catch (error: any) {
-      res.status(400).json({
+      console.error("Error in sendEmailOtp:", error.messsage || error);
+      res.status(500).json({
         success: false,
         message: error.message || "Failed to send email OTP"
       });

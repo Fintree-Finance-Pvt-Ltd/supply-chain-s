@@ -30,6 +30,53 @@ router.post('/password', customerController.setPassword);
 router.post('/auth/refresh', validateBody([{ field: 'refreshToken', required: true }]), 
   (req: Request, res: Response) => customerController.refreshToken(req, res));
 
+// =====================================================
+// 🔹 EMAIL APPROVAL ROUTES (PUBLIC - No authentication required)
+// These routes are for email-based invoice approval
+// =====================================================
+
+/**
+ * GET /api/customer-apk/invoices/email-approve
+ * Handle email-based invoice approval via token
+ * No authentication required - uses secure token
+ */
+router.get('/invoices/email-approve', async (req: Request, res: Response) => {
+  try {
+    const { token, action, remarks } = req.query;
+    
+    if (!token) {
+      res.status(400).json({ success: false, message: 'Approval token is required' });
+      return;
+    }
+    
+    if (!action || !['approve', 'reject'].includes(action as string)) {
+      res.status(400).json({ success: false, message: 'Action must be either "approve" or "reject"' });
+      return;
+    }
+    
+    const result = await invoiceDiscountingService.processEmailApproval(
+      token as string,
+      action as "approve" | "reject",
+      remarks as string | undefined
+    );
+    
+    if (result.success) {
+      res.json({
+        success: true,
+        message: result.message,
+        invoice: result.invoice
+      });
+    } else {
+      res.status(400).json({
+        success: false,
+        message: result.message
+      });
+    }
+  } catch (error: any) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+});
+
 router.use(customerAuthMiddleware);
 router.post('/auth/logout', (req: Request, res: Response) => customerController.logout(req, res));
 router.get('/dashboard', (req: Request, res: Response) => customerController.getDashboard(req, res));
@@ -59,6 +106,34 @@ router.get('/profile/bank-details', (req: Request, res: Response) => customerCon
 // 🔹 INVOICE APPROVAL ROUTES (Customer APK)
 // These routes are for customers to approve invoices after RM fills them
 // =====================================================
+
+/**
+ * POST /api/customer-apk/invoices/:invoiceId/send-approval-email
+ * Send approval email to customer
+ * Requires customer authentication
+ */
+router.post('/invoices/:invoiceId/send-approval-email', async (req: Request, res: Response) => {
+  try {
+    const { invoiceId } = req.params;
+    const customerId = req.customerId;
+    
+    if (!customerId) {
+      res.status(401).json({ success: false, message: 'Customer authentication required' });
+      return;
+    }
+    
+    const result = await invoiceDiscountingService.sendApprovalEmail(
+      parseInt(invoiceId)
+    );
+    
+    res.json({
+      success: result.success,
+      message: result.message,
+    });
+  } catch (error: any) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+});
 
 /**
  * GET /api/customer-apk/invoices/pending-approval

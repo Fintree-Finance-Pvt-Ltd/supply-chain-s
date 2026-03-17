@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { workflowService } from '../../services/workflowService';
 import LoadingSpinner from '../../components/LoadingSpinner';
 import StatusBadge from '../../components/StatusBadge';
-import { FiSave, FiSend, FiUser, FiFileText, FiDollarSign, FiCalendar, FiArrowRight, FiCheck, FiX } from 'react-icons/fi';
+import { FiSave, FiSend, FiUser, FiFileText, FiDollarSign, FiCalendar, FiArrowRight, FiCheck, FiX, FiMail } from 'react-icons/fi';
 
 export default function InvoiceDiscountingRM() {
   const navigate = useNavigate();
@@ -261,6 +261,24 @@ export default function InvoiceDiscountingRM() {
     return <StatusBadge status={s.color} label={s.label} />;
   };
 
+  const handleSendApprovalEmail = async (invoiceId) => {
+    try {
+      setLoading(true);
+      const baseUrl = window.location.origin;
+      const response = await workflowService.sendCustomerApprovalEmail(invoiceId, baseUrl);
+      if (response?.data?.success) {
+        alert('Approval email sent successfully to customer');
+      } else {
+        alert(response?.data?.message || 'Failed to send approval email');
+      }
+    } catch (error) {
+      console.error('Error sending approval email:', error);
+      alert('Error sending approval email');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   if (loading) return <LoadingSpinner />;
 
   return (
@@ -487,6 +505,27 @@ export default function InvoiceDiscountingRM() {
                   <td style={{ padding: '12px', textAlign: 'right' }}>₹{invoice.invoiceAmount?.toLocaleString()}</td>
                   <td style={{ padding: '12px', textAlign: 'center' }}>{getStatusBadge(invoice.status)}</td>
                   <td style={{ padding: '12px', textAlign: 'center' }}>
+                    {invoice.status === 'PENDING_CUSTOMER_APPROVAL' && (
+                      <button
+                        onClick={() => handleSendApprovalEmail(invoice.id)}
+                        disabled={loading}
+                        style={{
+                          padding: '6px 12px',
+                          background: '#28a745',
+                          color: '#fff',
+                          border: 'none',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          marginRight: '5px',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                        }}
+                        title="Send approval email to customer"
+                      >
+                        <FiMail size={12} /> Email
+                      </button>
+                    )}
                     <button
                       onClick={() => navigate(`/invoice-discounting/rm/${invoice.id}`)}
                       style={{
