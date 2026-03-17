@@ -264,7 +264,7 @@ export default function InvoiceDiscountingRM() {
   const handleSendApprovalEmail = async (invoiceId) => {
     try {
       setLoading(true);
-      const baseUrl = window.location.origin;
+      const baseUrl =import.meta.env.VITE_API_BASE_URL|| 'https://supplychain-prod.fintreelms.com/api';
       const response = await workflowService.sendCustomerApprovalEmail(invoiceId, baseUrl);
       if (response?.data?.success) {
         alert('Approval email sent successfully to customer');

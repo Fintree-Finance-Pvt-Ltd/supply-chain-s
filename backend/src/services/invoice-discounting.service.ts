@@ -78,8 +78,8 @@ export class InvoiceDiscountingService {
     await this.invoiceRepository.save(invoice);
 
     // Build approval URLs
-    const approveUrl = `${baseUrl || ''}/api/customer-apk/invoices/email-approve?token=${approvalToken}&action=approve`;
-    const rejectUrl = `${baseUrl || ''}/api/customer-apk/invoices/email-approve?token=${approvalToken}&action=reject`;
+    const approveUrl = `${baseUrl || ''}/api/lms-customers/invoices/email-approve?token=${approvalToken}&action=approve`;
+    const rejectUrl = `${baseUrl || ''}/api/lms-customers/invoices/email-approve?token=${approvalToken}&action=reject`;
 
     // Build email HTML
     const htmlContent = `
