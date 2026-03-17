@@ -56,14 +56,14 @@ export class InvoiceDiscountingService {
       throw new Error("Customer not found for this invoice");
     }
 
-    // Get customer email - check multiple possible fields
-    const customerEmail = (invoice.customer as any).email || 
-                         (invoice.customer as any).emailId || 
-                         (invoice.customer as any).registeredEmail;
+    const customer = await this.customerRepository.findOne({
+      where: { id: invoice.customerId },
+    });
 
-    if (!customerEmail) {
-      throw new Error("Customer email not found");
+    if (!customer?.email && !customer?.companyEmail) {
+      throw new Error("Customer email or mobile number not found");
     }
+    const customerEmail = customer.email ?? customer.companyEmail!;
 
     // Generate approval token
     const approvalToken = this.generateApprovalToken();
