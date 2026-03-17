@@ -124,17 +124,24 @@ export class CreditController {
 
   // Dedicated API for fetching all sanctions for a customer (for non-CREDIT_L1 roles)
   // Returns all sanctions without filtering by partner active status
+  // Includes partner name and all sanction fields (tenure, interestRate, penalCharges, processingFees) for RM post sanction review
   getSanctionsByCustomerIdSimple = async (req: Request, res: Response): Promise<void> => {
     try {
       const { customerId } = req.params;
       const sanctions = await this.creditService.getSanctionsByCustomerIdSimple(Number(customerId));
 
-      // Return in simple format with all required fields including partnerName
+      // Return in simple format with all required fields including partnerName, tenure, interestRate, penalCharges, processingFees
       const response = sanctions.map(s => ({
         customerId: s.customerId,
         partner: s.partner,
         partnerName: s.partnerName,
         sanctionAmount: s.sanctionAmount,
+        tenure: s.tenure,
+        interestRate: s.interestRate,
+        penalCharges: s.penalCharges,
+        processingFees: s.processingFees,
+        conditions: s.conditions,
+        creditRemarks: s.creditRemarks,
         status: s.status,
         createdAt: s.createdAt,
         updatedAt: s.updatedAt,
