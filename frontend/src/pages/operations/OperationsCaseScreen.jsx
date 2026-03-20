@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useSelector } from 'react-redux'
+import { toast } from 'react-toastify'
 import { workflowService } from '../../services/workflowService'
 import { customerService } from '../../services/customerService'
 import ApprovalTimeline from '../../components/ApprovalTimeline'
@@ -74,31 +75,31 @@ const OperationsCaseScreen = () => {
     // }
     try {
       await workflowService.verifyDocument(docId, status, remark)
-      alert('Document status updated')
+      toast.success('Document status updated')
       const response = await customerService.getCustomerById(id)
       setCustomer(response.data)
     } catch (error) {
-      alert('Verification failed')
+      toast.error('Verification failed')
     }
   }
 
   const handleUpdateBankDetails = async () => {
     try {
       await workflowService.updateBankDetails(id, bankData)
-      alert('Bank details updated successfully')
+      toast.success('Bank details updated successfully')
     } catch (error) {
-      alert('Failed to update bank details: ' + (error.response?.data?.message || error.message))
+      toast.error('Failed to update bank details: ' + (error.response?.data?.message || error.message))
     }
   }
 
   const handleUpload = async (file, type) => {
     try {
       await documentService.uploadDocument(id, file, type)
-      alert('Document uploaded successfully')
+      toast.success('Document uploaded successfully')
 
       // Simulate OCR for Cheque
       if (type === 'cheque') {
-        alert('Simulating OCR: Fetching bank details from cheque...')
+        toast.info('Simulating OCR: Fetching bank details from cheque...')
         setTimeout(() => {
           setBankData({
             bankAccountNo: '9876543210',
@@ -106,7 +107,7 @@ const OperationsCaseScreen = () => {
             bankName: 'ICICI BANK',
             bankBranch: 'MUMBAI BRANCH',
           })
-          alert('OCR Successful: Bank details auto-filled')
+          toast.success('OCR Successful: Bank details auto-filled')
         }, 1500)
       }
 
@@ -114,7 +115,7 @@ const OperationsCaseScreen = () => {
       const response = await customerService.getCustomerById(id)
       setCustomer(response.data)
     } catch (error) {
-      alert('Upload failed: ' + (error.response?.data?.message || error.message))
+      toast.error('Upload failed: ' + (error.response?.data?.message || error.message))
     }
   }
 
@@ -127,10 +128,10 @@ const OperationsCaseScreen = () => {
       } else {
         await workflowService.approveOpsL1(id, true, remarks)
       }
-      alert('Operations approval processed successfully')
+      toast.success('Operations approval processed successfully')
       navigate('/operations/dashboard')
     } catch (error) {
-      alert('Failed to update: ' + (error.response?.data?.message || error.message || error))
+      toast.error('Failed to update: ' + (error.response?.data?.message || error.message || error))
     } finally {
       setIsSubmitting(false)
     }
@@ -138,17 +139,17 @@ const OperationsCaseScreen = () => {
 
   const handleReject = async () => {
     if (!remarks.trim()) {
-      alert('Please add rejection reason')
+      toast.info('Please add rejection reason')
       return
     }
 
     setIsSubmitting(true)
     try {
       await workflowService.approveOpsL1(id, false, remarks)
-      alert('Operations check rejected')
+      toast.success('Operations check rejected')
       navigate('/operations/dashboard')
     } catch (error) {
-      alert('Failed to reject: ' + (error.response?.data?.message || error.message || error))
+      toast.error('Failed to reject: ' + (error.response?.data?.message || error.message || error))
     } finally {
       setIsSubmitting(false)
     }

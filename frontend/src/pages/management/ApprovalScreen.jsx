@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
+import { toast } from "react-toastify";
 import { workflowService } from "../../services/workflowService";
 import { customerService } from "../../services/customerService";
 import { partnerService } from "../../services/partnerService";
@@ -227,7 +228,7 @@ const ApprovalScreen = () => {
 
   const handleApprove = async () => {
     if (!comments.trim()) {
-      alert("Please add comments before approving");
+      toast.info("Please add comments before approving");
       return;
     }
 
@@ -267,10 +268,10 @@ const ApprovalScreen = () => {
         throw new Error("Unauthorized role for this action");
       }
 
-      alert("Approval processed successfully");
+      toast.success("Approval processed successfully");
       navigate("/management/dashboard");
     } catch (error) {
-      alert(
+      toast.error(
         "Failed to approve: " +
           (error.response?.data?.message || error.message || error),
       );
@@ -281,7 +282,7 @@ const ApprovalScreen = () => {
 
   const handleReject = async () => {
     if (!comments.trim()) {
-      alert("Please add rejection reason");
+      toast.info("Please add rejection reason");
       return;
     }
 
@@ -296,10 +297,10 @@ const ApprovalScreen = () => {
         throw new Error("Unauthorized role for this action");
       }
 
-      alert("Approval rejected");
+      toast.success("Approval rejected");
       navigate("/management/dashboard");
     } catch (error) {
-      alert(
+      toast.error(
         "Failed to reject: " +
           (error.response?.data?.message || error.message || error),
       );

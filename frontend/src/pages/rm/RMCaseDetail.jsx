@@ -11,7 +11,7 @@ import ApprovalTimeline from '../../components/ApprovalTimeline'
 import { formatDate } from '../../utils/format'
 import CustomerFullDetails from '../../components/CustomerFullDetails'
 import { FiFileText, FiCheck, FiSend, FiFile, FiLock, FiEye, FiCamera, FiRefreshCw } from 'react-icons/fi'
-import { Toaster, toast } from 'react-hot-toast'
+import { toast } from 'react-toastify'
 
 const RMCaseDetail = () => {
     const { id } = useParams()
@@ -136,10 +136,10 @@ const RMCaseDetail = () => {
                 }))
             
             await workflowService.updateBankDetails(id, { ...bankDetails, partnerSanctions: sanctionsArray })
-            alert('Details saved successfully')
+            toast.success('Details saved successfully')
             dispatch(fetchCaseById(id))
         } catch (error) {
-            alert('Failed to save bank details')
+            toast.error('Failed to save bank details')
         } finally {
             setIsUpdating(false)
         }
@@ -148,10 +148,10 @@ const RMCaseDetail = () => {
     const handleUpload = async (file, type) => {
         try {
             await documentService.uploadDocument(id, file, type)
-            alert('Document uploaded successfully')
+            toast.success('Document uploaded successfully')
             dispatch(fetchCaseById(id))
         } catch (error) {
-            alert('Upload failed: ' + (error.response?.data?.message || error.message))
+            toast.error('Upload failed: ' + (error.response?.data?.message || error.message))
         }
     }
 
@@ -160,10 +160,10 @@ const RMCaseDetail = () => {
         try {
             const payload = type === 'esign' ? { eSignStatus: 'completed' } : { eNachStatus: 'completed' }
             await workflowService.updateBankDetails(id, payload)
-            alert(`${type.toUpperCase()} triggered and simulated successfully`)
+            toast.success(`${type.toUpperCase()} triggered and simulated successfully`)
             dispatch(fetchCaseById(id))
         } catch (error) {
-            alert('Action failed')
+            toast.error('Action failed')
         } finally {
             setIsUpdating(false)
         }

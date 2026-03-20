@@ -90,7 +90,7 @@ export class OnboardingIntegrationService {
         customerId: customerId ?? IsNull(),
         identifier: mobileNumber,
         identifierType: OtpIdentifierType.MOBILE,
-        status: OtpSessionStatus.SENT,
+        status: OtpSessionStatus.VERIFIED,
         expiresAt: MoreThan(new Date()),
         ownerType,
         applicantId: ownerType === KycOwnerType.APPLICANT ? applicantId ?? IsNull() : IsNull(),

@@ -4,7 +4,7 @@ import { fetchFlows, createFlow, updateFlow, deleteFlow, toggleFlowStatus, addAp
 import { fetchRoles } from '../../store/slices/roleSlice'
 import { FiPlus, FiTrash2, FiEdit2, FiCheck, FiX } from 'react-icons/fi'
 import LoadingSpinner from '../../components/LoadingSpinner'
-import toast from 'react-hot-toast'
+import { toast } from 'react-toastify'
 
 const ApprovalFlowConfig = () => {
   const dispatch = useDispatch()

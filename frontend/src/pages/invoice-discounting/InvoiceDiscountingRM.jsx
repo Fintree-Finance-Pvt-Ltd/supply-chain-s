@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'react-toastify';
 import { workflowService } from '../../services/workflowService';
 import LoadingSpinner from '../../components/LoadingSpinner';
 import StatusBadge from '../../components/StatusBadge';
@@ -137,11 +138,11 @@ export default function InvoiceDiscountingRM() {
 
   const handleSave = async () => {
     if (!selectedCustomer || !selectedLAN || !selectedSupplier) {
-      alert('Please select Customer, LAN, and Supplier');
+      toast.info('Please select Customer, LAN, and Supplier');
       return;
     }
     if (!formData.invoiceNumber || !formData.invoiceDate || !formData.invoiceAmount || !formData.disbursementAmount) {
-      alert('Please fill all invoice details');
+      toast.info('Please fill all invoice details');
       return;
     }
 
@@ -157,12 +158,12 @@ export default function InvoiceDiscountingRM() {
       const invoiceData = response?.data?.data || response?.data;
       const invoiceId = invoiceData?.invoice?.id;
       setSavedInvoiceId(invoiceId);
-      alert('Invoice saved successfully');
+      toast.success('Invoice saved successfully');
       // Refresh the invoice list
       loadInvoices();
     } catch (error) {
       console.error('Error saving invoice:', error);
-      alert('Error saving invoice');
+      toast.error('Error saving invoice');
     } finally {
       setLoading(false);
     }
@@ -172,11 +173,11 @@ export default function InvoiceDiscountingRM() {
     // First create the invoice if not saved yet
     if (!savedInvoiceId) {
       if (!selectedCustomer || !selectedLAN || !selectedSupplier) {
-        alert('Please select Customer, LAN, and Supplier');
+        toast.info('Please select Customer, LAN, and Supplier');
         return;
       }
       if (!formData.invoiceNumber || !formData.invoiceDate || !formData.invoiceAmount || !formData.disbursementAmount) {
-        alert('Please fill all invoice details');
+        toast.info('Please fill all invoice details');
         return;
       }
 
@@ -197,7 +198,7 @@ export default function InvoiceDiscountingRM() {
         
         // Now submit it
         await workflowService.submitInvoice(invoiceId, {});
-        alert('Invoice submitted successfully - Pending Customer Approval');
+        toast.success('Invoice submitted successfully - Pending Customer Approval');
         setFormData({
           invoiceNumber: '',
           invoiceDate: '',
@@ -212,7 +213,7 @@ export default function InvoiceDiscountingRM() {
         loadInvoices();
       } catch (error) {
         console.error('Error submitting invoice:', error);
-        alert('Error submitting invoice');
+        toast.error('Error submitting invoice');
       } finally {
         setLoading(false);
       }
@@ -221,7 +222,7 @@ export default function InvoiceDiscountingRM() {
       try {
         setLoading(true);
         await workflowService.submitInvoice(savedInvoiceId, {});
-        alert('Invoice submitted successfully - Pending Customer Approval');
+        toast.success('Invoice submitted successfully - Pending Customer Approval');
         setFormData({
           invoiceNumber: '',
           invoiceDate: '',
@@ -236,7 +237,7 @@ export default function InvoiceDiscountingRM() {
         loadInvoices();
       } catch (error) {
         console.error('Error submitting invoice:', error);
-        alert('Error submitting invoice');
+        toast.error('Error submitting invoice');
       } finally {
         setLoading(false);
       }
@@ -267,13 +268,13 @@ export default function InvoiceDiscountingRM() {
       const baseUrl =import.meta.env.VITE_API_BASE_URL|| 'https://supplychain-prod.fintreelms.com/api';
       const response = await workflowService.sendCustomerApprovalEmail(invoiceId, baseUrl);
       if (response?.data?.success) {
-        alert('Approval email sent successfully to customer');
+        toast.success('Approval email sent successfully to customer');
       } else {
-        alert(response?.data?.message || 'Failed to send approval email');
+        toast.error(response?.data?.message || 'Failed to send approval email');
       }
     } catch (error) {
       console.error('Error sending approval email:', error);
-      alert('Error sending approval email');
+      toast.error('Error sending approval email');
     } finally {
       setLoading(false);
     }

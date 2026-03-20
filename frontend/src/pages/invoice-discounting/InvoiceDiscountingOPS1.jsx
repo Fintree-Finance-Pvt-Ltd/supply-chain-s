@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'react-toastify';
 import { workflowService } from '../../services/workflowService';
 import LoadingSpinner from '../../components/LoadingSpinner';
 import StatusBadge from '../../components/StatusBadge';
@@ -77,17 +78,17 @@ export default function InvoiceDiscountingOPS1() {
       setLoading(true);
       if (actionType === 'approve') {
         await workflowService.opsL1Approve(selectedInvoice.id, remarks);
-        alert('Invoice approved successfully');
+        toast.success('Invoice approved successfully');
       } else {
         await workflowService.opsL1Reject(selectedInvoice.id, remarks);
-        alert('Invoice rejected');
+        toast.success('Invoice rejected');
       }
       setShowModal(false);
       setRemarks('');
       loadData();
     } catch (error) {
       console.error('Error processing invoice:', error);
-      alert('Error processing invoice');
+      toast.error('Error processing invoice');
     } finally {
       setLoading(false);
     }
@@ -95,7 +96,7 @@ export default function InvoiceDiscountingOPS1() {
 
   const submitDisbursement = async () => {
     if (!disbursementData.disbursementUtr || !disbursementData.disbursementDate) {
-      alert('Please fill all disbursement details');
+      toast.info('Please fill all disbursement details');
       return;
     }
 
@@ -105,12 +106,12 @@ export default function InvoiceDiscountingOPS1() {
         ...disbursementData,
         loanAccountId: selectedInvoice.loanAccountId,
       });
-      alert('Disbursement data saved successfully');
+      toast.success('Disbursement data saved successfully');
       setShowDisbursementModal(false);
       loadData();
     } catch (error) {
       console.error('Error saving disbursement:', error);
-      alert('Error saving disbursement data');
+      toast.error('Error saving disbursement data');
     } finally {
       setLoading(false);
     }

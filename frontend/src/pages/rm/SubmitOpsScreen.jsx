@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { toast } from 'react-toastify'
 import { workflowService } from '../../services/workflowService'
 import { customerService } from '../../services/customerService'
 import LoadingSpinner from '../../components/LoadingSpinner'
@@ -32,10 +33,10 @@ const SubmitOpsScreen = () => {
         setIsSubmitting(true)
         try {
             await workflowService.submitToOperations(id, remarks)
-            alert('Case submitted to Operations Team L1 successfully')
+            toast.success('Case submitted to Operations Team L1 successfully')
             navigate('/rm/dashboard')
         } catch (error) {
-            alert('Failed to submit: ' + (error.response?.data?.message || error.message))
+            toast.error('Failed to submit: ' + (error.response?.data?.message || error.message))
         } finally {
             setIsSubmitting(false)
         }

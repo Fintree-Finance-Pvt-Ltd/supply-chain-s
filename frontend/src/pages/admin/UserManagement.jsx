@@ -5,7 +5,7 @@ import { fetchRoles as fetchRolesFromRoleSlice } from '../../store/slices/roleSl
 import DataTable from '../../components/DataTable'
 import LoadingSpinner from '../../components/LoadingSpinner'
 import { FiPlus, FiEdit2, FiTrash2, FiCheck, FiX } from 'react-icons/fi'
-import toast from 'react-hot-toast'
+import { toast } from 'react-toastify'
 
 const UserManagement = () => {
   const dispatch = useDispatch()

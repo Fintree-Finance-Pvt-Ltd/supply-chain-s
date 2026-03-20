@@ -3,8 +3,9 @@ import { Routes, Route, Navigate } from 'react-router-dom'
 import { useDispatch } from 'react-redux'
 import { checkAuth } from './store/slices/authSlice'
 import ProtectedRoute from './components/ProtectedRoute'
-import { Toaster } from 'react-hot-toast'
+import { ToastContainer } from 'react-toastify'
 import { ROLES } from './constants/roles'
+import 'react-toastify/dist/ReactToastify.css'
 
 // Layouts
 import MainLayout from './layouts/MainLayout'
@@ -60,7 +61,16 @@ function App() {
 
   return (
     <>
-      <Toaster position="top-right" />
+      <ToastContainer
+        position="top-right"
+        autoClose={3000}
+        hideProgressBar={false}
+        newestOnTop={true}
+        closeOnClick={true}
+        pauseOnHover={true}
+        draggable={true}
+        theme="colored"
+      />
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/unauthorized" element={<Unauthorized />} />

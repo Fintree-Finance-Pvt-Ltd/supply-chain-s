@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useDispatch, useSelector } from 'react-redux'
+import { toast } from 'react-toastify'
 import { fetchCaseById, clearCurrentCase, clearError } from '../../store/slices/caseSlice'
 import { creditService } from '../../services/creditService'
 import { partnerService } from '../../services/partnerService'
@@ -421,20 +422,20 @@ const CreditCaseDetail = () => {
   const handleUpload = async (file, type) => {
     try {
       await documentService.uploadDocument(id, file, type)
-      alert('Document uploaded successfully')
+      toast.success('Document uploaded successfully')
       dispatch(fetchCaseById(id))
     } catch (error) {
-      alert('Upload failed: ' + (error.response?.data?.message || error.message))
+      toast.error('Upload failed: ' + (error.response?.data?.message || error.message))
     }
   }
 
   const handleUpdateDocType = async (docId, newType) => {
     try {
       await documentService.updateDocumentMetadata(docId, { documentType: newType })
-      alert('Document type updated')
+      toast.success('Document type updated')
       dispatch(fetchCaseById(id))
     } catch (error) {
-      alert('Update failed: ' + (error.response?.data?.message || error.message))
+      toast.error('Update failed: ' + (error.response?.data?.message || error.message))
     }
   }
 
@@ -442,10 +443,10 @@ const CreditCaseDetail = () => {
     const remark = docRemarks[docId] || ''
     try {
       await workflowService.verifyDocument(docId, status, remark)
-      alert('Document status updated')
+      toast.success('Document status updated')
       dispatch(fetchCaseById(id))
     } catch (error) {
-      alert('Verification failed: ' + (error.response?.data?.message || error.message))
+      toast.error('Verification failed: ' + (error.response?.data?.message || error.message))
     }
   }
 
@@ -489,10 +490,10 @@ const CreditCaseDetail = () => {
         throw new Error('Unauthorized role for this action')
       }
 
-      alert('Approval processed successfully')
+      toast.success('Approval processed successfully')
       navigate('/credit/dashboard')
     } catch (error) {
-      alert('Failed: ' + (error.response?.data?.message || error.message || error))
+      toast.error('Failed: ' + (error.response?.data?.message || error.message || error))
     } finally {
       setIsSubmitting(false)
     }

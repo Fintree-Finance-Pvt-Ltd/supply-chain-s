@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { toast } from 'react-toastify';
 import { workflowService } from '../../services/workflowService';
 import LoadingSpinner from '../../components/LoadingSpinner';
 import StatusBadge from '../../components/StatusBadge';
@@ -40,17 +41,17 @@ export default function InvoiceDiscountingMD() {
       setLoading(true);
       if (actionType === 'approve') {
         await workflowService.mdApprove(selectedInvoice.id, remarks);
-        alert('Invoice approved successfully');
+        toast.success('Invoice approved successfully');
       } else {
         await workflowService.mdReject(selectedInvoice.id, remarks);
-        alert('Invoice rejected');
+        toast.success('Invoice rejected');
       }
       setShowModal(false);
       setRemarks('');
       loadData();
     } catch (error) {
       console.error('Error processing invoice:', error);
-      alert('Error processing invoice');
+      toast.error('Error processing invoice');
     } finally {
       setLoading(false);
     }

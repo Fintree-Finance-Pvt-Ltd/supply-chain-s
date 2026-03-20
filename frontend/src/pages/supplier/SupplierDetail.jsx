@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import toast from 'react-hot-toast'
+import { toast } from 'react-toastify'
 import { supplierService } from '../../services/supplierService'
 import { useSelector } from 'react-redux'
 import { ROLES } from '../../constants/roles'
@@ -93,7 +93,7 @@ const SupplierDetail = () => {
         
         // Show warning if image quality was low
         if (responseData.warning) {
-          toast.warning(responseData.warning)
+          toast.warn(responseData.warning)
         } else {
           toast.success('Cheque uploaded! Please verify and edit bank details if needed.')
         }

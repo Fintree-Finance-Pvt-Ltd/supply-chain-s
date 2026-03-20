@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { toast } from "react-toastify";
 import kycService from "../services/kycService";
 
 export function useVerificationStatusesState() {
@@ -58,7 +59,7 @@ export default function useOtpFlow({
 
   const handleOtpVerify = async () => {
   if (!otpValue || otpValue.length < 4) {
-    alert("Enter valid OTP");
+    toast.info("Enter valid OTP");
     return;
   }
 
@@ -112,7 +113,7 @@ export default function useOtpFlow({
     if (otpData.type === "email") {
 
       if (!customerId) {
-        alert("Verify company mobile first.");
+        toast.info("Verify company mobile first.");
         return;
       }
 
@@ -134,12 +135,12 @@ export default function useOtpFlow({
     await loadVerificationStatuses(customerId);
   }
   closeOtpModal();
-  alert("OTP verified successfully");
+  toast.success("OTP verified successfully");
 }
 
 
   } catch (e) {
-    alert(
+    toast.error(
       "OTP verification failed: " +
         (e?.response?.data?.message || e.message)
     );

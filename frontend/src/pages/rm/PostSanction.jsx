@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useDispatch, useSelector } from 'react-redux'
+import { toast } from 'react-toastify'
 import { fetchCaseById, updateCase } from '../../store/slices/caseSlice'
 import { documentService } from '../../services/documentService'
 import { operationsService } from '../../services/operationsService'
@@ -85,7 +86,7 @@ const PostSanction = () => {
     try {
       const customerId = currentCase?.id || id
       if (!customerId) {
-        alert('Customer ID not found')
+        toast.error('Customer ID not found')
         return
       }
 
@@ -94,7 +95,7 @@ const PostSanction = () => {
         setDocuments([...documents, result.data])
       }
     } catch (error) {
-      alert('Failed to upload document: ' + error.message)
+      toast.error('Failed to upload document: ' + error.message)
     }
   }
 
@@ -103,18 +104,18 @@ const PostSanction = () => {
       await documentService.deleteDocument(docId)
       setDocuments(documents.filter(doc => doc.id !== docId))
     } catch (error) {
-      alert('Failed to delete document: ' + error.message)
+      toast.error('Failed to delete document: ' + error.message)
     }
   }
 
   const handleESign = () => {
     // Placeholder for eSign integration
-    alert('eSign integration will be implemented here')
+    toast.info('eSign integration will be implemented here')
   }
 
   const handleENACH = () => {
     // Placeholder for eNACH integration
-    alert('eNACH integration will be implemented here')
+    toast.info('eNACH integration will be implemented here')
   }
 
   const handleEditSanction = () => {
@@ -147,7 +148,7 @@ const PostSanction = () => {
         conditions: editedSanction.conditions,
       })
       
-      alert('Sanction details updated and submitted to MD successfully')
+      toast.success('Sanction details updated and submitted to MD successfully')
       setIsEditingSanction(false)
       // Refresh sanctions data
       const response = await api.get(`/sanctions/customer/${id}`)
@@ -155,7 +156,7 @@ const PostSanction = () => {
         setSanctions(response.data)
       }
     } catch (error) {
-      alert('Failed to submit: ' + (error.message || error))
+      toast.error('Failed to submit: ' + (error.message || error))
     } finally {
       setIsSubmitting(false)
     }
@@ -172,10 +173,10 @@ const PostSanction = () => {
         remarks: 'Post-sanction activities completed by RM',
       })
 
-      alert('Case submitted to Operations Team successfully')
+      toast.success('Case submitted to Operations Team successfully')
       navigate('/rm/dashboard')
     } catch (error) {
-      alert('Failed to submit: ' + (error.message || error))
+      toast.error('Failed to submit: ' + (error.message || error))
     } finally {
       setIsSubmitting(false)
     }

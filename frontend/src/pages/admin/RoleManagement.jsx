@@ -3,7 +3,7 @@ import { useDispatch, useSelector } from 'react-redux'
 import { fetchRoles, createRole, updateRole, deleteRole, toggleRoleStatus, assignPermission, removePermission } from '../../store/slices/roleSlice'
 import { FiPlus, FiEdit2, FiTrash2, FiCheck, FiX } from 'react-icons/fi'
 import LoadingSpinner from '../../components/LoadingSpinner'
-import toast from 'react-hot-toast'
+import { toast } from 'react-toastify'
 
 const RoleManagement = () => {
   const dispatch = useDispatch()

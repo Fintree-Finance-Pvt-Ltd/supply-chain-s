@@ -1,6 +1,7 @@
 import { useEffect, useMemo } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { toast } from "react-toastify";
 
 import { fetchCaseById, createCase, updateCase, submitCase } from "../../../store/slices/caseSlice";
 import kycService from "../../../services/kycService";
@@ -445,12 +446,12 @@ const OnboardingContainer = () => {
     const isAadhaar = field === "applicantAadhaar" || field === "coApplicantAadhaar";
     
     if (!value && !isAadhaar) {
-      alert(`Please enter value for ${field}`);
+      toast.info(`Please enter value for ${field}`);
       return;
     }
 
     if (!customerId && field !== "companyMobile") {
-      alert("Verify company mobile first (customer must exist)");
+      toast.info("Verify company mobile first (customer must exist)");
       return;
     }
 
@@ -492,7 +493,7 @@ const OnboardingContainer = () => {
         field === "coApplicantMobile"
       ) {
         if (!validateMobile(value)) {
-          alert("Enter valid mobile");
+          toast.info("Enter valid mobile");
           return;
         }
 
@@ -543,7 +544,7 @@ const OnboardingContainer = () => {
         field === "coApplicantEmail"
       ) {
         if (!validateEmail(value)) {
-          alert("Enter valid email");
+          toast.info("Enter valid email");
           return;
         }
 
@@ -615,7 +616,7 @@ const OnboardingContainer = () => {
           await loadVerificationStatuses(customerId);
 
           if (!res?.success || !res?.data?.verified) {
-            alert("PAN verification failed");
+            toast.error("PAN verification failed");
           }
         } finally {
           setLoading(loadingKey, false);
@@ -639,7 +640,7 @@ const OnboardingContainer = () => {
           });
 
           if (!res?.success) {
-            alert("GST verification failed");
+            toast.error("GST verification failed");
           }
 
           await loadVerificationStatuses(customerId);
@@ -672,15 +673,15 @@ const OnboardingContainer = () => {
 
           if (res?.success) {
             // Trigger SMS via backend (third-party API call)
-            alert("Aadhaar KYC link sent to your mobile. Complete verification and click 'Refresh Status'.");
+            toast.success("Aadhaar KYC link sent to your mobile. Complete verification and click 'Refresh Status'.");
             
             // Load updated verification statuses
             await loadVerificationStatuses(customerId);
           } else {
-            alert("Failed to initiate Aadhaar verification: " + (res?.message || "Unknown error"));
+            toast.error("Failed to initiate Aadhaar verification: " + (res?.message || "Unknown error"));
           }
         } catch (err) {
-          alert("Aadhaar verification error: " + (err?.response?.data?.message || err.message));
+          toast.error("Aadhaar verification error: " + (err?.response?.data?.message || err.message));
         } finally {
           setLoading(loadingKey, false);
         }
@@ -689,7 +690,7 @@ const OnboardingContainer = () => {
       }
     } catch (e) {
       setLoading(`${field}_${coApplicantId || localKey || "main"}`, false);
-      alert(
+      toast.error(
         `${field} verification failed: ` +
         (e?.response?.data?.message || e.message)
       );
@@ -718,7 +719,7 @@ const OnboardingContainer = () => {
           console.error("Applicant PAN upload failed", uploadErr);
         }
       } else {
-        alert("Please verify mobile first (Customer ID required) to save the document.");
+        toast.info("Please verify mobile first (Customer ID required) to save the document.");
       }
 
       const res = await kycService.runOcr(file, "PAN");
@@ -729,10 +730,10 @@ const OnboardingContainer = () => {
           applicantName: res.data?.name || p.applicantName,
         }));
         setApplicantKyc((p) => ({ ...p, panFile: file, panNumber: res.data?.pan || p.panNumber }));
-        alert("OCR done");
+        toast.success("OCR done");
       }
     } catch (e) {
-      alert("OCR failed: " + (e?.response?.data?.message || e.message));
+      toast.error("OCR failed: " + (e?.response?.data?.message || e.message));
     }
   };
 
@@ -764,7 +765,7 @@ const OnboardingContainer = () => {
           console.error("Company PAN upload failed", uploadErr);
         }
       } else {
-        alert("Please verify mobile first (Customer ID required) to save the document.");
+        toast.info("Please verify mobile first (Customer ID required) to save the document.");
       }
 
       const res = await kycService.runOcr(file, "PAN");
@@ -775,10 +776,10 @@ const OnboardingContainer = () => {
           companyName: res.data?.name || p.companyName,
         }));
         setApplicantKyc((p) => ({ ...p, companyPanFile: file, companyPan: res.data?.pan || p.companyPan }));
-        alert("Company PAN OCR done");
+        toast.success("Company PAN OCR done");
       }
     } catch (e) {
-      alert("OCR failed: " + (e?.response?.data?.message || e.message));
+      toast.error("OCR failed: " + (e?.response?.data?.message || e.message));
     }
   };
 
@@ -802,12 +803,12 @@ const OnboardingContainer = () => {
       if (customerId) {
         try {
           await documentService.uploadDocument(customerId, file, "live_photo");
-          alert("Live photo uploaded");
+          toast.success("Live photo uploaded");
         } catch (e) {
-          alert("Live photo upload failed: " + (e?.response?.data?.message || e.message));
+          toast.error("Live photo upload failed: " + (e?.response?.data?.message || e.message));
         }
       } else {
-        alert("Verify company mobile first (customer must exist) before uploading documents.");
+        toast.info("Verify company mobile first (customer must exist) before uploading documents.");
       }
     }
 
@@ -867,7 +868,7 @@ const OnboardingContainer = () => {
     const uploadedTypes = new Set((documents || []).map((d) => d.documentType));
     const missing = mandatoryDocs.filter((d) => !uploadedTypes.has(d.documentType));
     if (missing.length) {
-      alert("Upload mandatory documents:\n" + missing.map((m) => m.label).join("\n"));
+      toast.info("Upload mandatory documents:\n" + missing.map((m) => m.label).join("\n"));
       return false;
     }
     return true;
@@ -990,14 +991,14 @@ const OnboardingContainer = () => {
 
     try {
       if (!customerId) {
-        alert("First verify company mobile OTP (it creates the customer).");
+        toast.info("First verify company mobile OTP (it creates the customer).");
         return;
       }
       await persistFullCustomer(customerId);
-      alert("Draft saved");
+      toast.success("Draft saved");
       navigate("/rm/dashboard");
     } catch (e) {
-      alert("Draft save failed: " + (e?.message || e));
+      toast.error("Draft save failed: " + (e?.message || e));
     }
   };
 
@@ -1006,7 +1007,7 @@ const OnboardingContainer = () => {
     const ok1 = validateBasicTab({ strict: true });
     if (!ok1) {
       setActiveTab("basic-kyc");
-      alert("Fix errors in Basic & KYC tab");
+      toast.info("Fix errors in Basic & KYC tab");
       return;
     }
 
@@ -1018,7 +1019,7 @@ const OnboardingContainer = () => {
 
     try {
       if (!customerId) {
-        alert("Customer not created. Verify company mobile first.");
+        toast.info("Customer not created. Verify company mobile first.");
         return;
       }
 
@@ -1030,10 +1031,10 @@ const OnboardingContainer = () => {
       }
 
       await dispatch(submitCase({ id: customerId, pushedTo: pushedToCsv })).unwrap();
-      alert("Case submitted");
+      toast.success("Case submitted");
       navigate("/rm/dashboard");
     } catch (e) {
-      alert("Submit failed: " + (e?.message || e));
+      toast.error("Submit failed: " + (e?.message || e));
     }
   };
 
