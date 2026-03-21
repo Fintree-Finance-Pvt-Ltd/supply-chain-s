@@ -9,8 +9,48 @@ import { LoanAccount, LENDER } from '../entities/LoanAccount';
 import { KycOwnerType } from '../entities/KycVerificationStatus';
 import { CoApplicant } from '../entities/CoApplicant';
 import { Partner } from '../entities/Partner';
+import { KycDetail } from '../entities/KycDetail';
+import { CustomerAddress } from '../entities/CustomerAddress';
 import { OnboardingIntegrationService } from './onboarding-integration.service';
 import { DEFAULT_PARTNER_CODES } from '../config/constants';
+import axios from 'axios';
+
+/**
+ * LMS Supply Chain API Payload interfaces
+ */
+interface LMSSupplyChainPayload {
+  partner_loan_id: string;
+  applicant: {
+    name: string;
+    pan: string;
+    aadhaar: string;
+    mobile: string;
+    address: string;
+  };
+  co_applicant?: {
+    name: string;
+    pan: string;
+    aadhaar: string;
+    mobile: string;
+    address: string;
+  };
+  company: {
+    name: string;
+    pan: string;
+    gst: string;
+    address: string;
+  };
+  sanctions: Array<{
+    lan: string;
+    lender: string;
+    sanction_amount: number;
+    tenure_months: number;
+    interest_rate: number;
+    penal_rate: number;
+    processing_fee: number;
+  }>;
+}
+
 
 export class CustomerOnboardingService {
   private customerRepository = AppDataSource.getRepository(Customer);
@@ -21,6 +61,8 @@ export class CustomerOnboardingService {
   private loanAccountRepository = AppDataSource.getRepository(LoanAccount);
   private coApplicantRepository = AppDataSource.getRepository(CoApplicant);
   private partnerRepository = AppDataSource.getRepository(Partner);
+  private kycDetailRepository = AppDataSource.getRepository(KycDetail);
+  private customerAddressRepository = AppDataSource.getRepository(CustomerAddress);
 
   // LAN ID sequence - now uses dynamic Partner table
 
@@ -1256,36 +1298,140 @@ async mdApprove(
     return workflow;
   }
 
-  async opsHeadApprove(customerId: number, userId: number, remarks: string) {
-    const workflow = await this.getOrCreateWorkflow(customerId);
-    if (workflow.currentStatus.toLowerCase() !== 'ops_l1_approved') throw new Error('Cannot approve: Pending at Operations Head');
+  // async opsHeadApprove(customerId: number, userId: number, remarks: string) {
+  //   const workflow = await this.getOrCreateWorkflow(customerId);
+  //   // if (workflow.currentStatus.toLowerCase() !== 'ops_l1_approved') throw new Error('Cannot approve: Pending at Operations Head');
 
-    const previousStatus = workflow.currentStatus;
-    workflow.currentStatus = 'completed';
-    workflow.currentApproverRoleName = 'None';
-    workflow.isCompleted = true;
-    workflow.completedDate = new Date();
-    workflow.remarks = remarks;
-    await this.workflowRepository.save(workflow);
+  //   const previousStatus = workflow.currentStatus;
+  //   workflow.currentStatus = 'completed';
+  //   workflow.currentApproverRoleName = 'None';
+  //   workflow.isCompleted = true;
+  //   workflow.completedDate = new Date();
+  //   workflow.remarks = remarks;
+  //   await this.workflowRepository.save(workflow);
 
-    // Update customer status to COMPLETED
-    const customer = await this.customerRepository.findOne({ where: { id: customerId } });
-    if (customer) {
-      customer.status = 'completed';
-      await this.customerRepository.save(customer);
+  //   // Update customer status to COMPLETED
+  //   const customer = await this.customerRepository.findOne({ where: { id: customerId } });
+  //   if (customer) {
+  //     customer.status = 'completed';
+  //     await this.customerRepository.save(customer);
+  //   }
+
+  //   await this.logHistory({
+  //     customerId,
+  //     caseWorkflowId: workflow.id,
+  //     status: 'completed',
+  //     previousStatus,
+  //     changedBy: userId,
+  //     remarks,
+  //   });
+
+  //   // Send customer data to LMS after successful onboarding
+  //   // This is a non-blocking call - we don't want to break the LOS flow if LMS fails
+  //   console.log(`[LMS Supply Chain] Triggering LMS integration for customer ${customerId} after successful onboarding`);
+    
+  //   try {
+  //     const lmsResult = await this.sendCustomerToLMS(customerId);
+  //     if (lmsResult.success) {
+  //       console.log(`[LMS Supply Chain] Successfully sent customer ${customerId} to LMS: ${lmsResult.message}`);
+  //     } else {
+  //       console.warn(`[LMS Supply Chain] Failed to send customer ${customerId} to LMS: ${lmsResult.message}`);
+  //       // Don't throw - LOS flow should not be affected by LMS failure
+  //     }
+  //   } catch (lmsError: any) {
+  //     // Log error but don't break the flow
+  //     console.error(`[LMS Supply Chain] Error during LMS integration for customer ${customerId}:`, lmsError.message);
+  //     // Don't throw - LOS flow should not be affected by LMS failure
+  //   }
+
+  //   return workflow;
+  // }
+
+  async opsHeadApprove(
+  customerId: number,
+  userId: number,
+  remarks: string
+) {
+
+  const workflow = await this.getOrCreateWorkflow(customerId);
+
+  const previousStatus = workflow.currentStatus;
+
+
+  console.log(
+    `[LMS Supply Chain] Triggering LMS integration for customer ${customerId}`
+  );
+
+
+  // 🚨 BLOCK WORKFLOW UNTIL LMS SUCCESS
+  let lmsResult;
+
+  try {
+
+    lmsResult = await this.sendCustomerToLMS(customerId);
+
+    if (!lmsResult.success) {
+
+      throw new Error(
+        lmsResult.message || "Customer sync failed with LMS"
+      );
+
     }
 
-    await this.logHistory({
-      customerId,
-      caseWorkflowId: workflow.id,
-      status: 'completed',
-      previousStatus,
-      changedBy: userId,
-      remarks,
-    });
+    console.log(
+      `[LMS Supply Chain] Successfully sent customer ${customerId} to LMS`
+    );
 
-    return workflow;
+  } catch (lmsError: any) {
+
+    console.error(
+      `[LMS Supply Chain] LMS integration failed for customer ${customerId}:`,
+      lmsError.message
+    );
+
+    // 🚫 STOP APPROVAL FLOW HERE
+    throw new Error(
+      `Ops Head approval blocked: LMS sync failed → ${lmsError.message}`
+    );
+
   }
+
+
+  // ✅ ONLY RUNS IF LMS SUCCESS
+  workflow.currentStatus = "completed";
+  workflow.currentApproverRoleName = "None";
+  workflow.isCompleted = true;
+  workflow.completedDate = new Date();
+  workflow.remarks = remarks;
+
+  await this.workflowRepository.save(workflow);
+
+
+  const customer = await this.customerRepository.findOne({
+    where: { id: customerId },
+  });
+
+  if (customer) {
+
+    customer.status = "completed";
+
+    await this.customerRepository.save(customer);
+
+  }
+
+
+  await this.logHistory({
+    customerId,
+    caseWorkflowId: workflow.id,
+    status: "completed",
+    previousStatus,
+    changedBy: userId,
+    remarks,
+  });
+
+
+  return workflow;
+}
 
   async getRMDashboard(rmId: number) {
     const customers = await this.customerRepository.find({
@@ -1430,4 +1576,198 @@ async mdApprove(
 
     return await this.customerRepository.save(customer);
   }
+
+  /**
+   * Send customer data to LMS after successful onboarding
+   * This is called after opsHeadApprove completes the onboarding process
+   * Does NOT break LOS flow if LMS call fails - just logs the error
+   */
+  async sendCustomerToLMS(customerId: number): Promise<{
+    success: boolean;
+    message: string;
+    response?: any;
+  }> {
+    console.log(`[LMS Supply Chain] Starting LMS integration for customer ${customerId}`);
+
+    try {
+      // Fetch customer with all related data
+      const customer = await this.customerRepository.findOne({
+        where: { id: customerId },
+      });
+
+      if (!customer) {
+        console.error(`[LMS Supply Chain] Customer not found: ${customerId}`);
+        return { success: false, message: 'Customer not found' };
+      }
+
+      console.log(`[LMS Supply Chain] Customer found: ${customer.name}, Status: ${customer.status}`);
+
+      // Get applicant KYC details (PAN, Aadhaar)
+      const applicantKycDetails = await this.kycDetailRepository.find({
+        where: { customerId, applicantType: 'applicant' },
+      });
+
+      const applicantPan = applicantKycDetails.find(k => k.kycType === 'PAN')?.kycNumber || '';
+      const applicantAadhaar = applicantKycDetails.find(k => k.kycType === 'AADHAAR')?.kycNumber || '';
+
+      // Get applicant address
+      const applicantAddress = await this.customerAddressRepository.findOne({
+        where: { customerId, type: 'Residence' as any },
+      });
+      const applicantAddressStr = applicantAddress 
+        ? `${applicantAddress.fullAddress}, ${applicantAddress.city}, ${applicantAddress.state} - ${applicantAddress.pincode}`
+        : '';
+
+      // Get co-applicant if exists
+      const coApplicant = await this.coApplicantRepository.findOne({
+        where: { customerId },
+      });
+
+      let coApplicantData: LMSSupplyChainPayload['co_applicant'] | undefined;
+      if (coApplicant) {
+        const coApplicantKycDetails = await this.kycDetailRepository.find({
+          where: { coApplicantId: coApplicant.id },
+        });
+
+        const coApplicantPan = coApplicantKycDetails.find(k => k.kycType === 'PAN')?.kycNumber || '';
+        const coApplicantAadhaar = coApplicantKycDetails.find(k => k.kycType === 'AADHAAR')?.kycNumber || '';
+
+        coApplicantData = {
+          name: coApplicant.name || '',
+          pan: coApplicantPan,
+          aadhaar: coApplicantAadhaar,
+          mobile: coApplicant.mobile || '',
+          address: '', // Co-applicant address not available in current schema
+        };
+      }
+
+      // Get company address
+      const companyAddress = await this.customerAddressRepository.findOne({
+        where: { customerId, type: 'Shop' as any },
+      });
+      const companyAddressStr = companyAddress
+        ? `${companyAddress.fullAddress}, ${companyAddress.city}, ${companyAddress.state} - ${companyAddress.pincode}`
+        : applicantAddressStr;
+
+      // Get loan accounts (LANs) for this customer - these represent the sanctions
+      const loanAccounts = await this.loanAccountRepository.find({
+        where: { customerId, status: 'active' },
+        relations: ['partner'],
+      });
+
+      console.log(`[LMS Supply Chain] Found ${loanAccounts.length} loan accounts for customer ${customerId}`);
+
+      if (loanAccounts.length === 0) {
+        console.warn(`[LMS Supply Chain] No active loan accounts found for customer ${customerId}`);
+        return { success: false, message: 'No active loan accounts found' };
+      }
+
+      // Get sanctions for all loan accounts
+      const sanctions = await Promise.all(
+        loanAccounts.map(async (loanAccount) => {
+          // Get the credit sanction for this loan account
+          const creditSanction = await this.sanctionRepository.findOne({
+            where: { 
+              customerId, 
+              partner: loanAccount.lender,
+              status: 'approved'
+            },
+            order: { createdAt: 'DESC' },
+          });
+
+          return {
+            lan: loanAccount.lanId,
+            lender: loanAccount.partner?.code || '',
+            sanction_amount: Number(loanAccount.sanctionedAmount),
+            tenure_months: creditSanction?.tenure || 0,
+            interest_rate: Number(creditSanction?.interestRate || 0),
+            penal_rate: Number(creditSanction?.penalCharges || 0),
+            processing_fee: Number(creditSanction?.processingFees || 0),
+          };
+        })
+      );
+
+      console.log(`[LMS Supply Chain] Prepared ${sanctions.length} sanctions for customer ${customerId}`);
+
+      // Build the LMS payload
+      const payload: LMSSupplyChainPayload = {
+        partner_loan_id: String(customerId),
+        applicant: {
+          name: customer.name || '',
+          pan: applicantPan ?? customer.pan,
+          aadhaar: applicantAadhaar ?? "9968xxxxxx",
+          mobile: customer.mobile || '',
+          address: applicantAddressStr,
+        },
+        co_applicant: coApplicantData,
+        company: {
+          name: customer.companyName || customer.companyName || '',
+          pan: customer.companyPan || '',
+          gst: customer.gstNumber || '',
+          address: companyAddressStr,
+        },
+        sanctions: sanctions,
+      };
+
+      console.log(`[LMS Supply Chain] Payload prepared for customer ${customerId}:`, JSON.stringify(payload, null, 2));
+
+      // Send to LMS API
+       const baseUrl = process.env.LMS_API_BASE_URL;
+    const apiKey = process.env.LMS_API_KEY;
+
+    if (!baseUrl || !apiKey) {
+      console.warn(`[LMS Supply Chain] LMS API configuration missing. Set LMS_API_BASE_URL and LMS_API_KEY in environment.`);
+      throw new Error('LMS API configuration missing. Set LMS_API_BASE_URL and LMS_API_KEY in environment.');
+    }
+
+    console.log(`[LMS Supply Chain] Calling LMS API at: ${baseUrl}v1/supply-chain`);
+   let response;
+    try {
+       response = await axios.post<any>(
+        `${baseUrl}loan-booking/v1/supply-chain`,
+        payload,
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': apiKey,
+          },
+          timeout: 30000, // 30 second timeout
+        }
+      );
+
+      console.log(`[LMS Supply Chain] LMS API response status: ${response.status}`);
+    } catch (error: any) {
+      if (error.response) {
+        throw new Error(`LMS API Error: ${error.response.status} - ${JSON.stringify(error.response.data)}`);
+      } else if (error.request) {
+        throw new Error('LMS API unreachable - no response received');
+      } else {
+        throw new Error(`Failed to send to LMS: ${error.message}`);
+      }
+    }
+
+      console.log(`[LMS Supply Chain] LMS response for customer ${customerId}:`, JSON.stringify(response.data));
+
+      return {
+        success: response.data?.success ?? true,
+        message: response.data?.message || 'Customer sent to LMS successfully',
+        response,
+      };
+    } catch (error: any) {
+      // Log error but don't throw - we don't want to break the LOS flow
+      console.error(`[LMS Supply Chain] Error sending customer ${customerId} to LMS:`, error.message);
+      
+      if (error.response) {
+        console.error(`[LMS Supply Chain] LMS API error response:`, JSON.stringify(error.response.data));
+      } else if (error.request) {
+        console.error(`[LMS Supply Chain] LMS API unreachable - no response received`);
+      }
+
+      return {
+        success: false,
+        message: error.message || 'Failed to send to LMS',
+      };
+    }
+  }
+
 }
