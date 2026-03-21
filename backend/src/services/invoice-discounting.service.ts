@@ -968,9 +968,9 @@ export class InvoiceDiscountingService {
     if (invoice.status !== "DISBURSEMENT_DATA_ENTRY") {
       throw new Error("Invoice is not in disbursement data entry stage");
     }
-
-    // Validate disbursement amount doesn't exceed invoice amount
-    if (invoice.disbursementAmount! > invoice.invoiceAmount) {
+    //console.log(invoice.disbursementAmount, invoice.invoiceAmount);
+    // Validate disbursement amount doesn't exceed invoice amount (compare as numbers)
+    if (Number(invoice.disbursementAmount) > Number(invoice.invoiceAmount)) {
       throw new Error("Disbursement amount cannot exceed invoice amount");
     }
 
@@ -1021,67 +1021,177 @@ export class InvoiceDiscountingService {
     });
   }
 
+  // async opsL2FinalVerification(
+  //   invoiceId: number,
+  //   userId: number,
+  //   action: "approve" | "reject",
+  //   remarks?: string,
+  // ) {
+  //   const invoice = await this.invoiceRepository.findOne({
+  //     where: { id: invoiceId },
+  //     relations: ["customer", "supplier"],
+  //   });
+  //   if (!invoice) throw new Error("Invoice not found");
+  //   if (invoice.status !== "PENDING_FINAL_OPS_L2_APPROVAL") {
+  //     throw new Error("Invoice is not pending final OPS L2 approval");
+  //   }
+
+  //   const previousStatus = invoice.status;
+  //   let lmsResult: { success: boolean; lmsResponse?: any; error?: string } | null = null;
+    
+  //   if (action === "approve") {
+  //     invoice.status = "ACTIVE";
+  //     if (invoice.loanAccountId) {
+  //       const loanAccount = await this.loanAccountRepository.findOne({
+  //         where: { id: invoice.loanAccountId },
+  //       });
+  //       if (loanAccount) {
+  //         loanAccount.disbursedAmount =
+  //           (loanAccount.disbursedAmount || 0) + invoice.disbursementAmount!;
+  //         await this.loanAccountRepository.save(loanAccount);
+  //       }
+  //     }
+      
+  //     // Automatically send to LMS after successful disbursement
+  //     try {
+  //       console.log(`[Auto-LMS] Sending invoice ${invoiceId} to LMS after disbursement...`);
+  //       lmsResult = await this.sendSingleToLMS(invoiceId);
+  //       if (lmsResult.success) {
+  //         console.log(`[Auto-LMS] Invoice ${invoiceId} sent to LMS successfully`);
+  //       } else {
+  //         console.error(`[Auto-LMS] Failed to send invoice ${invoiceId} to LMS:`, lmsResult.error);
+  //       }
+  //     } catch (lmsError: any) {
+  //       console.error(`[Auto-LMS] Error sending invoice ${invoiceId} to LMS:`, lmsError.message);
+  //       lmsResult = { success: false, error: lmsError.message };
+  //     }
+  //   } else {
+  //     invoice.status = "REJECTED";
+  //   }
+  //   await this.invoiceRepository.save(invoice);
+
+  //   const workflow = await this.createOrGetWorkflow(invoiceId);
+  //   workflow.currentStatus = invoice.status;
+  //   workflow.currentApproverRoleName = this.getApproverForStatus(
+  //     invoice.status,
+  //   );
+  //   workflow.isCompleted = action === "approve";
+  //   if (action === "approve") {
+  //     workflow.completedDate = new Date();
+  //   }
+  //   if (action === "reject") {
+  //     workflow.isRejected = true;
+  //   }
+  //   workflow.remarks = remarks || "";
+  //   await this.workflowRepository.save(workflow);
+
+  //   await this.logHistory({
+  //     customerId: invoice.customerId,
+  //     supplierId: invoice.supplierId,
+  //     invoiceId: invoice.id,
+  //     caseWorkflowId: workflow.id,
+  //     status: invoice.status,
+  //     previousStatus,
+  //     changedBy: userId,
+  //     remarks: remarks || `OPS L2 final verification: ${action}d`,
+  //   });
+
+  //   return { invoice, workflow, lmsResult };
+  // }
+
   async opsL2FinalVerification(
-    invoiceId: number,
-    userId: number,
-    action: "approve" | "reject",
-    remarks?: string,
-  ) {
-    const invoice = await this.invoiceRepository.findOne({
-      where: { id: invoiceId },
-      relations: ["customer", "supplier"],
-    });
-    if (!invoice) throw new Error("Invoice not found");
-    if (invoice.status !== "PENDING_FINAL_OPS_L2_APPROVAL") {
-      throw new Error("Invoice is not pending final OPS L2 approval");
-    }
+  invoiceId: number,
+  userId: number,
+  action: "approve" | "reject",
+  remarks?: string,
+) {
+  const invoice = await this.invoiceRepository.findOne({
+    where: { id: invoiceId },
+    relations: ["customer", "supplier"],
+  });
 
-    const previousStatus = invoice.status;
-    if (action === "approve") {
-      invoice.status = "ACTIVE";
-      if (invoice.loanAccountId) {
-        const loanAccount = await this.loanAccountRepository.findOne({
-          where: { id: invoice.loanAccountId },
-        });
-        if (loanAccount) {
-          loanAccount.disbursedAmount =
-            (loanAccount.disbursedAmount || 0) + invoice.disbursementAmount!;
-          await this.loanAccountRepository.save(loanAccount);
-        }
-      }
-    } else {
-      invoice.status = "REJECTED";
-    }
-    await this.invoiceRepository.save(invoice);
+  if (!invoice) throw new Error("Invoice not found");
 
-    const workflow = await this.createOrGetWorkflow(invoiceId);
-    workflow.currentStatus = invoice.status;
-    workflow.currentApproverRoleName = this.getApproverForStatus(
-      invoice.status,
-    );
-    workflow.isCompleted = action === "approve";
-    if (action === "approve") {
-      workflow.completedDate = new Date();
-    }
-    if (action === "reject") {
-      workflow.isRejected = true;
-    }
-    workflow.remarks = remarks || "";
-    await this.workflowRepository.save(workflow);
-
-    await this.logHistory({
-      customerId: invoice.customerId,
-      supplierId: invoice.supplierId,
-      invoiceId: invoice.id,
-      caseWorkflowId: workflow.id,
-      status: invoice.status,
-      previousStatus,
-      changedBy: userId,
-      remarks: remarks || `OPS L2 final verification: ${action}d`,
-    });
-
-    return { invoice, workflow };
+  if (invoice.status !== "PENDING_FINAL_OPS_L2_APPROVAL") {
+    throw new Error("Invoice is not pending final OPS L2 approval");
   }
+
+  const previousStatus = invoice.status;
+  let lmsResult: { success: boolean; lmsResponse?: any; error?: string } | null = null;
+
+  if (action === "approve") {
+
+    // 🔴 FIRST send to LMS before making ANY DB updates
+    try {
+      console.log(`[Auto-LMS] Sending invoice ${invoiceId} to LMS after disbursement...`);
+
+      lmsResult = await this.sendSingleToLMS(invoiceId);
+
+      if (!lmsResult.success) {
+        throw new Error(lmsResult.error || "LMS send failed");
+      }
+
+      console.log(`[Auto-LMS] Invoice ${invoiceId} sent to LMS successfully`);
+    } catch (error: any) {
+      console.error(`[Auto-LMS] Error sending invoice ${invoiceId} to LMS:`, error.message);
+
+      // ⛔ STOP EXECUTION — nothing should change
+      throw new Error(`LMS sync failed. Approval halted. Reason: ${error.message}`);
+    }
+
+    // ✅ Only update AFTER LMS success
+    invoice.status = "ACTIVE";
+
+    if (invoice.loanAccountId) {
+      const loanAccount = await this.loanAccountRepository.findOne({
+        where: { id: invoice.loanAccountId },
+      });
+
+      if (loanAccount) {
+        loanAccount.disbursedAmount =
+          (loanAccount.disbursedAmount || 0) + invoice.disbursementAmount!;
+
+        await this.loanAccountRepository.save(loanAccount);
+      }
+    }
+
+  } else {
+    invoice.status = "REJECTED";
+  }
+
+  await this.invoiceRepository.save(invoice);
+
+  const workflow = await this.createOrGetWorkflow(invoiceId);
+
+  workflow.currentStatus = invoice.status;
+  workflow.currentApproverRoleName = this.getApproverForStatus(invoice.status);
+  workflow.isCompleted = action === "approve";
+
+  if (action === "approve") {
+    workflow.completedDate = new Date();
+  }
+
+  if (action === "reject") {
+    workflow.isRejected = true;
+  }
+
+  workflow.remarks = remarks || "";
+
+  await this.workflowRepository.save(workflow);
+
+  await this.logHistory({
+    customerId: invoice.customerId,
+    supplierId: invoice.supplierId,
+    invoiceId: invoice.id,
+    caseWorkflowId: workflow.id,
+    status: invoice.status,
+    previousStatus,
+    changedBy: userId,
+    remarks: remarks || `OPS L2 final verification: ${action}d`,
+  });
+
+  return { invoice, workflow, lmsResult };
+}
 
   // Dashboard and Retrieval Methods
   async getInvoiceById(invoiceId: number) {
@@ -1309,7 +1419,7 @@ export class InvoiceDiscountingService {
     errors: { field: string; message: string }[];
   }> {
     const errors: { field: string; message: string }[] = [];
-
+    console.log(invoice)
     // Check required fields
     if (!invoice.loanAccountId) {
       errors.push({ field: "loanAccountId", message: "Invoice is not linked to a Loan Account" });
@@ -1366,8 +1476,8 @@ export class InvoiceDiscountingService {
     // Tenure must be exactly 90 days
     const tenureDays = 90;
 
-    // Disbursement amount <= Invoice amount
-    if (invoice.disbursementAmount > invoice.invoiceAmount) {
+    // Disbursement amount <= Invoice amount (compare as numbers, not strings)
+    if (Number(invoice.disbursementAmount) > Number(invoice.invoiceAmount)) {
       errors.push({ 
         field: "disbursement_amount", 
         message: `Disbursement amount (${invoice.disbursementAmount}) cannot exceed invoice amount (${invoice.invoiceAmount})` 
@@ -1487,7 +1597,7 @@ export class InvoiceDiscountingService {
     try {
       // Transform invoice to LMS payload
       const transformResult = await this.transformInvoiceToLMSPayload(invoiceId);
-      
+      console.log("transformResult",transformResult)
       if (!transformResult.success || !transformResult.data) {
         return {
           success: false,
@@ -1521,7 +1631,7 @@ export class InvoiceDiscountingService {
     if (!baseUrl || !apiKey) {
       throw new Error('LMS API configuration missing. Set LMS_API_BASE_URL and LMS_API_KEY in environment.');
     }
-   console.log(payload)
+   console.log("payload",payload)
     try {
       const response = await axios.post<LMSResponse>(
         `${baseUrl}loan-booking/v1/invoice-disbursement/validate`,
