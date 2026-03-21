@@ -1485,23 +1485,17 @@ export class InvoiceDiscountingService {
     }
 
     // Get ROI from CreditSanction
-    const creditSanction = await this.creditSanctionRepository.findOne({
-      where: { 
-        customerId: invoice.customerId,
-        status: 'approved'
-      },
-      order: { createdAt: "DESC" as any },
-    });
+    // const creditSanction = await this.creditSanctionRepository.findOne({
+    //   where: { 
+    //     customerId: invoice.customerId,
+    //     status: 'approved'
+    //   },
+    //   order: { createdAt: "DESC" as any },
+    // });
 
-    let roiPercentage: number;
-    if (!creditSanction) {
-      roiPercentage = invoice.roiPercentage || 0;
-      if (!invoice.roiPercentage) {
-        errors.push({ field: "roi_percentage", message: "ROI percentage not found" });
-      }
-    } else {
-      roiPercentage = Number(creditSanction.interestRate);
-    }
+    
+    
+    const  roiPercentage = invoice.roiPercentage;
 
     if (errors.length > 0) {
       return { valid: false, errors };
@@ -1573,9 +1567,18 @@ export class InvoiceDiscountingService {
       // Send to LMS API
       const lmsResponse = await this.sendToLMSApi(transformResult.data);
 
+      // Check if there are failed invoices and extract error messages
+      const failedResults = lmsResponse.results?.filter(r => r.status === 'failed') || [];
+      const errorMessages = failedResults.map(r => `${r.invoice_number}: ${r.message}`).join('; ');
+
       return {
         success: lmsResponse.failed_count === 0,
         lmsResponse,
+        error: lmsResponse.failed_count > 0 ? errorMessages : undefined,
+        losValidationErrors: failedResults.map(r => ({
+          invoiceId: transformResult.data?.find(d => d.invoice_number === r.invoice_number)?.partner_loan_id ? parseInt(transformResult.data.find(d => d.invoice_number === r.invoice_number)?.partner_loan_id || '0') : 0,
+          error: r.message
+        }))
       };
     } catch (error: any) {
       return {
@@ -1609,9 +1612,18 @@ export class InvoiceDiscountingService {
       // Send to LMS API
       const lmsResponse = await this.sendToLMSApi([transformResult.data]);
 
+      // Check if there are failed invoices and extract error messages
+      const failedResults = lmsResponse.results?.filter(r => r.status === 'failed') || [];
+      const errorMessages = failedResults.map(r => `${r.invoice_number}: ${r.message}`).join('; ');
+
       return {
         success: lmsResponse.failed_count === 0,
         lmsResponse,
+        error: lmsResponse.failed_count > 0 ? errorMessages : undefined,
+        losValidationErrors: failedResults.map(r => ({
+          field: r.invoice_number,
+          message: r.message
+        }))
       };
     } catch (error: any) {
       return {
@@ -1631,6 +1643,8 @@ export class InvoiceDiscountingService {
     if (!baseUrl || !apiKey) {
       throw new Error('LMS API configuration missing. Set LMS_API_BASE_URL and LMS_API_KEY in environment.');
     }
+
+    console.log(baseUrl)
    console.log("payload",payload)
     try {
       const response = await axios.post<LMSResponse>(
@@ -1644,6 +1658,8 @@ export class InvoiceDiscountingService {
           timeout: 30000,
         }
       );
+
+      console.log(response);
       return response.data;
     } catch (error: any) {
       if (error.response) {
