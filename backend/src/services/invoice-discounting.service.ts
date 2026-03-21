@@ -1546,47 +1546,47 @@ export class InvoiceDiscountingService {
   /**
    * Send invoice disbursement data to LMS
    */
-  async sendToLMS(invoiceIds: number[]): Promise<{
-    success: boolean;
-    lmsResponse?: LMSResponse;
-    losValidationErrors?: { invoiceId: number; error: string }[];
-    error?: string;
-  }> {
-    try {
-      // Transform invoices to LMS payload
-      const transformResult = await this.transformMultipleInvoicesToLMSPayload(invoiceIds);
+  // async sendToLMS(invoiceIds: number[]): Promise<{
+  //   success: boolean;
+  //   lmsResponse?: LMSResponse;
+  //   losValidationErrors?: { invoiceId: number; error: string }[];
+  //   error?: string;
+  // }> {
+  //   try {
+  //     // Transform invoices to LMS payload
+  //     const transformResult = await this.transformMultipleInvoicesToLMSPayload(invoiceIds);
       
-      if (!transformResult.success || !transformResult.data || transformResult.data.length === 0) {
-        return {
-          success: false,
-          losValidationErrors: transformResult.errors,
-          error: 'Failed to transform invoice data'
-        };
-      }
+  //     if (!transformResult.success || !transformResult.data || transformResult.data.length === 0) {
+  //       return {
+  //         success: false,
+  //         losValidationErrors: transformResult.errors,
+  //         error: 'Failed to transform invoice data'
+  //       };
+  //     }
 
-      // Send to LMS API
-      const lmsResponse = await this.sendToLMSApi(transformResult.data);
+  //     // Send to LMS API
+  //     const lmsResponse = await this.sendToLMSApi(transformResult.data);
 
-      // Check if there are failed invoices and extract error messages
-      const failedResults = lmsResponse.results?.filter(r => r.status === 'failed') || [];
-      const errorMessages = failedResults.map(r => `${r.invoice_number}: ${r.message}`).join('; ');
+  //     // Check if there are failed invoices and extract error messages
+  //     const failedResults = lmsResponse.results?.filter(r => r.status === 'failed') || [];
+  //     const errorMessages = failedResults.map(r => `${r.invoice_number}: ${r.message}`).join('; ');
 
-      return {
-        success: lmsResponse.failed_count === 0,
-        lmsResponse,
-        error: lmsResponse.failed_count > 0 ? errorMessages : undefined,
-        losValidationErrors: failedResults.map(r => ({
-          invoiceId: transformResult.data?.find(d => d.invoice_number === r.invoice_number)?.partner_loan_id ? parseInt(transformResult.data.find(d => d.invoice_number === r.invoice_number)?.partner_loan_id || '0') : 0,
-          error: r.message
-        }))
-      };
-    } catch (error: any) {
-      return {
-        success: false,
-        error: error.message || 'Failed to send to LMS'
-      };
-    }
-  }
+  //     return {
+  //       success: lmsResponse.failed_count === 0,
+  //       lmsResponse,
+  //       error: lmsResponse.failed_count > 0 ? errorMessages : undefined,
+  //       losValidationErrors: failedResults.map(r => ({
+  //         invoiceId: transformResult.data?.find(d => d.invoice_number === r.invoice_number)?.partner_loan_id ? parseInt(transformResult.data.find(d => d.invoice_number === r.invoice_number)?.partner_loan_id || '0') : 0,
+  //         error: r.message
+  //       }))
+  //     };
+  //   } catch (error: any) {
+  //     return {
+  //       success: false,
+  //       error: error.message || 'Failed to send to LMS'
+  //     };
+  //   }
+  // }
 
   /**
    * Send single invoice to LMS
