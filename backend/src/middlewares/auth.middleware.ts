@@ -29,11 +29,11 @@ export const authMiddleware = async (
     }
 
     const token = authHeader.substring(7); // Remove 'Bearer ' prefix
-    console.log('[AUTH] Token received, length:', token.length);
+   // console.log('[AUTH] Token received, length:', token.length);
 
     // Verify token
     const decoded = verifyToken(token) as JWTPayload;
-    console.log('[AUTH] Token decoded, userId:', decoded.userId, 'role:', decoded.role);
+   // console.log('[AUTH] Token decoded, userId:', decoded.userId, 'role:', decoded.role);
 
     // Get user from database
     const userRepository = AppDataSource.getRepository(User);
@@ -53,7 +53,7 @@ export const authMiddleware = async (
       where: { userId: user.id, isActive: true },
       relations: ['role'],
     });
-    console.log('[AUTH] User roles:', userRoles);
+   // console.log('[AUTH] User roles:', userRoles);
     // Attach user to request with roles
     req.user = {
       ...user,
@@ -62,7 +62,7 @@ export const authMiddleware = async (
     req.userId = user.id;
     req.userRole = decoded.role;
 
-    console.log('[AUTH] Success, user:', user.email);
+    //console.log('[AUTH] Success, user:', user.email);
     next();
   } catch (error: any) {
     // Provide more specific error messages

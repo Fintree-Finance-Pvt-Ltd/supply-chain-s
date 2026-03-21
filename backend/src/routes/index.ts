@@ -15,6 +15,7 @@ import debugRoutes from './debug.routes';
 import migrationRoutes from './migration.routes';
 import onboardingRoutes from './onboarding.routes';
 import partnerRoutes from './partner.routes';
+import invoiceDisbursementRoutes from './invoice-disbursement.routes';
 import { authMiddleware } from '../middlewares/auth.middleware';
 
 const router = Router();
@@ -48,5 +49,6 @@ router.use('/onboarding', onboardingRoutes);
 router.use('/debug', debugRoutes);
 router.use('/migration', migrationRoutes);
 router.use('/partners', partnerRoutes);
+router.use('/v1/invoice-disbursement', invoiceDisbursementRoutes);
 
 export default router;

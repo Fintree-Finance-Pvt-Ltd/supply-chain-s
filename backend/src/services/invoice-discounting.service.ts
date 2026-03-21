@@ -9,7 +9,53 @@ import { LoanAccount } from "../entities/LoanAccount";
 import { CreditSanction } from "../entities/CreditSanction";
 import { Notification } from "../entities/Notification";
 import { NodemailerProvider } from "../integrations/notifications/email/nodemailer.provider";
+import axios from "axios";
 import crypto from "crypto";
+
+/**
+ * LMS API Response interfaces
+ */
+interface LMSValidationResult {
+  invoice_number: string;
+  status: 'success' | 'failed';
+  message: string;
+  expected?: number;
+  received?: number;
+}
+
+interface LMSResponse {
+  message: string;
+  total: number;
+  success_count: number;
+  failed_count: number;
+  results: LMSValidationResult[];
+}
+
+/**
+ * Invoice Disbursement Payload for LMS
+ */
+interface InvoiceDisbursementPayload {
+  partner_loan_id: string;
+  lan: string;
+  invoice_number: string;
+  invoice_date: string;
+  invoice_amount: number;
+  tenure_days: number;
+  supplier_name: string;
+  supplier_bank_details: {
+    bank_account_number: string;
+    ifsc_code: string;
+    bank_name: string;
+    account_holder_name: string;
+  };
+  disbursement_amount: number;
+  disbursement_date: string;
+  invoice_due_date: string;
+  disbursement_utr: string;
+  roi_percentage: number;
+  total_roi_amount: number;
+  emi_amount: number;
+}
 
 export class InvoiceDiscountingService {
   private invoiceRepository = AppDataSource.getRepository(Invoice);
@@ -1159,4 +1205,346 @@ export class InvoiceDiscountingService {
       remarks,
     );
   }
+
+  // ============================================
+  // LMS INTEGRATION METHODS
+  // ============================================
+
+  /**
+   * Format date to YYYY-MM-DD
+   */
+  private formatDate(date: Date): string {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  /**
+   * Calculate total ROI amount
+   * Formula: (disbursement_amount × roi_percentage × 90) / 365
+   */
+  private calculateTotalRoiAmount(
+    disbursementAmount: number,
+    roiPercentage: number,
+    tenureDays: number
+  ): number {
+    const roiAmount = (disbursementAmount * roiPercentage * tenureDays) / 365;
+    return Number(roiAmount.toFixed(2));
+  }
+
+  /**
+   * Calculate EMI amount
+   * Formula: disbursement_amount + total_roi_amount
+   */
+  private calculateEmiAmount(disbursementAmount: number, totalRoiAmount: number): number {
+    const emi = disbursementAmount + totalRoiAmount;
+    return Number(emi.toFixed(2));
+  }
+
+  /**
+   * Transform single invoice to LMS payload format
+   */
+  async transformInvoiceToLMSPayload(invoiceId: number): Promise<{
+    success: boolean;
+    data?: InvoiceDisbursementPayload;
+    error?: string;
+    validationErrors?: { field: string; message: string }[];
+  }> {
+    const invoice = await this.invoiceRepository.findOne({
+      where: { id: invoiceId },
+      relations: ["loanAccount", "supplier", "supplier.bankDetail", "customer"],
+    });
+
+    if (!invoice) {
+      return { success: false, error: `Invoice not found with ID: ${invoiceId}` };
+    }
+
+    const validationResult = await this.validateForLMS(invoice);
+    
+    if (!validationResult.valid) {
+      return { success: false, validationErrors: validationResult.errors };
+    }
+
+    return { success: true, data: validationResult.payload };
+  }
+
+  /**
+   * Transform multiple invoices to LMS payload format
+   */
+  async transformMultipleInvoicesToLMSPayload(invoiceIds: number[]): Promise<{
+    success: boolean;
+    data?: InvoiceDisbursementPayload[];
+    errors?: { invoiceId: number; error: string }[];
+  }> {
+    const payloads: InvoiceDisbursementPayload[] = [];
+    const errors: { invoiceId: number; error: string }[] = [];
+
+    for (const invoiceId of invoiceIds) {
+      const result = await this.transformInvoiceToLMSPayload(invoiceId);
+      
+      if (result.success && result.data) {
+        payloads.push(result.data);
+      } else {
+        errors.push({
+          invoiceId,
+          error: result.error || result.validationErrors?.map(e => e.message).join(', ') || 'Unknown error'
+        });
+      }
+    }
+
+    if (errors.length > 0 && payloads.length === 0) {
+      return { success: false, errors };
+    }
+
+    return { success: true, data: payloads };
+  }
+
+  /**
+   * Validate invoice data according to LMS requirements
+   */
+  private async validateForLMS(invoice: Invoice): Promise<{
+    valid: boolean;
+    payload?: InvoiceDisbursementPayload;
+    errors: { field: string; message: string }[];
+  }> {
+    const errors: { field: string; message: string }[] = [];
+
+    // Check required fields
+    if (!invoice.loanAccountId) {
+      errors.push({ field: "loanAccountId", message: "Invoice is not linked to a Loan Account" });
+    }
+    if (!invoice.invoiceNumber) {
+      errors.push({ field: "invoiceNumber", message: "Invoice number is missing" });
+    }
+    if (!invoice.invoiceDate) {
+      errors.push({ field: "invoiceDate", message: "Invoice date is missing" });
+    }
+    if (!invoice.invoiceAmount) {
+      errors.push({ field: "invoiceAmount", message: "Invoice amount is missing" });
+    }
+    if (!invoice.disbursementAmount) {
+      errors.push({ field: "disbursementAmount", message: "Disbursement amount is missing" });
+    }
+    if (!invoice.disbursementDate) {
+      errors.push({ field: "disbursementDate", message: "Disbursement date is missing" });
+    }
+    if (!invoice.disbursementUtr) {
+      errors.push({ field: "disbursementUtr", message: "Disbursement UTR is missing" });
+    }
+    if (!invoice.supplier?.supplierName) {
+      errors.push({ field: "supplier_name", message: "Supplier name is missing" });
+    }
+    if (!invoice.supplier?.bankDetail) {
+      errors.push({ field: "supplier_bank_details", message: "Supplier bank details are missing" });
+    }
+
+    if (errors.length > 0) {
+      return { valid: false, errors };
+    }
+
+    // Get Loan Account
+    const loanAccount = await this.loanAccountRepository.findOne({
+      where: { id: invoice.loanAccountId },
+    });
+
+    if (!loanAccount) {
+      errors.push({ field: "loanAccount", message: "Loan Account not found" });
+      return { valid: false, errors };
+    }
+
+    // Get Supplier Bank Details
+    const supplierBankDetail = await this.supplierBankDetailRepository.findOne({
+      where: { supplierId: invoice.supplierId },
+    });
+
+    if (!supplierBankDetail) {
+      errors.push({ field: "supplier_bank_details", message: "Supplier bank details not found" });
+      return { valid: false, errors };
+    }
+
+    // Tenure must be exactly 90 days
+    const tenureDays = 90;
+
+    // Disbursement amount <= Invoice amount
+    if (invoice.disbursementAmount > invoice.invoiceAmount) {
+      errors.push({ 
+        field: "disbursement_amount", 
+        message: `Disbursement amount (${invoice.disbursementAmount}) cannot exceed invoice amount (${invoice.invoiceAmount})` 
+      });
+    }
+
+    // Get ROI from CreditSanction
+    const creditSanction = await this.creditSanctionRepository.findOne({
+      where: { 
+        customerId: invoice.customerId,
+        status: 'approved'
+      },
+      order: { createdAt: "DESC" as any },
+    });
+
+    let roiPercentage: number;
+    if (!creditSanction) {
+      roiPercentage = invoice.roiPercentage || 0;
+      if (!invoice.roiPercentage) {
+        errors.push({ field: "roi_percentage", message: "ROI percentage not found" });
+      }
+    } else {
+      roiPercentage = Number(creditSanction.interestRate);
+    }
+
+    if (errors.length > 0) {
+      return { valid: false, errors };
+    }
+
+    // Calculate dates
+    const disbursementDate = new Date(invoice.disbursementDate);
+    const expectedDueDate = new Date(disbursementDate);
+    expectedDueDate.setDate(expectedDueDate.getDate() + 90);
+    const expectedDueDateStr = this.formatDate(expectedDueDate);
+
+    const invoiceDueDateStr = invoice.invoiceDueDate 
+      ? this.formatDate(new Date(invoice.invoiceDueDate)) 
+      : expectedDueDateStr;
+
+    // Calculate ROI and EMI
+    const disbursementAmount = Number(invoice.disbursementAmount);
+    const totalRoiAmount = this.calculateTotalRoiAmount(disbursementAmount, roiPercentage, tenureDays);
+    const emiAmount = this.calculateEmiAmount(disbursementAmount, totalRoiAmount);
+
+    // Build Payload
+    const payload: InvoiceDisbursementPayload = {
+      partner_loan_id: String(invoice.customerId),
+      lan: loanAccount.lanId,
+      invoice_number: invoice.invoiceNumber,
+      invoice_date: this.formatDate(new Date(invoice.invoiceDate)),
+      invoice_amount: Number(invoice.invoiceAmount),
+      tenure_days: tenureDays,
+      supplier_name: invoice.supplier!.supplierName,
+      supplier_bank_details: {
+        bank_account_number: supplierBankDetail.bankAccountNumber,
+        ifsc_code: supplierBankDetail.ifscCode,
+        bank_name: supplierBankDetail.bankName,
+        account_holder_name: supplierBankDetail.accountHolderName,
+      },
+      disbursement_amount: disbursementAmount,
+      disbursement_date: this.formatDate(disbursementDate),
+      invoice_due_date: invoiceDueDateStr,
+      disbursement_utr: invoice.disbursementUtr,
+      roi_percentage: roiPercentage,
+      total_roi_amount: totalRoiAmount,
+      emi_amount: emiAmount,
+    };
+
+    return { valid: true, payload, errors: [] };
+  }
+
+  /**
+   * Send invoice disbursement data to LMS
+   */
+  async sendToLMS(invoiceIds: number[]): Promise<{
+    success: boolean;
+    lmsResponse?: LMSResponse;
+    losValidationErrors?: { invoiceId: number; error: string }[];
+    error?: string;
+  }> {
+    try {
+      // Transform invoices to LMS payload
+      const transformResult = await this.transformMultipleInvoicesToLMSPayload(invoiceIds);
+      
+      if (!transformResult.success || !transformResult.data || transformResult.data.length === 0) {
+        return {
+          success: false,
+          losValidationErrors: transformResult.errors,
+          error: 'Failed to transform invoice data'
+        };
+      }
+
+      // Send to LMS API
+      const lmsResponse = await this.sendToLMSApi(transformResult.data);
+
+      return {
+        success: lmsResponse.failed_count === 0,
+        lmsResponse,
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.message || 'Failed to send to LMS'
+      };
+    }
+  }
+
+  /**
+   * Send single invoice to LMS
+   */
+  async sendSingleToLMS(invoiceId: number): Promise<{
+    success: boolean;
+    lmsResponse?: LMSResponse;
+    losValidationErrors?: { field: string; message: string }[];
+    error?: string;
+  }> {
+    try {
+      // Transform invoice to LMS payload
+      const transformResult = await this.transformInvoiceToLMSPayload(invoiceId);
+      
+      if (!transformResult.success || !transformResult.data) {
+        return {
+          success: false,
+          losValidationErrors: transformResult.validationErrors,
+          error: transformResult.error || 'Failed to transform invoice data'
+        };
+      }
+
+      // Send to LMS API
+      const lmsResponse = await this.sendToLMSApi([transformResult.data]);
+
+      return {
+        success: lmsResponse.failed_count === 0,
+        lmsResponse,
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.message || 'Failed to send to LMS'
+      };
+    }
+  }
+
+  /**
+   * Send data to LMS API
+   */
+  private async sendToLMSApi(payload: InvoiceDisbursementPayload[]): Promise<LMSResponse> {
+    const baseUrl = process.env.LMS_API_BASE_URL;
+    const apiKey = process.env.LMS_API_KEY;
+
+    if (!baseUrl || !apiKey) {
+      throw new Error('LMS API configuration missing. Set LMS_API_BASE_URL and LMS_API_KEY in environment.');
+    }
+   console.log(payload)
+    try {
+      const response = await axios.post<LMSResponse>(
+        `${baseUrl}loan-booking/v1/invoice-disbursement/validate`,
+        payload,
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': apiKey,
+          },
+          timeout: 30000,
+        }
+      );
+      return response.data;
+    } catch (error: any) {
+      if (error.response) {
+        throw new Error(`LMS API Error: ${error.response.status} - ${JSON.stringify(error.response.data)}`);
+      } else if (error.request) {
+        throw new Error('LMS API unreachable - no response received');
+      } else {
+        throw new Error(`Failed to send to LMS: ${error.message}`);
+      }
+    }
+  }
 }
+
+export const invoiceDiscountingService = new InvoiceDiscountingService();
