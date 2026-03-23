@@ -292,6 +292,83 @@ checkBureau: async ({
             headers: { 'Content-Type': 'multipart/form-data' }
         })
         return response.data
+    },
+
+    // -----------------------------
+    // 🔹 PAN OCR - Direct Frontend Call
+    // -----------------------------
+
+    /**
+     * Validate PAN format
+     * Format: 5 letters + 4 digits + 1 letter (e.g., ABCDE1234F)
+     */
+    isValidPanFormat: (pan) => {
+        const panRegex = /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/;
+        return panRegex.test(pan);
+    },
+
+    /**
+     * Process PAN OCR from image file - Direct call to external OCR API
+     * @param {File} file - PAN card image file
+     * @returns {Promise<Object>} - OCR result with pan_number, name, dob, father_name
+     */
+    processPanOcr: async (file) => {
+        if (!file) {
+            throw new Error('No file provided');
+        }
+
+        const PAN_OCR_API_URL = 'https://sandbox.fintreelms.com/ocr/v1/pan';
+        const PAN_API_KEY = 'Fintree@2026';
+
+        // Create FormData
+        const formData = new FormData();
+        formData.append('imageUrl', file);
+        formData.append('clientRefId', 'pan_ocr_' + Date.now());
+
+        try {
+            const response = await fetch(PAN_OCR_API_URL, {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'x-api-key': PAN_API_KEY,
+                },
+            });
+
+            if (!response.ok) {
+                throw new Error(`OCR request failed with status: ${response.status}`);
+            }
+
+            const result = await response.json();
+
+            if (result.success) {
+                // Log provider name
+                console.log('PAN OCR Provider:', result.provider);
+
+                // Convert PAN to uppercase
+                const panNumber = result.data.pan_number?.toUpperCase() || '';
+
+                // Validate PAN format
+                if (panNumber && !kycService.isValidPanFormat(panNumber)) {
+                    throw new Error('Invalid PAN format detected');
+                }
+
+                return {
+                    success: true,
+                    provider: result.provider,
+                    data: {
+                        pan_number: panNumber,
+                        name: result.data.name || '',
+                        dob: result.data.dob || '',
+                        father_name: result.data.father_name || '',
+                    },
+                };
+            } else {
+                throw new Error(result.message || 'PAN OCR failed');
+            }
+        } catch (error) {
+            console.error('PAN OCR Error:', error);
+            throw error;
+        }
     }
 }
 
