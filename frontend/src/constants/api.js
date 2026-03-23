@@ -136,4 +136,9 @@ DASHBOARD_OPERATIONS_SUPPLIERS: '/workflows/suppliers/dashboard/operations',
   ONBOARDING_KYC_AADHAAR: '/onboarding/kyc/aadhaar',
   ONBOARDING_BUREAU_CHECK: '/onboarding/bureau/check',
   ONBOARDING_OCR_PROCESS: '/onboarding/ocr/process',
+
+  // PAN OCR (Direct frontend call)
+  PAN_OCR: 'https://sandbox.fintreelms.com/ocr/v1/pan',
+  // Cheque OCR (Direct frontend call)
+  CHEQUE_OCR: 'https://sandbox.fintreelms.com/ocr/v1/cheque',
 }

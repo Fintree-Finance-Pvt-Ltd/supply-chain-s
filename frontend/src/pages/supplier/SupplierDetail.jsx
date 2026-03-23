@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import { supplierService } from '../../services/supplierService'
+import kycService from '../../services/kycService'
 import { useSelector } from 'react-redux'
 import { ROLES } from '../../constants/roles'
 import { API_BASE_URL } from '../../constants/api'
@@ -71,41 +72,48 @@ const SupplierDetail = () => {
       if (!file) return toast.error('Select cheque file')
       
       setIsUploading(true)
-      const res = await supplierService.uploadCheque(Number(id), file)
       
-      const responseData = res.data?.data
-      
-      // Check for OCR success
-      if (responseData?.ocrSuccess) {
-        // OCR succeeded - auto fill bank details
-        setBank(responseData.bankDetails)
+      // ----- Direct Cheque OCR from frontend (no backend routing) -----
+      try {
+        const ocrResult = await kycService.processChequeOcr(file);
         
-        // Populate form with OCR data for editing
-        setBankForm({
-          bankAccountNumber: responseData.bankDetails?.bankAccountNumber || '',
-          ifscCode: responseData.bankDetails?.ifscCode || '',
-          bankName: responseData.bankDetails?.bankName || '',
-          accountHolderName: responseData.bankDetails?.accountHolderName || '',
-          micrCode: responseData.bankDetails?.micrCode || '',
-          chequeNumber: responseData.bankDetails?.chequeNumber || ''
-        })
-        setIsEditingBank(true)
-        
-        // Show warning if image quality was low
-        if (responseData.warning) {
-          toast.warn(responseData.warning)
-        } else {
-          toast.success('Cheque uploaded! Please verify and edit bank details if needed.')
+        if (ocrResult.success) {
+          const { bank_account_number, ifsc_code, bank_name, account_holder_name, micr_code, cheque_number } = ocrResult.data;
+          
+          // Log provider name
+          console.log('Cheque OCR Provider:', ocrResult.provider);
+          
+          // Auto-fill bank details from OCR
+          setBank({
+            bankAccountNumber: bank_account_number,
+            ifscCode: ifsc_code,
+            bankName: bank_name,
+            accountHolderName: account_holder_name,
+            micrCode: micr_code,
+            chequeNumber: cheque_number
+          });
+          
+          // Populate form with OCR data for editing
+          setBankForm({
+            bankAccountNumber: bank_account_number || '',
+            ifscCode: ifsc_code || '',
+            bankName: bank_name || '',
+            accountHolderName: account_holder_name || '',
+            micrCode: micr_code || '',
+            chequeNumber: cheque_number || ''
+          });
+          
+          setIsEditingBank(true);
+          
+          toast.success('Cheque OCR completed! Please verify and edit bank details if needed.');
         }
-      } else {
+      } catch (ocrErr) {
         // OCR failed - show message to enter details manually
-        setChequeDocument(responseData?.chequeDocument)
-        setIsEditingBank(true)
-        toast.error(responseData?.warning || 'Unable to read cheque. Please enter details manually.')
+        console.error('Cheque OCR Error:', ocrErr.message);
+        setIsEditingBank(true);
+        toast.error('Unable to read cheque. Please enter details manually.');
       }
       
-      // Refresh data
-      fetchSupplierDetails()
     } catch (e) {
       console.error(e)
       toast.error(e?.response?.data?.message || 'Cheque upload failed')

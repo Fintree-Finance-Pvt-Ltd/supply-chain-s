@@ -4,6 +4,7 @@ import { useSelector, useDispatch } from 'react-redux'
 import { fetchCaseById } from '../../store/slices/caseSlice'
 import { workflowService } from '../../services/workflowService'
 import { documentService } from '../../services/documentService'
+import kycService from '../../services/kycService'
 import api from '../../services/api'
 import DocumentUploader from '../../components/DocumentUploader'
 import LoadingSpinner from '../../components/LoadingSpinner'
@@ -147,6 +148,36 @@ const RMCaseDetail = () => {
 
     const handleUpload = async (file, type) => {
         try {
+            // For cheque upload, use direct frontend OCR
+            if (type === 'cheque') {
+                try {
+                    const ocrResult = await kycService.processChequeOcr(file);
+                    
+                    if (ocrResult.success) {
+                        const { bank_account_number, ifsc_code, bank_name, account_holder_name, micr_code, cheque_number } = ocrResult.data;
+                        
+                        // Log provider name
+                        console.log('Cheque OCR Provider:', ocrResult.provider);
+                        
+                        // Auto-fill bank details from OCR
+                        setBankDetails({
+                            bankAccountNo: bank_account_number,
+                            bankIfscCode: ifsc_code,
+                            bankName: bank_name,
+                            bankBranch: '',
+                            bankType: 'savings'
+                        });
+                        
+                        toast.success('Cheque OCR completed! Bank details auto-filled.');
+                        return; // Don't call documentService for cheque
+                    }
+                } catch (ocrErr) {
+                    console.error('Cheque OCR Error:', ocrErr.message);
+                    toast.error('Unable to read cheque. Please enter details manually.');
+                }
+            }
+            
+            // For other document types, use the existing service
             await documentService.uploadDocument(id, file, type)
             toast.success('Document uploaded successfully')
             dispatch(fetchCaseById(id))
@@ -253,7 +284,7 @@ const RMCaseDetail = () => {
         }
     };
 
-    const capturePhoto = () => {
+    const capturePhoto = async () => {
         const video = document.getElementById('camera-preview');
         const canvas = document.createElement('canvas');
         canvas.width = video.videoWidth;
@@ -269,24 +300,34 @@ const RMCaseDetail = () => {
         setIsCameraOpen(false);
         setCameraStream(null);
 
-        // Simulate OCR
-        toast.promise(
-            new Promise(resolve => setTimeout(resolve, 1500)),
-            {
-                loading: 'Processing Cheque OCR...',
-                success: 'OCR Completed Successfully!',
-                error: 'OCR Failed',
+        // Convert to file and process with direct OCR
+        try {
+            const blob = await (await fetch(dataUrl)).blob();
+            const file = new File([blob], "cheque_capture.jpg", { type: "image/jpeg" });
+            
+            const ocrResult = await kycService.processChequeOcr(file);
+            
+            if (ocrResult.success) {
+                const { bank_account_number, ifsc_code, bank_name, account_holder_name, micr_code, cheque_number } = ocrResult.data;
+                
+                // Log provider name
+                console.log('Cheque OCR Provider:', ocrResult.provider);
+                
+                // Auto-fill bank details from OCR
+                setBankDetails({
+                    bankAccountNo: bank_account_number,
+                    bankIfscCode: ifsc_code,
+                    bankName: bank_name,
+                    bankBranch: '',
+                    bankType: 'savings'
+                });
+                
+                toast.success('Cheque OCR completed! Bank details auto-filled.');
             }
-        ).then(() => {
-            // Mock data extraction
-            setBankDetails(prev => ({
-                ...prev,
-                bankAccountNo: '9182736455',
-                bankIfscCode: 'HDFC0001234',
-                bankName: 'HDFC BANK LTD',
-                bankBranch: 'MUMBAI BRANCH'
-            }));
-        });
+        } catch (ocrErr) {
+            console.error('Cheque OCR Error:', ocrErr.message);
+            toast.error('Unable to read cheque. Please try again or enter details manually.');
+        }
     };
 
     const handleUploadCaptured = async () => {

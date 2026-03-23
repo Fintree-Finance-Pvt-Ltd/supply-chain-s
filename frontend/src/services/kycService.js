@@ -369,6 +369,73 @@ checkBureau: async ({
             console.error('PAN OCR Error:', error);
             throw error;
         }
+    },
+
+    // -----------------------------
+    // 🔹 Cheque OCR - Direct Frontend Call
+    // -----------------------------
+
+    /**
+     * Process Cheque OCR from image file - Direct call to external OCR API
+     * @param {File} file - Cheque image file
+     * @param {string} accountHolderName - Optional account holder name
+     * @returns {Promise<Object>} - OCR result with bank details
+     */
+    processChequeOcr: async (file, accountHolderName = '') => {
+        if (!file) {
+            throw new Error('No file provided');
+        }
+
+        const CHEQUE_OCR_API_URL = 'https://sandbox.fintreelms.com/ocr/v1/cheque';
+        const CHEQUE_API_KEY = 'Fintree@2026';
+
+        // Create FormData
+        const formData = new FormData();
+        formData.append('imageUrl', file);
+        formData.append('clientRefId', 'cheque_ocr_' + Date.now());
+        if (accountHolderName) {
+            formData.append('accountHolderName', accountHolderName);
+        }
+
+        try {
+            const response = await fetch(CHEQUE_OCR_API_URL, {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'x-api-key': CHEQUE_API_KEY,
+                },
+            });
+
+            if (!response.ok) {
+                throw new Error(`Cheque OCR request failed with status: ${response.status}`);
+            }
+
+            const result = await response.json();
+
+            if (result.success) {
+                // Log provider name
+                console.log('Cheque OCR Provider:', result.provider);
+
+                return {
+                    success: true,
+                    provider: result.provider,
+                    data: {
+                        bank_account_number: result.data.bank_account_number || '',
+                        ifsc_code: result.data.ifsc_code || '',
+                        bank_name: result.data.bank_name || '',
+                        account_holder_name: result.data.account_holder_name || '',
+                        micr_code: result.data.micr_code || '',
+                        cheque_number: result.data.cheque_number || '',
+                        quality_check: result.data.quality_check || null,
+                    },
+                };
+            } else {
+                throw new Error(result.message || 'Cheque OCR failed');
+            }
+        } catch (error) {
+            console.error('Cheque OCR Error:', error);
+            throw error;
+        }
     }
 }
 
