@@ -4,6 +4,7 @@ import { useSelector } from 'react-redux'
 import { toast } from 'react-toastify'
 import { workflowService } from '../../services/workflowService'
 import { customerService } from '../../services/customerService'
+import api from '../../services/api'
 import ApprovalTimeline from '../../components/ApprovalTimeline'
 import CustomerFullDetails from '../../components/CustomerFullDetails'
 import LoadingSpinner from '../../components/LoadingSpinner'
@@ -334,15 +335,67 @@ const OperationsCaseScreen = () => {
                       </div>
                     </div>
                     <div className="flex items-center space-x-2">
-                      <a
-                        href={`${import.meta.env.VITE_API_BASE_URL}/documents/download/${doc.id}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="p-1 text-primary-600 hover:bg-primary-50 rounded"
-                        title="Preview"
-                      >
-                        <FiEye /> {/* Changed to Eye icon */}
-                      </a>
+                      {/* Helper for MIME type */}
+                      {(() => {
+                        const getMimeType = (fileName) => {
+                          const ext = fileName?.toLowerCase().split('.').pop() || '';
+                          const mimeTypes = {
+                            jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png',
+                            gif: 'image/gif', webp: 'image/webp', bmp: 'image/bmp',
+                            svg: 'image/svg+xml', pdf: 'application/pdf',
+                            doc: 'application/msword',
+                            docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                          };
+                          return mimeTypes[ext] || 'application/octet-stream';
+                        };
+                        return (
+                          <>
+                            <button
+                              onClick={async () => {
+                                try {
+                                  const response = await api.get(`/documents/download/${doc.id}?mode=inline`, {
+                                    responseType: 'blob',
+                                  });
+                                  const blob = new Blob([response.data], { type: getMimeType(doc.fileName) });
+                                  const blobUrl = URL.createObjectURL(blob);
+                                  window.open(blobUrl, '_blank');
+                                } catch (error) {
+                                  console.error('Failed to preview document:', error);
+                                  toast.error('Failed to preview document');
+                                }
+                              }}
+                              className="p-1 text-primary-600 hover:bg-primary-50 rounded"
+                              title="Preview"
+                            >
+                              <FiEye />
+                            </button>
+                            <button
+                              onClick={async () => {
+                                try {
+                                  const response = await api.get(`/documents/download/${doc.id}?mode=attachment`, {
+                                    responseType: 'blob',
+                                  });
+                                  const blob = new Blob([response.data], { type: getMimeType(doc.fileName) });
+                                  const blobUrl = URL.createObjectURL(blob);
+                                  const link = document.createElement('a');
+                                  link.href = blobUrl;
+                                  link.download = doc.fileName || 'document';
+                                  document.body.appendChild(link);
+                                  link.click();
+                                  document.body.removeChild(link);
+                                } catch (error) {
+                                  console.error('Failed to download document:', error);
+                                  toast.error('Failed to download document');
+                                }
+                              }}
+                              className="p-1 text-blue-600 hover:bg-blue-50 rounded"
+                              title="Download"
+                            >
+                              <FiDownload />
+                            </button>
+                          </>
+                        );
+                      })()}
                       {doc.status === 'approved' ? (
                         <span className="badge bg-green-100 text-green-800">Verified</span>
                       ) : doc.status === 'rejected' ? (

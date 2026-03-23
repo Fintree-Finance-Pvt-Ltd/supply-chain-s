@@ -3,6 +3,8 @@ import { DocumentService } from '../services/document.service';
 import { AppDataSource } from '../config/database';
 import { Applicant } from '../entities/Applicant';
 import { CoApplicant } from '../entities/CoApplicant';
+import * as path from 'path';
+import * as fs from 'fs';
 
 export class DocumentController {
   private documentService: DocumentService;
@@ -204,4 +206,71 @@ export class DocumentController {
       });
     }
   };
+
+downloadDocument = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const mode = (req.query.mode as string) || 'inline';
+
+    if (!req.userId) {
+      res.status(401).json({
+        success: false,
+        message: 'Authentication required',
+      });
+      return;
+    }
+
+    const document = await this.documentService.getDocumentById(Number(id));
+
+    if (!document) {
+      res.status(404).json({
+        success: false,
+        message: 'Document not found',
+      });
+      return;
+    }
+
+    // Resolve file path directly
+    const absolutePath = path.resolve(process.cwd(), document.filePath);
+
+    if (!fs.existsSync(absolutePath)) {
+      console.error('File not found at:', absolutePath);
+
+      res.status(404).json({
+        success: false,
+        message: 'File not found on server',
+      });
+      return;
+    }
+
+    // Set headers
+    res.setHeader(
+      'Content-Type',
+      document.mimeType || 'application/octet-stream'
+    );
+
+    if (mode === 'attachment') {
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="${document.fileName}"`
+      );
+    } else {
+      res.setHeader(
+        'Content-Disposition',
+        `inline; filename="${document.fileName}"`
+      );
+    }
+
+    // Stream file
+    const fileStream = fs.createReadStream(absolutePath);
+    fileStream.pipe(res);
+  } catch (error: any) {
+    console.error('Download document error:', error);
+
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to download document',
+    });
+  }
+};
 }

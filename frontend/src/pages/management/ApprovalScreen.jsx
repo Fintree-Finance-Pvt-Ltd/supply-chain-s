@@ -10,7 +10,7 @@ import ApprovalTimeline from "../../components/ApprovalTimeline";
 import LoadingSpinner from "../../components/LoadingSpinner";
 import CustomerFullDetails from "../../components/CustomerFullDetails";
 import { formatDate } from "../../utils/format";
-import { FiCheck, FiX, FiEye, FiFileText } from "react-icons/fi";
+import { FiCheck, FiX, FiEye, FiFileText, FiDownload } from "react-icons/fi";
 
 const ApprovalScreen = () => {
   const { id } = useParams(); // This is now customerId
@@ -338,11 +338,51 @@ const ApprovalScreen = () => {
     return role.includes("credit");
   };
 
-  const handlePreview = (doc) => {
-    setPreviewedDocs((prev) => new Set(prev).add(doc.id));
-    const fileUrl = `${import.meta.env.VITE_API_BASE_URL}/documents/download/${doc.id}`;
-    window.open(fileUrl, "_blank");
+  // Helper function to detect MIME type from file extension
+  const getMimeType = (fileName) => {
+    const ext = fileName?.toLowerCase().split('.').pop() || '';
+    const mimeTypes = {
+      jpg: 'image/jpeg',
+      jpeg: 'image/jpeg',
+      png: 'image/png',
+      gif: 'image/gif',
+      webp: 'image/webp',
+      bmp: 'image/bmp',
+      svg: 'image/svg+xml',
+      pdf: 'application/pdf',
+      doc: 'application/msword',
+      docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    };
+    return mimeTypes[ext] || 'application/octet-stream';
   };
+
+  const handlePreview = async (doc, mode = 'inline') => {
+    setPreviewedDocs((prev) => new Set(prev).add(doc.id));
+    try {
+      const response = await api.get(`/documents/download/${doc.id}?mode=${mode}`, {
+        responseType: 'blob',
+      });
+      const mimeType = getMimeType(doc.fileName);
+      const blob = new Blob([response.data], { type: mimeType });
+      const blobUrl = URL.createObjectURL(blob);
+      
+      if (mode === 'attachment') {
+        const link = document.createElement('a');
+        link.href = blobUrl;
+        link.download = doc.fileName || 'document';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      } else {
+        window.open(blobUrl, "_blank");
+      }
+    } catch (error) {
+      console.error('Failed to preview document:', error);
+    }
+  };
+
+  const handlePreviewClick = (doc) => handlePreview(doc, 'inline');
+  const handleDownloadClick = (doc) => handlePreview(doc, 'attachment');
 
   const role = (user?.role || "").toLowerCase();
 
@@ -658,22 +698,32 @@ const ApprovalScreen = () => {
                           </p>
                         </div>
                       </div>
-                      <button
-                        onClick={() => handlePreview(doc)}
-                        className={`px-3 py-1 rounded text-xs font-bold border transition-colors flex items-center space-x-1 ${previewedDocs.has(doc.id) ? "bg-green-100 text-green-700 border-green-200" : "bg-primary-50 text-primary-600 border-primary-200 hover:bg-primary-100"}`}
-                      >
-                        {previewedDocs.has(doc.id) ? (
-                          <>
-                            <FiCheck className="h-3 w-3" />
-                            <span>VIEWED</span>
-                          </>
-                        ) : (
-                          <>
-                            <FiEye className="h-3 w-3" />
-                            <span>VIEW DOCUMENT</span>
-                          </>
-                        )}
-                      </button>
+                      <div className="flex items-center space-x-2">
+                        <button
+                          onClick={() => handlePreviewClick(doc)}
+                          className={`px-3 py-1 rounded text-xs font-bold border transition-colors flex items-center space-x-1 ${previewedDocs.has(doc.id) ? "bg-green-100 text-green-700 border-green-200" : "bg-primary-50 text-primary-600 border-primary-200 hover:bg-primary-100"}`}
+                        >
+                          {previewedDocs.has(doc.id) ? (
+                            <>
+                              <FiCheck className="h-3 w-3" />
+                              <span>VIEWED</span>
+                            </>
+                          ) : (
+                            <>
+                              <FiEye className="h-3 w-3" />
+                              <span>VIEW</span>
+                            </>
+                          )}
+                        </button>
+                        <button
+                          onClick={() => handleDownloadClick(doc)}
+                          className="px-3 py-1 rounded text-xs font-bold border border-blue-200 bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors flex items-center space-x-1"
+                          title="Download"
+                        >
+                          <FiDownload className="h-3 w-3" />
+                          <span>DOWNLOAD</span>
+                        </button>
+                      </div>
                     </div>
 
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mt-2">

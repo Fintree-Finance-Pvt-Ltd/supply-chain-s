@@ -501,11 +501,60 @@ const CreditCaseDetail = () => {
 
   const [previewedDocs, setPreviewedDocs] = useState(new Set())
 
-  const handlePreview = (doc) => {
+  // Helper function to detect MIME type from file extension
+  const getMimeType = (fileName) => {
+    const ext = fileName?.toLowerCase().split('.').pop() || '';
+    const mimeTypes = {
+      jpg: 'image/jpeg',
+      jpeg: 'image/jpeg',
+      png: 'image/png',
+      gif: 'image/gif',
+      webp: 'image/webp',
+      bmp: 'image/bmp',
+      svg: 'image/svg+xml',
+      pdf: 'application/pdf',
+      doc: 'application/msword',
+      docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    };
+    return mimeTypes[ext] || 'application/octet-stream';
+  };
+
+  const handlePreview = async (doc, mode = 'inline') => {
     setPreviewedDocs(prev => new Set(prev).add(doc.id))
-    const fileUrl = `${import.meta.env.VITE_API_BASE_URL}/documents/download/${doc.id}`
-    window.open(fileUrl, '_blank')
+    try {
+      // Use authenticated API to fetch the document
+      const response = await api.get(`/documents/download/${doc.id}?mode=${mode}`, {
+        responseType: 'blob',
+      })
+      
+      // Detect MIME type from file extension
+      const mimeType = getMimeType(doc.fileName);
+      
+      // Create a blob URL from the response
+      const blob = new Blob([response.data], { type: mimeType })
+      const blobUrl = URL.createObjectURL(blob)
+      
+      // For download, create an anchor element and trigger click
+      if (mode === 'attachment') {
+        const link = document.createElement('a')
+        link.href = blobUrl
+        link.download = doc.fileName || 'document'
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+      } else {
+        // Open in new tab for preview
+        window.open(blobUrl, '_blank')
+      }
+    } catch (error) {
+      console.error('Failed to preview document:', error)
+      toast.error('Failed to preview document')
+    }
   }
+
+  // Wrapper functions for preview and download
+  const handlePreviewClick = (doc) => handlePreview(doc, 'inline')
+  const handleDownloadClick = (doc) => handlePreview(doc, 'attachment')
 
   if (isLoading) {
     return (
@@ -606,12 +655,19 @@ const CreditCaseDetail = () => {
                       </div>
                       <div className="flex items-center space-x-2">
                         <button
-                          onClick={() => handlePreview(doc)}
+                          onClick={() => handlePreviewClick(doc)}
                           className={`p-1 ${previewedDocs.has(doc.id) ? 'text-green-600' : 'text-primary-600'} hover:bg-primary-50 rounded flex items-center space-x-1`}
                           title="Preview"
                         >
                           <FiEye className="h-4 w-4" />
                           {previewedDocs.has(doc.id) && <span className="text-[10px] font-bold">VIEWED</span>}
+                        </button>
+                        <button
+                          onClick={() => handleDownloadClick(doc)}
+                          className="p-1 text-blue-600 hover:bg-blue-50 rounded"
+                          title="Download"
+                        >
+                          <FiDownload className="h-4 w-4" />
                         </button>
                         <StatusBadge status={doc.status} />
                       </div>

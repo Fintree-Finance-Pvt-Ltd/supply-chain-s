@@ -15,6 +15,7 @@ router.post(
 );
 
 router.get('/customer/:customerId', documentController.getDocumentsByCustomer);
+router.get('/download/:id', documentController.downloadDocument);
 router.post('/:id/verify', documentController.verifyDocument);
 router.patch('/:id/metadata', documentController.updateMetadata);
 router.delete('/:id', documentController.deleteDocument);
