@@ -416,17 +416,41 @@ checkBureau: async ({
                 // Log provider name
                 console.log('Cheque OCR Provider:', result.provider);
 
+                // Parse the new nested response format
+                // Response: { success, data: { status, result: [{ type, details: { field: { conf, value } } }] } }
+                const resultData = result.data;
+                const chequeDetails = resultData?.result?.[0]?.details || {};
+
+                // Helper function to extract value and confidence from nested object
+                const extractField = (field) => {
+                    if (field && typeof field === 'object' && 'value' in field) {
+                        return {
+                            value: field.value || '',
+                            conf: field.conf || 0
+                        };
+                    }
+                    return { value: '', conf: 0 };
+                };
+
+                const accountNumber = extractField(chequeDetails.account_number);
+                const name = extractField(chequeDetails.name);
+                const ifscCode = extractField(chequeDetails.ifsc_code);
+                const micrCode = extractField(chequeDetails.micr_code);
+                const chequeNumber = extractField(chequeDetails.cheque_number);
+                const bankName = extractField(chequeDetails.bank_name);
+                const qualityCheck = extractField(chequeDetails.qualityCheck?.isCompleteImage);
+
                 return {
                     success: true,
                     provider: result.provider,
                     data: {
-                        bank_account_number: result.data.bank_account_number || '',
-                        ifsc_code: result.data.ifsc_code || '',
-                        bank_name: result.data.bank_name || '',
-                        account_holder_name: result.data.account_holder_name || '',
-                        micr_code: result.data.micr_code || '',
-                        cheque_number: result.data.cheque_number || '',
-                        quality_check: result.data.quality_check || null,
+                        bank_account_number: accountNumber.value,
+                        ifsc_code: ifscCode.value,
+                        bank_name: bankName.value,
+                        account_holder_name: name.value,
+                        micr_code: micrCode.value,
+                        cheque_number: chequeNumber.value,
+                        quality_check: qualityCheck.value ? { isCompleteImage: qualityCheck.value } : null,
                     },
                 };
             } else {
