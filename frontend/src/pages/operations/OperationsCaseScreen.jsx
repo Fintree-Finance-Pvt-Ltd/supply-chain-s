@@ -202,28 +202,42 @@ const OperationsCaseScreen = () => {
           {/* Sanction Details (Read Only) */}
           <div className="card border-l-4 border-indigo-500">
             <h2 className="text-xl font-semibold text-gray-900 mb-4">Sanction Details</h2>
-            {customer?.creditSanctions?.[0] ? (
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                <div className="p-3 bg-indigo-50 rounded-lg">
-                  <p className="text-xs text-indigo-600 uppercase font-bold">Sanction Amount</p>
-                  <p className="text-lg font-bold">₹{customer.creditSanctions[0].sanctionAmount}</p>
-                </div>
-                <div className="p-3 bg-indigo-50 rounded-lg">
-                  <p className="text-xs text-indigo-600 uppercase font-bold">Tenure</p>
-                  <p className="text-lg font-bold">{customer.creditSanctions[0].tenure} Months</p>
-                </div>
-                <div className="p-3 bg-indigo-50 rounded-lg">
-                  <p className="text-xs text-indigo-600 uppercase font-bold">Interest Rate</p>
-                  <p className="text-lg font-bold">{customer.creditSanctions[0].interestRate}%</p>
-                </div>
-                <div className="p-3 bg-indigo-50 rounded-lg">
-                  <p className="text-xs text-indigo-600 uppercase font-bold">Penal Charges</p>
-                  <p className="text-lg font-bold">{customer.creditSanctions[0].penalCharges}%</p>
-                </div>
-                <div className="p-3 bg-indigo-50 rounded-lg">
-                  <p className="text-xs text-indigo-600 uppercase font-bold">Processing Fees</p>
-                  <p className="text-lg font-bold">{customer.creditSanctions[0].processingFees}%</p>
-                </div>
+            {customer?.creditSanctions && customer.creditSanctions.length > 0 ? (
+              <div className="space-y-4">
+                {customer.creditSanctions.map((sanction, index) => (
+                  <div key={sanction.id} className="p-4 bg-indigo-50 rounded-lg border border-indigo-100">
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="text-sm font-bold text-indigo-700">
+                        {sanction.partner || `Partner ${index + 1}`}
+                      </h3>
+                      <span className="text-xs bg-indigo-200 text-indigo-800 px-2 py-1 rounded-full">
+                        {sanction.status || 'N/A'}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                      <div className="p-2 bg-white rounded">
+                        <p className="text-xs text-indigo-600 uppercase font-bold">Sanction Amount</p>
+                        <p className="text-lg font-bold">₹{sanction.sanctionAmount}</p>
+                      </div>
+                      <div className="p-2 bg-white rounded">
+                        <p className="text-xs text-indigo-600 uppercase font-bold">Tenure</p>
+                        <p className="text-lg font-bold">{sanction.tenure} Months</p>
+                      </div>
+                      <div className="p-2 bg-white rounded">
+                        <p className="text-xs text-indigo-600 uppercase font-bold">Interest Rate</p>
+                        <p className="text-lg font-bold">{sanction.interestRate}%</p>
+                      </div>
+                      <div className="p-2 bg-white rounded">
+                        <p className="text-xs text-indigo-600 uppercase font-bold">Penal Charges</p>
+                        <p className="text-lg font-bold">{sanction.penalCharges}%</p>
+                      </div>
+                      <div className="p-2 bg-white rounded">
+                        <p className="text-xs text-indigo-600 uppercase font-bold">Processing Fees</p>
+                        <p className="text-lg font-bold">{sanction.processingFees}%</p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
             ) : (
               <p className="text-gray-500">No sanction details available.</p>

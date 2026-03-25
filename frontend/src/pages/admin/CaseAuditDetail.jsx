@@ -97,11 +97,25 @@ const CaseAuditDetail = () => {
                     <div className="card">
                         <h2 className="text-lg font-bold mb-4">Sanction Limit History</h2>
                         <div className="space-y-3">
-                            {customer.creditSanctions?.[0] ? (
-                                <div className="p-4 bg-indigo-50 rounded border border-indigo-100 grid grid-cols-3 gap-4">
-                                    <div><p className="text-xs text-indigo-600 font-bold">AMOUNT</p><p className="text-xl font-bold">₹{customer.creditSanctions[0].sanctionAmount}</p></div>
-                                    <div><p className="text-xs text-indigo-600 font-bold">TENURE</p><p className="text-xl font-bold">{customer.creditSanctions[0].tenure} M</p></div>
-                                    <div><p className="text-xs text-indigo-600 font-bold">RATE</p><p className="text-xl font-bold">{customer.creditSanctions[0].interestRate}%</p></div>
+                            {customer.creditSanctions && customer.creditSanctions.length > 0 ? (
+                                <div className="space-y-3">
+                                    {customer.creditSanctions.map((sanction, index) => (
+                                        <div key={sanction.id} className="p-4 bg-indigo-50 rounded border border-indigo-100">
+                                            <div className="flex items-center justify-between mb-2">
+                                                <h3 className="text-sm font-bold text-indigo-700">
+                                                    {sanction.partner || `Partner ${index + 1}`}
+                                                </h3>
+                                                <span className="text-xs bg-indigo-200 text-indigo-800 px-2 py-1 rounded-full">
+                                                    {sanction.status || 'N/A'}
+                                                </span>
+                                            </div>
+                                            <div className="grid grid-cols-3 gap-2">
+                                                <div><p className="text-xs text-indigo-600 font-bold">AMOUNT</p><p className="text-xl font-bold">₹{sanction.sanctionAmount}</p></div>
+                                                <div><p className="text-xs text-indigo-600 font-bold">TENURE</p><p className="text-xl font-bold">{sanction.tenure} M</p></div>
+                                                <div><p className="text-xs text-indigo-600 font-bold">RATE</p><p className="text-xl font-bold">{sanction.interestRate}%</p></div>
+                                            </div>
+                                        </div>
+                                    ))}
                                 </div>
                             ) : <p className="text-gray-400">No sanction data available</p>}
 
