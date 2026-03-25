@@ -6,7 +6,7 @@ import * as dotenv from 'dotenv';
 dotenv.config();
 
 const UPLOAD_DIR = process.env.UPLOAD_DIR || './uploads';
-const MAX_FILE_SIZE = parseInt(process.env.MAX_FILE_SIZE || '10485760'); // 10MB default
+const MAX_FILE_SIZE = parseInt(process.env.MAX_FILE_SIZE || '52428800'); // 50MB default
 
 // Ensure upload directory exists
 if (!fs.existsSync(UPLOAD_DIR)) {
