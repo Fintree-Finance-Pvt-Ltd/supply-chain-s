@@ -294,7 +294,7 @@ import { useState, useEffect } from 'react'
 import { FiUpload, FiX, FiFile, FiCheckCircle, FiEye } from 'react-icons/fi'
 import { documentService } from '../services/documentService'
 
-const MAX_FILE_MB = 12
+const MAX_FILE_MB = 50
 const ALLOWED_TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg']
 
 const DocumentChecklistUploader = ({

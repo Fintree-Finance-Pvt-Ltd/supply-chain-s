@@ -161,7 +161,7 @@
 import { useState, useRef } from 'react'
 import { FiUpload, FiX, FiFile, FiEye } from 'react-icons/fi'
 
-const MAX_FILE_MB = 20
+const MAX_FILE_MB = 50
 const ALLOWED_TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg']
 
 const DocumentUploader = ({
