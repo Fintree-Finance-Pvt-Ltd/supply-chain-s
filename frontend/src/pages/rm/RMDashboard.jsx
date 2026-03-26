@@ -272,7 +272,7 @@ const RMDashboard = () => {
           </div>
           <button
             onClick={() => navigate('/rm/customer/new')}
-            className="flex items-center gap-2 bg-gray-800 hover:bg-blue-900 text-white text-sm font-medium px-4 py-2.5 rounded-lg transition-colors shadow-sm"
+            className="flex items-center gap-2 bg-gray-800 hover:bg-gray-900 text-white text-sm font-medium px-4 py-2.5 rounded-lg transition-colors shadow-sm"
           >
             <FiPlus className="h-4 w-4" />
             New Customer

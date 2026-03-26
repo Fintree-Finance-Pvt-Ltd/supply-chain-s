@@ -22,6 +22,7 @@ const BasicKycTab = ({
   customerId,
   applicantStatus,
   onLoadVerificationStatuses,
+  onManualAadhaarUpload,
 }) => {
   const [isRefreshingAadhaar, setIsRefreshingAadhaar] = useState(false);
   const [aadhaarRefreshStatus, setAadhaarRefreshStatus] = useState({});
@@ -378,7 +379,7 @@ const BasicKycTab = ({
         {applicantVerified.pan && (
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Applicant Aadhaar KYC <span className="text-red-500">*</span>
+              Applicant Aadhaar KYC
             </label>
 
             {/* Show info message if Aadhaar is initiated but not verified */}
@@ -388,35 +389,59 @@ const BasicKycTab = ({
               </div>
             )}
 
-            <button
-              type="button"
-              onClick={() => onVerify("applicantAadhaar", null)}
-              disabled={
-                loadingStates["applicantAadhaar_main"] ||
-                !applicantVerified.pan ||
-                applicantStatus?.aadhaarStatus === 'VERIFIED' ||
-                applicantStatus?.aadhaarStatus === 'INITIATED'
-              }
-              className={`btn-${applicantStatus?.aadhaarStatus === 'VERIFIED' ? "success" : "secondary"} w-full flex items-center justify-center`}
-            >
-              {applicantStatus?.aadhaarStatus === 'VERIFIED'
-                ? '✓ Aadhaar Verified'
-                : loadingStates["applicantAadhaar_main"]
-                  ? <LoadingSpinner size="sm" />
-                  : 'Verify Aadhaar'}
-            </button>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <button
+                  type="button"
+                  onClick={() => onVerify("applicantAadhaar", null)}
+                  disabled={
+                    loadingStates["applicantAadhaar_main"] ||
+                    !applicantVerified.pan ||
+                    applicantStatus?.aadhaarStatus === 'VERIFIED' ||
+                    applicantStatus?.aadhaarStatus === 'INITIATED'
+                  }
+                  className={`btn-${applicantStatus?.aadhaarStatus === 'VERIFIED' ? "success" : "secondary"} w-full flex items-center justify-center`}
+                >
+                  {applicantStatus?.aadhaarStatus === 'VERIFIED'
+                    ? '✓ Aadhaar Verified'
+                    : loadingStates["applicantAadhaar_main"]
+                      ? <LoadingSpinner size="sm" />
+                      : 'Verify Aadhaar'}
+                </button>
 
-            {/* Show Refresh Status button if Aadhaar is initiated but not verified */}
-            {applicantStatus?.aadhaarStatus === 'INITIATED' && (
-              <button
-                type="button"
-                onClick={handleAadhaarRefresh}
-                disabled={isRefreshingAadhaar}
-                className="mt-2 btn-secondary w-full flex items-center justify-center"
-              >
-                {isRefreshingAadhaar ? <LoadingSpinner size="sm" /> : 'Refresh Status'}
-              </button>
-            )}
+                {/* Show Refresh Status button if Aadhaar is initiated but not verified */}
+                {applicantStatus?.aadhaarStatus === 'INITIATED' && (
+                  <button
+                    type="button"
+                    onClick={handleAadhaarRefresh}
+                    disabled={isRefreshingAadhaar}
+                    className="mt-2 btn-secondary w-full flex items-center justify-center"
+                  >
+                    {isRefreshingAadhaar ? <LoadingSpinner size="sm" /> : 'Refresh Status'}
+                  </button>
+                )}
+              </div>
+
+              {/* Manual Aadhaar Upload Option */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Or Upload Manual Aadhaar Card
+                </label>
+                <input
+                  type="file"
+                  accept="image/*,.pdf"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file && onManualAadhaarUpload) {
+                      onManualAadhaarUpload(file);
+                    }
+                  }}
+                  className="input-field w-full"
+                  disabled={applicantStatus?.aadhaarStatus === 'VERIFIED'}
+                />
+                <p className="text-xs text-gray-500 mt-1">Upload Aadhaar card (PDF/Image)</p>
+              </div>
+            </div>
           </div>
         )}
 

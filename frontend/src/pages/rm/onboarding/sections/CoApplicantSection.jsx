@@ -13,6 +13,7 @@ const CoApplicantSection = ({
   loadingStates,
   errors,
   onLoadVerificationStatuses,
+  onManualAadhaarUpload,
 }) => {
   const addCoApplicant = () => {
     const localKey = Date.now();
@@ -61,6 +62,22 @@ const CoApplicantSection = ({
     }
   };
 
+  const handleCoApplicantAadhaarUpload = async (file, coAppKey) => {
+    if (!file) return;
+    try {
+      const coApp = coApplicants.find((c) => (c.id || c.localKey) === coAppKey);
+      const coAppId = coApp?.id;
+
+      if (customerId && coAppId) {
+        // Upload as aadhaar document for co-applicant
+        const uploadRes = await documentService.uploadDocument(customerId, file, 'aadhaar', 'co-applicant', 1, coAppId);
+        console.log('Co-applicant Manual Aadhaar uploaded:', coAppId);
+      }
+    } catch (e) {
+      console.error('Co-applicant Aadhaar upload error', e);
+    }
+  };
+
   return (
     <div className="border-t pt-6">
       <div className="flex items-center justify-between mb-4">
@@ -98,6 +115,7 @@ const CoApplicantSection = ({
                 loadingStates={loadingStates}
                 verificationStatus={vs}
                 onLoadVerificationStatuses={onLoadVerificationStatuses}
+                onManualAadhaarUpload={handleCoApplicantAadhaarUpload}
               />
             );
           })}

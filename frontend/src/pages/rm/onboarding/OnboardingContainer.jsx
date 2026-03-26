@@ -777,6 +777,32 @@ const OnboardingContainer = () => {
     return applicantStatus?.[map[kind]] === "VERIFIED";
   };
 
+  // ----- Manual Aadhaar Upload Handler
+  const handleManualAadhaarUpload = async (file) => {
+    if (!file) return;
+    try {
+      if (customerId) {
+        try {
+          // Upload as aadhaar document type
+          const uploadRes = await documentService.uploadDocument(customerId, file, "aadhaar", "applicant", 0, null, {});
+          if (uploadRes?.data) {
+            handleDocumentUploaded(uploadRes.data);
+          }
+          // refresh docs
+          const docs = await documentService.getDocumentsByCustomer(customerId);
+          setDocuments(docs.data);
+          toast.success("Manual Aadhaar document uploaded successfully");
+        } catch (uploadErr) {
+          console.error("Manual Aadhaar upload failed", uploadErr);
+          toast.error("Failed to upload Aadhaar document");
+        }
+      } else {
+        toast.info("Please verify mobile first (Customer ID required) to save the document.");
+      }
+    } catch (e) {
+      toast.error("Manual Aadhaar upload failed: " + (e?.response?.data?.message || e.message));
+    }
+  };
 
   const handleCompanyPanUpload = async (file) => {
     if (!file) return;
@@ -1175,6 +1201,7 @@ const OnboardingContainer = () => {
               }}
               applicantStatus={applicantStatus}
               onLoadVerificationStatuses={loadVerificationStatuses}
+              onManualAadhaarUpload={handleManualAadhaarUpload}
 
             />
 
@@ -1189,6 +1216,7 @@ const OnboardingContainer = () => {
               loadingStates={loadingStates}
               errors={errors}
               onLoadVerificationStatuses={loadVerificationStatuses}
+              onManualAadhaarUpload={handleManualAadhaarUpload}
             />
 
             <ContactPersonSection
