@@ -33,7 +33,8 @@ const CreditDashboard = () => {
     {
       key: 'status',
       label: 'Status',
-      render: (value) => <StatusBadge status={value} label={value?.replace(/_/g, ' ').toUpperCase()} />,
+            render: (_, row) => row.customer?.status ?? 'N/A'
+      // render: (value) => <StatusBadge status={value} label={value?.replace(/_/g, ' ').toUpperCase()} />,
     },
     {
       key: 'createdAt',

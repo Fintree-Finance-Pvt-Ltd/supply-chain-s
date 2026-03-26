@@ -656,7 +656,7 @@ const CreditCaseDetail = () => {
                       <div className="flex items-center space-x-2">
                         <button
                           onClick={() => handlePreviewClick(doc)}
-                          className={`p-1 ${previewedDocs.has(doc.id) ? 'text-green-600' : 'text-primary-600'} hover:bg-primary-50 rounded flex items-center space-x-1`}
+                          className={`p-1 ${previewedDocs.has(doc.id) ? 'text-green-600' : 'text-gray-600'} hover:bg-primary-50 rounded flex items-center space-x-1`}
                           title="Preview"
                         >
                           <FiEye className="h-4 w-4" />
@@ -664,7 +664,7 @@ const CreditCaseDetail = () => {
                         </button>
                         <button
                           onClick={() => handleDownloadClick(doc)}
-                          className="p-1 text-blue-600 hover:bg-blue-50 rounded"
+                          className="p-1 text-gray-600 hover:bg-blue-50 rounded"
                           title="Download"
                         >
                           <FiDownload className="h-4 w-4" />
@@ -834,7 +834,7 @@ const CreditCaseDetail = () => {
           <button
             onClick={handleSaveSanction}
             disabled={isSubmitting || readOnly || (!allDocsPreviewed && currentCase.documents?.length > 0)}
-            className={`w-full btn-primary flex items-center justify-center space-x-2 ${(readOnly || (!allDocsPreviewed && currentCase.documents?.length > 0)) ? 'opacity-50 cursor-not-allowed' : ''}`}
+            className={`w-full btn-success flex items-center justify-center space-x-2 ${(readOnly || (!allDocsPreviewed && currentCase.documents?.length > 0)) ? 'opacity-50 cursor-not-allowed' : ''}`}
             title={(!allDocsPreviewed && currentCase.documents?.length > 0) ? "Please preview all documents before proceeding" : ""}
           >
             {isSubmitting ? (

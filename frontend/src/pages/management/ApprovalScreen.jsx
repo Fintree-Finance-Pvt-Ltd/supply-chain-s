@@ -424,7 +424,7 @@ const ApprovalScreen = () => {
 
           {/* Only show sanction details for RM and MD roles */}
           {canAccessSanctionDetails() && (
-            <div className="card border-l-4 border-primary-500">
+            <div className="card border-l-4 border-secondary-600">
               <h2 className="text-xl font-semibold text-gray-900 mb-4">
                 Sanction Details (Review & Revise)
               </h2>
@@ -432,9 +432,6 @@ const ApprovalScreen = () => {
               {/* CEO sees only sanction amount, MD sees all fields */}
               {role === "ceo" && (
                 <div className="space-y-4 mb-4">
-                  <p className="text-sm text-gray-600 mb-2">
-                    Partner Sanctions (L1 & L2 Credits)
-                  </p>
                   {partnerSanctions.map((ps, index) => (
                     <div
                       key={ps.partner}
@@ -797,7 +794,7 @@ const ApprovalScreen = () => {
                     isSubmitting ||
                     (!allDocsPreviewed && visibleDocuments.length > 0)
                   }
-                  className={`w-full btn-primary flex items-center justify-center space-x-2 ${!allDocsPreviewed && visibleDocuments.length > 0 ? "opacity-50 cursor-not-allowed" : ""}`}
+                  className={`w-full btn-success flex items-center justify-center space-x-2 ${!allDocsPreviewed && visibleDocuments.length > 0 ? "opacity-50 cursor-not-allowed" : ""}`}
                 >
                   {isSubmitting ? (
                     <LoadingSpinner size="sm" />

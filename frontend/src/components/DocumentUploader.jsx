@@ -315,7 +315,7 @@ const DocumentUploader = ({
               <button
                 onClick={handleUpload}
                 disabled={!selectedFiles.length || !selectedType || isUploading}
-                className="btn-primary"
+                className="btn-secondary"
               >
                 {isUploading ? 'Uploading...' : 'Upload'}
               </button>
@@ -327,7 +327,7 @@ const DocumentUploader = ({
       {/* Selected Files Preview */}
       {selectedFiles.length > 0 && (
         <div className="bg-blue-50 p-3 rounded">
-          <p className="text-sm text-blue-800">
+          <p className="text-sm text-gray-800">
             {selectedFiles.length} file(s) selected.
           </p>
         </div>
