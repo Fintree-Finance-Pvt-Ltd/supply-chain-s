@@ -120,14 +120,14 @@ const Login = () => {
         <div className="w-full max-w-sm">
           
           {/* Logo */}
-          <div className="flex items-center gap-2 mb-10 justify-center">
-<img src="/logos/FinTree-Logo.jpg" alt="SCF Logo" className="w-8 h-8 rounded-lg object-contain" />
+          <div className="flex flex-col items-center gap-2 mb-4 justify-center">
+<img src="/logos/FinTree-Logo.jpg" alt="SCF Logo" className="w-16 h-12 rounded-lg object-contain" />
             <span className="text-gray-900 font-semibold text-sm">
               Supply Chain Finance
             </span>
           </div>
 
-          <div className="mb-8 text-center">
+          <div className="mb-2 text-center">
             <h1 className="text-2xl font-bold text-gray-900 tracking-tight">
               Sign in
             </h1>
