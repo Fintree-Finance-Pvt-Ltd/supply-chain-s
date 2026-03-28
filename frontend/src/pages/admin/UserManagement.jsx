@@ -13,7 +13,6 @@ const UserManagement = () => {
   const { roles } = useSelector((state) => state.roles)
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
-  const [showRoleModal, setShowRoleModal] = useState(false)
   const [selectedUser, setSelectedUser] = useState(null)
   const [formData, setFormData] = useState({
     name: '',
@@ -45,19 +44,6 @@ const UserManagement = () => {
       toast.success('User created successfully')
     } catch (error) {
       toast.error('Failed to create user: ' + error)
-    }
-  }
-
-  const handleAssignMultipleRoles = async (e) => {
-    e.preventDefault()
-    try {
-      await dispatch(assignMultipleRoles({ userId: selectedUser.id, roleIds: formData.selectedRoles })).unwrap()
-      setShowRoleModal(false)
-      setFormData({ ...formData, selectedRoles: [] })
-      dispatch(fetchUsers())
-      toast.success('Roles assigned successfully')
-    } catch (error) {
-      toast.error('Failed to assign roles: ' + error)
     }
   }
 
@@ -101,31 +87,6 @@ const UserManagement = () => {
     }
   }
 
-  const handleAssignRole = async (e) => {
-    e.preventDefault()
-    const roleId = Number(e.target.roleId.value)
-    try {
-      await dispatch(assignRole({ userId: selectedUser.id, roleId })).unwrap()
-      setShowRoleModal(false)
-      dispatch(fetchUsers())
-      toast.success('Role assigned successfully')
-    } catch (error) {
-      toast.error('Failed to assign role: ' + error)
-    }
-  }
-
-  const handleRemoveRole = async (userId, roleId) => {
-    if (window.confirm('Are you sure you want to remove this role?')) {
-      try {
-        await dispatch(removeRole({ userId, roleId })).unwrap()
-        dispatch(fetchUsers())
-        toast.success('Role removed successfully')
-      } catch (error) {
-        toast.error('Failed to remove role: ' + error)
-      }
-    }
-  }
-
   const handleToggleStatus = async (userId) => {
     try {
       await dispatch(toggleUserStatus(userId)).unwrap()
@@ -164,11 +125,6 @@ const UserManagement = () => {
   const handleCloseEditModal = () => {
     setShowEditModal(false)
     setEditFormData({ name: '', email: '', mobile: '', selectedRoles: [] })
-  }
-
-  const handleRoleClick = (user) => {
-    setSelectedUser(user)
-    setShowRoleModal(true)
   }
 
   const columns = [
@@ -234,13 +190,6 @@ const UserManagement = () => {
                         title="Edit"
                       >
                         <FiEdit2 className="h-5 w-5" />
-                      </button>
-                      <button
-                        onClick={() => handleRoleClick(user)}
-                        className="action-button action-button-success"
-                        title="Manage Roles"
-                      >
-                        <FiCheck className="h-5 w-5" />
                       </button>
                       <button
                         onClick={() => handleToggleStatus(user.id)}
@@ -425,67 +374,6 @@ const UserManagement = () => {
                   </div>
                 </div>
               </form>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Assign Role Modal */}
-      {showRoleModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg max-w-md w-full max-h-screen overflow-y-auto">
-            <div className="p-6">
-              <h2 className="text-xl font-semibold mb-4">Manage Roles for {selectedUser?.name}</h2>
-              <div className="space-y-4">
-                {/* Option 1: Assign Multiple Roles at Once */}
-                <form onSubmit={handleAssignMultipleRoles} className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Assign Multiple Roles</label>
-                    <p className="text-xs text-gray-500 mb-2">Select multiple roles for Maker-Checker functionality</p>
-                    <div className="max-h-32 overflow-y-auto border rounded-md p-2 space-y-1">
-                      {roles.map((role) => (
-                        <label key={role.id} className="flex items-center space-x-2 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={formData.selectedRoles.includes(role.id)}
-                            onChange={(e) => {
-                              const roleId = role.id
-                              if (e.target.checked) {
-                                setFormData({ ...formData, selectedRoles: [...formData.selectedRoles, roleId] })
-                              } else {
-                                setFormData({ ...formData, selectedRoles: formData.selectedRoles.filter(id => id !== roleId) })
-                              }
-                            }}
-                            className="rounded text-blue-600"
-                          />
-                          <span className="text-sm">{role.label}</span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                  <button type="submit" className="btn-primary w-full">Assign Selected Roles</button>
-                </form>
-                
-                {selectedUser?.userRoles && selectedUser.userRoles.length > 0 && (
-                  <div className="border-t pt-4">
-                    <h3 className="font-medium mb-3">Current Roles</h3>
-                    <div className="space-y-2">
-                      {selectedUser.userRoles.map((userRole) => (
-                        <div key={userRole.id} className="flex justify-between items-center p-2 bg-gray-50 rounded">
-                          <span>{userRole.role?.label}</span>
-                          <button
-                            onClick={() => handleRemoveRole(selectedUser.id, userRole.roleId)}
-                            className="text-red-600 hover:text-red-900 text-sm"
-                          >
-                            Remove
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-              <button onClick={() => { setShowRoleModal(false); setFormData({ ...formData, selectedRoles: [] }); }} className="btn-secondary w-full mt-4">Close</button>
             </div>
           </div>
         </div>

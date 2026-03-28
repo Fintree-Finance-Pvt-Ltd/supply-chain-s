@@ -652,12 +652,42 @@ router.patch('/documents/:documentId', checkRole(['relationship_manager', 'credi
 /**
  * POST /api/workflows/customers/:customerId/ops-l1
  * Operations L1 verifies customer documentation
+ * FIXED: Allow users with both L1 and L2 roles to access L1 approval
  */
-router.post('/customers/:customerId/ops-l1', checkRole(['operations_team_l1']), async (req: Request, res: Response) => {
+router.post('/customers/:customerId/ops-l1', checkRole(['operations_team_l1', 'operations_team_l2']), async (req: Request, res: Response) => {
   try {
     const { customerId } = req.params;
     const { approved, remarks } = req.body;
     const user = (req as any).user;
+    const userRoles = (user?.roles || []).map((r: any) => r.name.toLowerCase());
+    
+    // Check if user has L1 role
+    const hasL1Role = userRoles.includes('operations_team_l1');
+    
+    if (!hasL1Role) {
+      res.status(403).json({
+        success: false,
+        message: 'You do not have Operations Team L1 role to approve L1 cases',
+      });
+      return;
+    }
+
+    // MAKER-CHECKER VALIDATION: If user has both L1 and L2 roles, they cannot approve their own cases
+    const hasBothRoles = userRoles.includes('operations_team_l1') && userRoles.includes('operations_team_l2');
+    if (hasBothRoles && approved) {
+      const { OperationsCheck } = require('../entities');
+      const existingChecks = await AppDataSource.getRepository(OperationsCheck).find({
+        where: { customerId: parseInt(customerId) }
+      });
+      const userAsCreator = existingChecks.find(c => c.opsUserId === user.id);
+      if (userAsCreator) {
+        res.status(403).json({
+          success: false,
+          message: 'You have both L1 and L2 roles. You already performed operations check for this case as L1, so you cannot approve it at L1.',
+        });
+        return;
+      }
+    }
 
     const workflow = await customerOnboardingService.opsL1Approve(
       parseInt(customerId),
@@ -915,12 +945,41 @@ router.post('/suppliers/:supplierId/submit', checkRole(['relationship_manager'])
 /**
  * POST /api/workflows/suppliers/:supplierId/ops-l1
  * Operations L1 reviews and approves/rejects supplier
+ * FIXED: Allow users with both L1 and L2 roles to access L1 approval
  */
-router.post('/suppliers/:supplierId/ops-l1', checkRole(['operations_team_l1']), async (req: Request, res: Response) => {
+router.post('/suppliers/:supplierId/ops-l1', checkRole(['operations_team_l1', 'operations_team_l2']), async (req: Request, res: Response) => {
   try {
     const { supplierId } = req.params;
     const { approved, remarks } = req.body;
     const user = (req as any).user;
+    const userRoles = (user?.roles || []).map((r: any) => r.name.toLowerCase());
+    
+    // Check if user has L1 role
+    const hasL1Role = userRoles.includes('operations_team_l1');
+    
+    if (!hasL1Role) {
+      res.status(403).json({
+        success: false,
+        message: 'You do not have Operations Team L1 role to approve L1 cases',
+      });
+      return;
+    }
+
+    // MAKER-CHECKER VALIDATION: If user has both L1 and L2 roles, they cannot approve their own cases
+    const hasBothRoles = userRoles.includes('operations_team_l1') && userRoles.includes('operations_team_l2');
+    if (hasBothRoles && approved) {
+      const { Supplier } = require('../entities');
+      const supplier = await AppDataSource.getRepository(Supplier).findOne({
+        where: { id: parseInt(supplierId) }
+      });
+      if (supplier && supplier.createdByUserId === user.id) {
+        res.status(403).json({
+          success: false,
+          message: 'You have both L1 and L2 roles. You already created this supplier as L1, so you cannot approve it at L1.',
+        });
+        return;
+      }
+    }
 
     const workflow = await supplierOnboardingService.opsL1Approve(
       parseInt(supplierId),
@@ -1175,12 +1234,42 @@ router.post('/invoices/:invoiceId/submit', checkRole(['relationship_manager']), 
 /**
  * POST /api/workflows/invoices/:invoiceId/ops-l1
  * Operations L1 performs initial verification
+ * FIXED: Allow users with both L1 and L2 roles to access L1 approval
  */
-router.post('/invoices/:invoiceId/ops-l1', checkRole(['operations_team_l1']), async (req: Request, res: Response) => {
+router.post('/invoices/:invoiceId/ops-l1', checkRole(['operations_team_l1', 'operations_team_l2']), async (req: Request, res: Response) => {
   try {
     const { invoiceId } = req.params;
     const { approved, remarks } = req.body;
     const user = (req as any).user;
+    const userRoles = (user?.roles || []).map((r: any) => r.name.toLowerCase());
+    
+    // Check if user has L1 role
+    const hasL1Role = userRoles.includes('operations_team_l1');
+    
+    if (!hasL1Role) {
+      res.status(403).json({
+        success: false,
+        message: 'You do not have Operations Team L1 role to approve L1 cases',
+      });
+      return;
+    }
+
+    // MAKER-CHECKER VALIDATION: If user has both L1 and L2 roles, they cannot approve their own cases
+    const hasBothRoles = userRoles.includes('operations_team_l1') && userRoles.includes('operations_team_l2');
+    if (hasBothRoles && approved) {
+      // Check if user already verified this invoice
+      const { Invoice } = require('../entities');
+      const invoice = await AppDataSource.getRepository(Invoice).findOne({
+        where: { id: parseInt(invoiceId) }
+      });
+      if (invoice && invoice.createdBy === user.id) {
+        res.status(403).json({
+          success: false,
+          message: 'You have both L1 and L2 roles. You already created this invoice as L1, so you cannot approve it at L1.',
+        });
+        return;
+      }
+    }
 
     const workflow = await invoiceDiscountingService.opsL1Verification(
       parseInt(invoiceId),
@@ -1205,12 +1294,53 @@ router.post('/invoices/:invoiceId/ops-l1', checkRole(['operations_team_l1']), as
 /**
  * POST /api/workflows/invoices/:invoiceId/ops-l2
  * Operations L2 performs validation
+ * FIXED: Allow users with both L1 and L2 roles to access L2 approval
  */
-router.post('/invoices/:invoiceId/ops-l2', checkRole(['operations_team_l2']), async (req: Request, res: Response) => {
+router.post('/invoices/:invoiceId/ops-l2', checkRole(['operations_team_l1', 'operations_team_l2']), async (req: Request, res: Response) => {
   try {
     const { invoiceId } = req.params;
     const { approved, remarks } = req.body;
     const user = (req as any).user;
+    const userRoles = (user?.roles || []).map((r: any) => r.name.toLowerCase());
+    
+    // Check if user has L2 role
+    const hasL2Role = userRoles.includes('operations_team_l2');
+    
+    if (!hasL2Role) {
+      res.status(403).json({
+        success: false,
+        message: 'You do not have Operations Team L2 role to approve L2 cases',
+      });
+      return;
+    }
+
+    // MAKER-CHECKER VALIDATION: If user has both L1 and L2 roles, they cannot approve their own L1 approvals
+    const hasBothRoles = userRoles.includes('operations_team_l1') && userRoles.includes('operations_team_l2');
+    if (hasBothRoles && approved) {
+      // Check if this user already approved this invoice at L1
+      const { Invoice } = require('../entities');
+      const invoice = await AppDataSource.getRepository(Invoice).findOne({
+        where: { id: parseInt(invoiceId) }
+      });
+      // Check history for L1 approval by this user
+      const { CaseStatusHistory } = require('../entities');
+      const historyRepo = AppDataSource.getRepository(CaseStatusHistory);
+      const l1Approval = await historyRepo.findOne({
+        where: { 
+          caseWorkflow: { id: invoice?.caseWorkflowId },
+          status: 'ops_l1_approved'
+        },
+        relations: ['caseWorkflow', 'changedByUser'],
+        order: { createdAt: 'DESC' }
+      });
+      if (l1Approval && l1Approval.changedByUser?.id === user.id) {
+        res.status(403).json({
+          success: false,
+          message: 'You have both L1 and L2 roles. You already approved this invoice at L1, so you cannot approve it at L2.',
+        });
+        return;
+      }
+    }
 
     const workflow = await invoiceDiscountingService.opsL2Verification(
       parseInt(invoiceId),
@@ -1956,12 +2086,33 @@ router.post('/invoices/:invoiceId/disburse', checkRole(['operations_team_l1']), 
 /**
  * POST /api/workflows/invoices/:invoiceId/final-ops-l2
  * OPS L2 final verification
+ * FIXED: Allow users with both L1 and L2 roles to access L2 approval
  */
-router.post('/invoices/:invoiceId/final-ops-l2', checkRole(['operations_team_l2']), async (req, res) => {
+router.post('/invoices/:invoiceId/final-ops-l2', checkRole(['operations_team_l1', 'operations_team_l2']), async (req, res) => {
   try {
     const { invoiceId } = req.params;
     const { approved, remarks } = req.body;
     const user = (req as any).user;
+    const userRoles = (user?.roles || []).map((r: any) => r.name.toLowerCase());
+    
+    // Check if user has L2 role
+    const hasL2Role = userRoles.includes('operations_team_l2');
+    
+    if (!hasL2Role) {
+      res.status(403).json({ success: false, message: 'You do not have Operations Team L2 role to approve final L2 cases' });
+      return;
+    }
+
+    // MAKER-CHECKER VALIDATION
+    const hasBothRoles = userRoles.includes('operations_team_l1') && userRoles.includes('operations_team_l2');
+    if (hasBothRoles && approved) {
+      const { Invoice } = require('../entities');
+      const invoice = await AppDataSource.getRepository(Invoice).findOne({ where: { id: parseInt(invoiceId) } });
+      if (invoice && invoice.createdBy === user.id) {
+        res.status(403).json({ success: false, message: 'You have both L1 and L2 roles. You already created this invoice as L1, so you cannot approve it at L2.' });
+        return;
+      }
+    }
 
     if (approved === undefined) {
       return res.status(400).json({ success: false, message: 'approved field is required' });
