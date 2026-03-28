@@ -248,6 +248,43 @@ export class UserController {
       });
     }
   };
+
+  /**
+   * Assign multiple roles to a user at once
+   * 
+   * Admin can use this to assign both Maker (L1) and Checker (L2) roles
+   * to a single user in one operation.
+   */
+  assignMultipleRoles = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { userId, roleIds } = req.body;
+
+      if (!userId || !roleIds || !Array.isArray(roleIds) || roleIds.length === 0) {
+        res.status(400).json({
+          success: false,
+          message: 'userId and roleIds (array) are required',
+        });
+        return;
+      }
+
+      const userRoles = await this.userService.assignMultipleRoles(
+        userId,
+        roleIds,
+        req.userId
+      );
+
+      res.json({
+        success: true,
+        message: 'Roles assigned successfully',
+        data: userRoles,
+      });
+    } catch (error: any) {
+      res.status(400).json({
+        success: false,
+        message: error.message || 'Failed to assign multiple roles',
+      });
+    }
+  };
 }
 
 

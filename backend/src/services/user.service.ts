@@ -59,10 +59,16 @@ export class UserService {
   }
 
   async getUsers(): Promise<User[]> {
-    return await this.userRepository.find({
-      relations: ['userRoles', 'userRoles.role'],
-      order: { createdAt: 'DESC' },
-    });
+    // Use query builder to only get active user roles
+    const users = await this.userRepository
+      .createQueryBuilder('user')
+      .leftJoinAndSelect('user.userRoles', 'userRole', 'userRole.isActive = :isActive', { isActive: true })
+      .leftJoinAndSelect('userRole.role', 'role')
+      .where('user.isActive = :isActive', { isActive: true })
+      .orderBy('user.createdAt', 'DESC')
+      .getMany();
+
+    return users;
   }
 
   async getUserById(id: number): Promise<User | null> {
@@ -106,7 +112,7 @@ export class UserService {
     const existing = await this.userRoleRepository.findOne({
       where: { userId, roleId },
     });
-
+    console.log(existing)
     if (existing) {
       existing.isActive = true;
       return await this.userRoleRepository.save(existing);
@@ -126,11 +132,71 @@ export class UserService {
     const userRole = await this.userRoleRepository.findOne({
       where: { userId, roleId },
     });
-
+    console.log(userId,roleId);
+    console.log(userRole)
     if (userRole) {
       userRole.isActive = false;
       await this.userRoleRepository.save(userRole);
     }
+  }
+
+  /**
+   * Assign multiple roles to a user at once
+   * 
+   * This is useful for admin to assign both Maker (L1) and Checker (L2) roles
+   * to a user in a single operation.
+   * 
+   * @param userId - The user ID to assign roles to
+   * @param roleIds - Array of role IDs to assign
+   * @param assignedBy - Optional ID of user performing the assignment
+   * @returns Array of created UserRole records
+   */
+  async assignMultipleRoles(
+    userId: number,
+    roleIds: number[],
+    assignedBy?: number
+  ): Promise<UserRole[]> {
+    if (!roleIds || roleIds.length === 0) {
+      throw new Error('At least one role ID must be provided');
+    }
+
+    // Verify user exists
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+    if (!user) {
+      throw new Error('User not found');
+    }
+
+    // Verify all roles exist
+    const roles = await this.roleRepository.findByIds(roleIds);
+    if (roles.length !== roleIds.length) {
+      throw new Error('One or more roles not found');
+    }
+
+    const userRoles: UserRole[] = [];
+
+    // Assign each role
+    for (const roleId of roleIds) {
+      const existing = await this.userRoleRepository.findOne({
+        where: { userId, roleId },
+      });
+
+
+      if (existing) {
+        // Reactivate if already exists
+        existing.isActive = true;
+        userRoles.push(await this.userRoleRepository.save(existing));
+      } else {
+        const userRole = this.userRoleRepository.create({
+          userId,
+          roleId,
+          assignedBy,
+          isActive: true,
+        });
+        userRoles.push(await this.userRoleRepository.save(userRole));
+      }
+    }
+
+    return userRoles;
   }
 }
 

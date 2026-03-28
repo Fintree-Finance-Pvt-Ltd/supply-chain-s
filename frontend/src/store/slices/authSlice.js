@@ -75,10 +75,14 @@ const authSlice = createSlice({
         const decoded = decodeJWT(action.payload.token)
         const role = action.payload.user.role || action.payload.user.defaultRole || decoded?.role
         
+        // Get all roles from user object (multi-role support)
+        const roles = action.payload.user.roles || []
+        
         // Ensure role is set on user object
         const user = {
           ...action.payload.user,
           role: role,
+          roles: roles,
         }
         state.user = user
         state.token = action.payload.token
@@ -86,7 +90,7 @@ const authSlice = createSlice({
         
         // Debug logging (remove in production)
         if (process.env.NODE_ENV === 'development') {
-          console.log('Login successful:', { user, role, decoded })
+          console.log('Login successful:', { user, role, roles, decoded })
         }
       })
       .addCase(login.rejected, (state, action) => {
@@ -102,10 +106,14 @@ const authSlice = createSlice({
       })
       // Check Auth
       .addCase(checkAuth.fulfilled, (state, action) => {
+        // Get all roles from user object (multi-role support)
+        const roles = action.payload.user.roles || []
+        
         // Ensure role is set on user object
         const user = {
           ...action.payload.user,
           role: action.payload.user.role || action.payload.user.defaultRole,
+          roles: roles,
         }
         state.user = user
         state.token = action.payload.token

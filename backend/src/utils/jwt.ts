@@ -16,6 +16,7 @@ export interface JWTPayload {
   userId: number;
   email: string;
   role?: string;
+  roles?: string[]; // For multi-role support
 }
 
 export interface CustomerJWTPayload {

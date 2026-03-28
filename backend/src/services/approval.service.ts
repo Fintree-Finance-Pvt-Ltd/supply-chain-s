@@ -10,6 +10,7 @@ import {
   UserRole,
   Role,
   Customer,
+  Invoice,
 } from '../entities';
 import { APPROVAL_STATUS, APPROVAL_FLOW_TYPES, CASE_STATUS } from '../config/constants';
 import { Repository } from 'typeorm';
@@ -17,6 +18,11 @@ import { Repository } from 'typeorm';
 /**
  * CRITICAL: Approval Flow Engine Service
  * Handles multi-level sequential approval workflows
+ * 
+ * Implements Maker-Checker segregation:
+ * - Maker (L1): Creates/transactions
+ * - Checker (L2): Approves/reviews transactions
+ * - If same user has both roles, they CANNOT approve their own transactions
  */
 export class ApprovalService {
   private approvalFlowRepository: Repository<ApprovalFlow>;
@@ -28,6 +34,7 @@ export class ApprovalService {
   private userRepository: Repository<User>;
   private userRoleRepository: Repository<UserRole>;
   private customerRepository: Repository<Customer>;
+  private invoiceRepository: Repository<Invoice>;
 
   constructor() {
     this.approvalFlowRepository = AppDataSource.getRepository(ApprovalFlow);
@@ -39,6 +46,7 @@ export class ApprovalService {
     this.userRepository = AppDataSource.getRepository(User);
     this.userRoleRepository = AppDataSource.getRepository(UserRole);
     this.customerRepository = AppDataSource.getRepository(Customer);
+    this.invoiceRepository = AppDataSource.getRepository(Invoice);
   }
 
   /**
@@ -120,6 +128,17 @@ export class ApprovalService {
 
   /**
    * Process approval action (approve/reject)
+   * 
+   * CRITICAL: Maker-Checker Validation
+   * This method enforces the segregation of duties by preventing a user
+   * who has both Maker (L1) and Checker (L2) roles from approving their own transactions.
+   * 
+   * @param approvalInstanceId - The ID of the approval instance
+   * @param approverId - The ID of the user attempting to approve
+   * @param action - The action to take (approved/rejected)
+   * @param comments - Optional comments
+   * @returns Updated ApprovalInstance
+   * @throws Error if approver tries to approve their own transaction as both Maker and Checker
    */
   async processApproval(
     approvalInstanceId: number,
@@ -143,6 +162,18 @@ export class ApprovalService {
     if (approvalInstance.currentApproverId !== approverId) {
       throw new Error('You are not the current approver');
     }
+
+    /**
+     * MAKER-CHECKER VALIDATION
+     * 
+     * Check if the current approver has both Maker (L1) and Checker (L2) roles.
+     * If they do, we must verify they are not approving a transaction they created.
+     * 
+     * This prevents:
+     * - Credit Officer (L1) creating a credit sanction, then approving it as Credit Team L2
+     * - Operations L1 doing ops check, then approving as Operations L2
+     */
+    await this.validateMakerCheckerSegregation(approvalInstance, approverId);
 
     // Get current step
     const steps = approvalInstance.approvalFlow.steps.sort(
@@ -218,6 +249,96 @@ export class ApprovalService {
   }
 
   /**
+   * Validates Maker-Checker Segregation
+   * 
+   * This method enforces the segregation of duties by checking:
+   * 1. If the approver has both Maker (L1) and Checker (L2) roles
+   * 2. If so, whether they are trying to approve a transaction they created
+   * 
+   * Supported workflows:
+   * - Credit Sanction: creditOfficerId (Maker) vs approver (Checker)
+   * - Operations Check: opsUserId (Maker) vs approver (Checker)
+   * - Invoice: createdByUserId (Maker) vs approver (Checker)
+   * 
+   * @param approvalInstance - The approval instance being processed
+   * @param approverId - The ID of the user attempting to approve
+   * @throws Error if Maker tries to approve their own transaction
+   */
+  private async validateMakerCheckerSegregation(
+    approvalInstance: ApprovalInstance,
+    approverId: number
+  ): Promise<void> {
+    // Step 1: Check if the approver has both Maker (L1) and Checker (L2) roles
+    const hasBothRoles = await this.userHasBothMakerAndCheckerRoles(approverId);
+    
+    if (!hasBothRoles) {
+      // User doesn't have both roles - normal approval flow, allow
+      return;
+    }
+
+    // Step 2: User has both roles - check if they are approving their own transaction
+    let creatorId: number | null = null;
+
+    // Check Credit Sanction workflow
+    if (approvalInstance.creditSanctionId) {
+      const creditSanction = await this.creditSanctionRepository.findOne({
+        where: { id: approvalInstance.creditSanctionId },
+      });
+      creatorId = creditSanction?.creditOfficerId || null;
+    }
+    
+    // Check Operations workflow
+    if (approvalInstance.operationsCheckId && !creatorId) {
+      const opsCheck = await this.operationsCheckRepository.findOne({
+        where: { id: approvalInstance.operationsCheckId },
+      });
+      creatorId = opsCheck?.opsUserId || null;
+    }
+
+    // Step 3: Block if same user is trying to approve their own transaction
+    if (creatorId && creatorId === approverId) {
+      throw new Error(
+        'Maker cannot approve their own transaction. ' +
+        'You have both Maker (L1) and Checker (L2) roles, which creates a conflict of interest. '
+        + 'Please assign this transaction to another Checker for approval.'
+      );
+    }
+  }
+
+  /**
+   * Check if a user has both Maker (L1) and Checker (L2) roles
+   * 
+   * Maker roles (L1): credit_team_l1, operations_team_l1
+   * Checker roles (L2): credit_team_l2, operations_team_l2
+   * 
+   * @param userId - The user ID to check
+   * @returns true if user has both Maker and Checker roles
+   */
+  private async userHasBothMakerAndCheckerRoles(userId: number): Promise<boolean> {
+    // Get all roles for this user
+    const userRoles = await this.userRoleRepository.find({
+      where: { userId, isActive: true },
+      relations: ['role'],
+    });
+
+    if (!userRoles || userRoles.length === 0) {
+      return false;
+    }
+
+    const roleNames = userRoles.map(ur => ur.role.name.toLowerCase());
+
+    // Define Maker and Checker role patterns
+    const makerRoles = ['credit_team_l1', 'operations_team_l1'];
+    const checkerRoles = ['credit_team_l2', 'operations_team_l2'];
+
+    const hasMakerRole = roleNames.some(name => makerRoles.includes(name));
+    const hasCheckerRole = roleNames.some(name => checkerRoles.includes(name));
+
+    // User has both if they have at least one Maker AND one Checker role
+    return hasMakerRole && hasCheckerRole;
+  }
+
+  /**
    * Update related entity status based on approval
    */
   private async updateRelatedEntityStatus(
@@ -272,25 +393,161 @@ export class ApprovalService {
   }
 
   /**
-   * Get pending approvals for a user
+   * Get pending approvals for a user based on their roles
+   * 
+   * CRITICAL: When user has both Maker (L1) and Checker (L2) roles:
+   * - Show pending cases for ALL roles the user has
+   * - Include cases where user already approved at L1 and needs to approve at L2
+   * - Exclude cases where user is the creator (Maker of that case) when they have Checker role
+   * 
+   * This ensures:
+   * - Credit Officer (L1) sees cases needing L1 approval
+   * - Credit Team L2 sees cases needing L2 approval
+   * - User with both L1+L2 sees BOTH sets of pending cases
+   * - User who approved at L1 can continue to approve at L2
+   * - But NOT cases they themselves created as Maker
    */
   async getPendingApprovalsForUser(userId: number): Promise<ApprovalInstance[]> {
-    return await this.approvalInstanceRepository.find({
+    // Step 1: Get all roles for this user
+    const userRoles = await this.userRoleRepository.find({
+      where: { userId, isActive: true },
+      relations: ['role'],
+    });
+
+    if (!userRoles || userRoles.length === 0) {
+      return [];
+    }
+
+    const roleNames = userRoles.map(ur => ur.role.name.toLowerCase());
+    const userRoleIds = userRoles.map(ur => ur.role.id);
+
+    // Step 2: Define Maker and Checker role patterns
+    const makerRoles = ['credit_team_l1', 'operations_team_l1'];
+    const checkerRoles = ['credit_team_l2', 'operations_team_l2'];
+
+    const hasMakerRole = roleNames.some(name => makerRoles.includes(name));
+    const hasCheckerRole = roleNames.some(name => checkerRoles.includes(name));
+    const hasBothRoles = hasMakerRole && hasCheckerRole;
+
+    // Step 3: Get ALL pending approval instances (not filtered by currentApproverId)
+    // This ensures users can see cases assigned to their role, not just a specific user
+    const pendingApprovals = await this.approvalInstanceRepository.find({
       where: {
-        currentApproverId: userId,
         status: APPROVAL_STATUS.PENDING,
       },
       relations: [
         'approvalFlow',
+        'approvalFlow.steps',
+        'approvalFlow.steps.approverRole',
         'creditSanction',
         'creditSanction.customer',
+        'creditSanction.creditOfficer',
         'operationsCheck',
         'operationsCheck.customer',
+        'operationsCheck.opsUser',
         'actions',
         'actions.approver',
       ],
       order: { createdAt: 'DESC' },
     });
+
+    // Step 4: Filter instances based on user's roles
+    const filteredApprovals = pendingApprovals.filter(instance => {
+      // Sort steps by order to get proper step sequence
+      const steps = (instance.approvalFlow?.steps || []).sort(
+        (a, b) => a.stepOrder - b.stepOrder
+      );
+      
+      const currentStep = steps[instance.currentStep];
+      
+      if (!currentStep || !currentStep.approverRoleId) {
+        return false;
+      }
+
+      // Get the role name of the current step
+      const currentStepRoleName = currentStep.approverRole?.name?.toLowerCase() || '';
+
+      // Check if the current step's role matches any of user's roles
+      const isUserRoleStep = userRoleIds.includes(currentStep.approverRoleId);
+      
+      if (!isUserRoleStep) {
+        return false;
+      }
+
+      // Step 5: If user has both Maker and Checker roles, handle the case properly
+      if (hasBothRoles) {
+        const isCurrentStepMaker = makerRoles.includes(currentStepRoleName);
+        const isCurrentStepChecker = checkerRoles.includes(currentStepRoleName);
+
+        // If current step is L1 (Maker role)
+        if (isCurrentStepMaker) {
+          // Check if user created this case - exclude if they are the Maker
+          if (instance.creditSanctionId && instance.creditSanction) {
+            if (instance.creditSanction.creditOfficerId === userId) {
+              return false; // Exclude - user is the Maker
+            }
+          }
+          if (instance.operationsCheckId && instance.operationsCheck) {
+            if (instance.operationsCheck.opsUserId === userId) {
+              return false; // Exclude - user is the Maker
+            }
+          }
+          return true; // Show - user can approve at L1
+        }
+
+        // If current step is L2 (Checker role)
+        if (isCurrentStepChecker) {
+          // For L2 step - exclude cases where user is the Maker of the original case
+          // (but now they can approve at L2 since they didn't create it)
+          
+          // Check credit sanction - if user created it, they can't approve at L2
+          if (instance.creditSanctionId && instance.creditSanction) {
+            if (instance.creditSanction.creditOfficerId === userId) {
+              return false; // Exclude - can't approve own case at L2
+            }
+          }
+
+          // Check operations check - if user created it, they can't approve at L2
+          if (instance.operationsCheckId && instance.operationsCheck) {
+            if (instance.operationsCheck.opsUserId === userId) {
+              return false; // Exclude - can't approve own case at L2
+            }
+          }
+
+          return true; // Show - user can approve at L2
+        }
+      }
+
+      // Step 6: For users with only one role type
+      // If user has only Maker role and current step is Maker role
+      if (hasMakerRole && !hasCheckerRole) {
+        if (makerRoles.includes(currentStepRoleName)) {
+          // Exclude cases user created as Maker
+          if (instance.creditSanctionId && instance.creditSanction) {
+            if (instance.creditSanction.creditOfficerId === userId) {
+              return false;
+            }
+          }
+          if (instance.operationsCheckId && instance.operationsCheck) {
+            if (instance.operationsCheck.opsUserId === userId) {
+              return false;
+            }
+          }
+          return true;
+        }
+      }
+
+      // If user has only Checker role and current step is Checker role
+      if (hasCheckerRole && !hasMakerRole) {
+        if (checkerRoles.includes(currentStepRoleName)) {
+          return true;
+        }
+      }
+
+      return false;
+    });
+
+    return filteredApprovals;
   }
 
   /**

@@ -414,8 +414,34 @@ const DocumentChecklistUploader = ({
     }
   }
 
+  // Helper to match checklist item with uploaded document, accounting for backend normalization
+  // e.g., 'gst_certificate' in checklist matches 'applicant_gst' in uploaded docs
+  const isDocumentTypeMatch = (docDocumentType, checklistDocumentType) => {
+    if (docDocumentType === checklistDocumentType) return true;
+    
+    // Document type mappings for normalization
+    const documentTypeMappings = {
+      'gst_certificate': 'applicant_gst',
+      'pan': 'applicant_pan',
+      'msme_certificate': 'msme_certificate',
+      'office_electricity_bill': 'office_electricity_bill',
+      'applicant_pan': 'applicant_pan',
+      'applicant_gst': 'applicant_gst',
+      'audited_financials': 'audited_financials',
+      'gstr_3b': 'gstr_3b',
+      'bank_statement': 'bank_statement',
+      'obligation_sheet': 'obligation_sheet',
+      'residence_electricity_bill': 'residence_electricity_bill',
+      'sales_purchase': 'sales_purchase',
+    };
+    
+    // Check if the uploaded doc type matches the expected type after normalization
+    return documentTypeMappings[docDocumentType] === checklistDocumentType ||
+           documentTypeMappings[checklistDocumentType] === docDocumentType;
+  };
+
   const isUploaded = (type) =>
-    uploadedDocuments.some(d => d.documentType === type)
+    uploadedDocuments.some(d => isDocumentTypeMatch(d.documentType, type))
 
   return (
     <div className="space-y-4">
@@ -430,7 +456,7 @@ const DocumentChecklistUploader = ({
       </div>
 
       {checklist.map((item) => {
-        const docs = uploadedDocuments.filter(d => d.documentType === item.documentType)
+        const docs = uploadedDocuments.filter(d => isDocumentTypeMatch(d.documentType, item.documentType))
         const uploadingNow = uploading[item.key]
 
         return (
@@ -568,7 +594,7 @@ const DocumentChecklistUploader = ({
           Mandatory Pending: {
             checklist.filter(i =>
               i.mandatory &&
-              !isUploaded(i.documentType)
+              !uploadedDocuments.some(d => isDocumentTypeMatch(d.documentType, i.documentType))
             ).length
           }
         </p>

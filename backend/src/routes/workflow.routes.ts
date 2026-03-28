@@ -657,17 +657,54 @@ router.get('/customers/dashboard/rm', checkRole(['relationship_manager']), async
 /**
  * GET /api/workflows/customers/dashboard/credit/:level
  * Credit Team Dashboard
+ * Modified: Now supports users with both L1 and L2 roles
  */
 router.get('/customers/dashboard/credit/:level', checkRole(['credit_team_l1', 'credit_team_l2']), async (req: Request, res: Response) => {
   try {
     const { level } = req.params;
-    const roleParam = level === '1' ? 'CREDIT_TEAM_L1' : 'CREDIT_TEAM_L2';
-    const dashboard = await customerOnboardingService.getCreditTeamPending(roleParam, (req as any).user?.id);
+    const user = (req as any).user;
+    
+    // Handle 'both' level request - user has both L1 and L2 roles
+    if (level === 'both') {
+      // Get all user roles
+      const userRoles = user?.roles?.map((r: any) => r.name.toLowerCase()) || [];
+      const hasL1Role = userRoles.includes('credit_team_l1');
+      const hasL2Role = userRoles.includes('credit_team_l2');
+      
+      if (hasL1Role && hasL2Role) {
+        const l1Dashboard = await customerOnboardingService.getCreditTeamPending('CREDIT_TEAM_L1', user?.id);
+        const l2Dashboard = await customerOnboardingService.getCreditTeamPending('CREDIT_TEAM_L2', user?.id);
+        
+        // Combine pending from both L1 and L2
+        const combinedPending = [...(l1Dashboard.pending || []), ...(l2Dashboard.pending || [])];
+        
+        // Get handled cases from both
+        const combinedHandled = [...(l1Dashboard.handled || []), ...(l2Dashboard.handled || [])];
+        
+        // Remove duplicates based on workflow ID
+        const uniquePending = Array.from(new Map(combinedPending.map(item => [item.id, item])).values());
+        const uniqueHandled = Array.from(new Map(combinedHandled.map(item => [item.id, item])).values());
+        
+        res.json({
+          success: true,
+          data: { pending: uniquePending, handled: uniqueHandled },
+        });
+      } else {
+        // Fallback to single role
+        const roleParam = userRoles.includes('credit_team_l2') ? 'CREDIT_TEAM_L2' : 'CREDIT_TEAM_L1';
+        const dashboard = await customerOnboardingService.getCreditTeamPending(roleParam, user?.id);
+        res.json({ success: true, data: dashboard });
+      }
+    } else {
+      // Standard single level request
+      const roleParam = level === '2' ? 'CREDIT_TEAM_L2' : 'CREDIT_TEAM_L1';
+      const dashboard = await customerOnboardingService.getCreditTeamPending(roleParam, user?.id);
 
-    res.json({
-      success: true,
-      data: dashboard,
-    });
+      res.json({
+        success: true,
+        data: dashboard,
+      });
+    }
   } catch (error: any) {
     res.status(404).json({
       success: false,

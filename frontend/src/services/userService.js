@@ -47,6 +47,17 @@ export const userService = {
       throw new Error(message)
     }
   },
+  assignMultipleRoles: async (userId, roleIds) => {
+    try {
+      const response = await api.post(API_ENDPOINTS.ASSIGN_MULTIPLE_ROLES, { userId, roleIds })
+      return {
+        data: response.data.success ? response.data.data : null
+      }
+    } catch (error) {
+      const message = error.response?.data?.message || error.message || 'Failed to assign multiple roles'
+      throw new Error(message)
+    }
+  },
   removeRole: async (userId, roleId) => {
     try {
       const response = await api.post(API_ENDPOINTS.REMOVE_ROLE, { userId, roleId })

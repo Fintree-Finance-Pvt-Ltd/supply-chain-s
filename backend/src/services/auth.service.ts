@@ -35,22 +35,25 @@ console.log('USER FOUND:',user);
     });
 
     const primaryRole = userRoles[0]?.role.name || user.defaultRole || '';
+    const allRoles = userRoles.map(ur => ur.role);
 
     // Generate token
     const token = generateToken({
       userId: user.id,
       email: user.email,
       role: primaryRole,
+      roles: allRoles.map(r => r.name), // Include all roles in token
     });
 
     // Remove password from response
     const { password: _, ...userWithoutPassword } = user;
 
-    // Add role to user object for frontend
+    // Add role to user object for frontend - include all roles
     const userWithRole = {
       ...userWithoutPassword,
-      role: primaryRole, // Add role to user object
-    } as User & { role: string };
+      role: primaryRole, // Primary role for backward compatibility
+      roles: allRoles,   // All roles for multi-role support
+    } as User & { role: string; roles: any[] };
 
     return {
       user: userWithRole,

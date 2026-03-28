@@ -15,6 +15,7 @@ export const API_ENDPOINTS = {
   UPDATE_USER: (id) => `/users/${id}`,
   DELETE_USER: (id) => `/users/${id}`,
   ASSIGN_ROLE: '/users/assign-role',
+  ASSIGN_MULTIPLE_ROLES: '/users/assign-multiple-roles',
 
   // Roles (Admin)
   ROLES: '/roles',

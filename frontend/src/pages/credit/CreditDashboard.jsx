@@ -14,9 +14,30 @@ const CreditDashboard = () => {
   const { dashboardData, isLoading } = useSelector((state) => state.cases)
 
   useEffect(() => {
-    const userRole = (user?.role || '').toLowerCase()
-    const level = userRole === 'credit_team_l2' ? '2' : '1'
-    dispatch(fetchWorkflowDashboard({ role: 'credit', level }))
+    const loadDashboard = async () => {
+      try {
+        // Get user's roles from auth state
+        const userRoles = (user?.roles || []).map(r => (r.name || '').toLowerCase())
+        const hasL1Role = userRoles.includes('credit_team_l1')
+        const hasL2Role = userRoles.includes('credit_team_l2')
+        
+        // If user has both L1 and L2 roles, fetch both levels
+        if (hasL1Role && hasL2Role) {
+          dispatch(fetchWorkflowDashboard({ role: 'credit', level: 'both' }))
+        } else {
+          // Single role - use the role from user or default based on level param
+          const userRole = (user?.role || '').toLowerCase()
+          const level = userRole === 'credit_team_l2' ? '2' : '1'
+          dispatch(fetchWorkflowDashboard({ role: 'credit', level }))
+        }
+      } catch (error) {
+        console.error('Error loading dashboard:', error)
+      }
+    }
+    
+    if (user) {
+      loadDashboard()
+    }
   }, [dispatch, user])
 
   const columns = [

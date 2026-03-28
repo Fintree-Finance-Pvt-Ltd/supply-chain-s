@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
-import { fetchUsers, createUser, assignRole, removeRole, updateUser, deleteUser, toggleUserStatus } from '../../store/slices/userSlice'
+import { fetchUsers, createUser, assignRole, assignMultipleRoles, removeRole, updateUser, deleteUser, toggleUserStatus } from '../../store/slices/userSlice'
 import { fetchRoles as fetchRolesFromRoleSlice } from '../../store/slices/roleSlice'
 import DataTable from '../../components/DataTable'
 import LoadingSpinner from '../../components/LoadingSpinner'
@@ -21,11 +21,13 @@ const UserManagement = () => {
     password: '',
     mobile: '',
     defaultRole: '',
+    selectedRoles: [],
   })
   const [editFormData, setEditFormData] = useState({
     name: '',
     email: '',
     mobile: '',
+    selectedRoles: [],
   })
 
   useEffect(() => {
@@ -38,7 +40,7 @@ const UserManagement = () => {
     try {
       await dispatch(createUser(formData)).unwrap()
       setShowCreateModal(false)
-      setFormData({ name: '', email: '', password: '', mobile: '', defaultRole: '' })
+      setFormData({ name: '', email: '', password: '', mobile: '', defaultRole: '', selectedRoles: [] })
       dispatch(fetchUsers())
       toast.success('User created successfully')
     } catch (error) {
@@ -46,15 +48,56 @@ const UserManagement = () => {
     }
   }
 
-  const handleEditUser = async (e) => {
+  const handleAssignMultipleRoles = async (e) => {
     e.preventDefault()
     try {
-      await dispatch(updateUser({ id: selectedUser.id, data: editFormData })).unwrap()
-      setShowEditModal(false)
+      await dispatch(assignMultipleRoles({ userId: selectedUser.id, roleIds: formData.selectedRoles })).unwrap()
+      setShowRoleModal(false)
+      setFormData({ ...formData, selectedRoles: [] })
       dispatch(fetchUsers())
-      toast.success('User updated successfully')
+      toast.success('Roles assigned successfully')
     } catch (error) {
-      toast.error('Failed to update user: ' + error)
+      toast.error('Failed to assign roles: ' + error)
+    }
+  }
+
+  const handleEditUser = async (e) => {
+    e.preventDefault()
+    
+    if (!selectedUser || !selectedUser.id) {
+      toast.error('User not selected')
+      return
+    }
+    
+    try {
+      // First, update user basic info (exclude selectedRoles from the data)
+      const { selectedRoles, ...userData } = editFormData
+      await dispatch(updateUser({ id: selectedUser.id, data: userData })).unwrap()
+      
+      // Then handle role changes - compare current roles with selected roles
+      const currentRoleIds = selectedUser.userRoles?.map(ur => ur.roleId) || []
+      const newRoleIds = editFormData.selectedRoles || []
+      
+      // Roles to add (in new but not in current)
+      const rolesToAdd = newRoleIds.filter(roleId => !currentRoleIds.includes(roleId))
+      // Roles to remove (in current but not in new)
+      const rolesToRemove = currentRoleIds.filter(roleId => !newRoleIds.includes(roleId))
+      
+      // Add new roles
+      for (const roleId of rolesToAdd) {
+        await dispatch(assignRole({ userId: selectedUser.id, roleId })).unwrap()
+      }
+      
+      // Remove old roles
+      for (const roleId of rolesToRemove) {
+        await dispatch(removeRole({ userId: selectedUser.id, roleId })).unwrap()
+      }
+      
+      handleCloseEditModal()
+      dispatch(fetchUsers())
+      toast.success('User and roles updated successfully')
+    } catch (error) {
+      toast.error('Failed to update user: ' + (error.message || error))
     }
   }
 
@@ -107,12 +150,20 @@ const UserManagement = () => {
 
   const handleEditClick = (user) => {
     setSelectedUser(user)
+    // Extract current role IDs from user's roles
+    const currentRoleIds = user.userRoles?.map(ur => ur.roleId) || []
     setEditFormData({
       name: user.name,
       email: user.email,
       mobile: user.mobile || '',
+      selectedRoles: currentRoleIds,
     })
     setShowEditModal(true)
+  }
+
+  const handleCloseEditModal = () => {
+    setShowEditModal(false)
+    setEditFormData({ name: '', email: '', mobile: '', selectedRoles: [] })
   }
 
   const handleRoleClick = (user) => {
@@ -273,6 +324,31 @@ const UserManagement = () => {
                   ))}
                 </select>
               </div>
+              {/* Multiple Roles Selection for Maker-Checker */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Assign Multiple Roles (Optional)</label>
+                <p className="text-xs text-gray-500 mb-2">Select multiple roles to enable Maker-Checker functionality</p>
+                <div className="max-h-40 overflow-y-auto border rounded-md p-2 space-y-1">
+                  {roles.map((role) => (
+                    <label key={role.id} className="flex items-center space-x-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={formData.selectedRoles.includes(role.id)}
+                        onChange={(e) => {
+                          const roleId = role.id
+                          if (e.target.checked) {
+                            setFormData({ ...formData, selectedRoles: [...formData.selectedRoles, roleId] })
+                          } else {
+                            setFormData({ ...formData, selectedRoles: formData.selectedRoles.filter(id => id !== roleId) })
+                          }
+                        }}
+                        className="rounded text-blue-600"
+                      />
+                      <span className="text-sm">{role.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
               <div className="flex gap-2 pt-4">
                 <button type="submit" className="btn-primary flex-1">Create</button>
                 <button type="button" onClick={() => setShowCreateModal(false)} className="btn-secondary flex-1">Cancel</button>
@@ -321,7 +397,32 @@ const UserManagement = () => {
                 </div>
                 <div className="flex gap-2 pt-4">
                   <button type="submit" className="btn-primary flex-1">Save</button>
-                  <button type="button" onClick={() => setShowEditModal(false)} className="btn-secondary flex-1">Cancel</button>
+                  <button type="button" onClick={handleCloseEditModal} className="btn-secondary flex-1">Cancel</button>
+                </div>
+                {/* Edit User Roles Section */}
+                <div className="border-t pt-4 mt-4">
+                  <h3 className="font-medium mb-3">Edit Roles</h3>
+                  <p className="text-xs text-gray-500 mb-2">Check/uncheck roles to update. Save to apply changes.</p>
+                  <div className="max-h-32 overflow-y-auto border rounded-md p-2 space-y-1">
+                    {roles.map((role) => (
+                      <label key={role.id} className="flex items-center space-x-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={editFormData.selectedRoles.includes(role.id)}
+                          onChange={(e) => {
+                            const roleId = role.id;
+                            if (e.target.checked) {
+                              setEditFormData({ ...editFormData, selectedRoles: [...editFormData.selectedRoles, roleId] });
+                            } else {
+                              setEditFormData({ ...editFormData, selectedRoles: editFormData.selectedRoles.filter(id => id !== roleId) });
+                            }
+                          }}
+                          className="rounded text-blue-600"
+                        />
+                        <span className="text-sm">{role.label}</span>
+                      </label>
+                    ))}
+                  </div>
                 </div>
               </form>
             </div>
@@ -336,17 +437,33 @@ const UserManagement = () => {
             <div className="p-6">
               <h2 className="text-xl font-semibold mb-4">Manage Roles for {selectedUser?.name}</h2>
               <div className="space-y-4">
-                <form onSubmit={handleAssignRole} className="space-y-4">
+                {/* Option 1: Assign Multiple Roles at Once */}
+                <form onSubmit={handleAssignMultipleRoles} className="space-y-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Assign Role</label>
-                    <select name="roleId" className="input-field" defaultValue="">
-                      <option value="">Select a role</option>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Assign Multiple Roles</label>
+                    <p className="text-xs text-gray-500 mb-2">Select multiple roles for Maker-Checker functionality</p>
+                    <div className="max-h-32 overflow-y-auto border rounded-md p-2 space-y-1">
                       {roles.map((role) => (
-                        <option key={role.id} value={role.id}>{role.label}</option>
+                        <label key={role.id} className="flex items-center space-x-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={formData.selectedRoles.includes(role.id)}
+                            onChange={(e) => {
+                              const roleId = role.id
+                              if (e.target.checked) {
+                                setFormData({ ...formData, selectedRoles: [...formData.selectedRoles, roleId] })
+                              } else {
+                                setFormData({ ...formData, selectedRoles: formData.selectedRoles.filter(id => id !== roleId) })
+                              }
+                            }}
+                            className="rounded text-blue-600"
+                          />
+                          <span className="text-sm">{role.label}</span>
+                        </label>
                       ))}
-                    </select>
+                    </div>
                   </div>
-                  <button type="submit" className="btn-primary w-full">Assign Role</button>
+                  <button type="submit" className="btn-primary w-full">Assign Selected Roles</button>
                 </form>
                 
                 {selectedUser?.userRoles && selectedUser.userRoles.length > 0 && (
@@ -368,7 +485,7 @@ const UserManagement = () => {
                   </div>
                 )}
               </div>
-              <button onClick={() => setShowRoleModal(false)} className="btn-secondary w-full mt-4">Close</button>
+              <button onClick={() => { setShowRoleModal(false); setFormData({ ...formData, selectedRoles: [] }); }} className="btn-secondary w-full mt-4">Close</button>
             </div>
           </div>
         </div>

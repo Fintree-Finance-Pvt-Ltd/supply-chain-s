@@ -50,6 +50,18 @@ export const assignRole = createAsyncThunk(
   }
 )
 
+export const assignMultipleRoles = createAsyncThunk(
+  'users/assignMultipleRoles',
+  async ({ userId, roleIds }, { rejectWithValue }) => {
+    try {
+      const response = await userService.assignMultipleRoles(userId, roleIds)
+      return response.data
+    } catch (error) {
+      return rejectWithValue(error.response?.data?.message || 'Failed to assign multiple roles')
+    }
+  }
+)
+
 export const removeRole = createAsyncThunk(
   'users/removeRole',
   async ({ userId, roleId }, { rejectWithValue }) => {
@@ -146,29 +158,49 @@ const userSlice = createSlice({
       })
       // Assign Role
       .addCase(assignRole.fulfilled, (state, action) => {
-        const index = state.users.findIndex(u => u.id === action.payload.id)
-        if (index !== -1) {
-          state.users[index] = action.payload
+        if (action.payload) {
+          const index = state.users.findIndex(u => u.id === action.payload.id)
+          if (index !== -1) {
+            state.users[index] = action.payload
+          }
+        }
+      })
+      // Assign Multiple Roles
+      .addCase(assignMultipleRoles.fulfilled, (state, action) => {
+        if (action.payload && action.payload.length > 0) {
+          const userId = action.payload[0]?.userId
+          const index = state.users.findIndex(u => u.id === userId)
+          if (index !== -1) {
+            state.users[index] = { ...state.users[index], userRoles: action.payload }
+          }
         }
       })
       // Remove Role
       .addCase(removeRole.fulfilled, (state, action) => {
-        const index = state.users.findIndex(u => u.id === action.payload.id)
-        if (index !== -1) state.users[index] = action.payload
+        if (action.payload) {
+          const index = state.users.findIndex(u => u.id === action.payload.id)
+          if (index !== -1) state.users[index] = action.payload
+        }
       })
       // Update User
       .addCase(updateUser.fulfilled, (state, action) => {
-        const index = state.users.findIndex(u => u.id === action.payload.id)
-        if (index !== -1) state.users[index] = action.payload
+        if (action.payload) {
+          const index = state.users.findIndex(u => u.id === action.payload.id)
+          if (index !== -1) state.users[index] = action.payload
+        }
       })
       // Delete User
       .addCase(deleteUser.fulfilled, (state, action) => {
-        state.users = state.users.filter(u => u.id !== action.payload.id)
+        if (action.payload) {
+          state.users = state.users.filter(u => u.id !== action.payload.id)
+        }
       })
       // Toggle Status
       .addCase(toggleUserStatus.fulfilled, (state, action) => {
-        const index = state.users.findIndex(u => u.id === action.payload.id)
-        if (index !== -1) state.users[index] = action.payload
+        if (action.payload) {
+          const index = state.users.findIndex(u => u.id === action.payload.id)
+          if (index !== -1) state.users[index] = action.payload
+        }
       })
   },
 })
