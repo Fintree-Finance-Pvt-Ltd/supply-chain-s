@@ -68,14 +68,20 @@ const CreditCaseDetail = () => {
   // Get user role (lowercase for comparison)
   const userRole = (user?.role || '').toLowerCase()
   
+  // Get all user roles as an array (for users with multiple roles)
+  const userRoles = (user?.roles || []).map(r => (r.name || r || '').toLowerCase())
+  const hasL1Role = userRoles.includes('credit_team_l1')
+  const hasL2Role = userRoles.includes('credit_team_l2')
+  
   // Fetch partners from API - role-based logic
   // credit_l1: fetch from partners table (for new sanctions)
+  // users with both L1 and L2: fetch partners (L1 functionality)
   // other roles: DO NOT fetch from partners table - use partners from sanction records
   useEffect(() => {
-    // EARLY RETURN: Only credit_team_l1 should fetch from partners table
-    // All other roles (ceo, md, credit_l2, etc.) should get partners from sanction records
-    if (userRole !== 'credit_team_l1') {
-      console.log('fetchPartners: Skipping - userRole is', userRole, '(not credit_team_l1)')
+    // EARLY RETURN: Only credit_team_l1 (or both L1+L2) should fetch from partners table
+    // All other roles (ceo, md, credit_l2 only, etc.) should get partners from sanction records
+    if (!hasL1Role) {
+      console.log('fetchPartners: Skipping - user has no L1 role, userRoles:', userRoles)
       setPartnersLoading(false)
       return
     }
@@ -111,7 +117,8 @@ const CreditCaseDetail = () => {
       }
       
       // For credit_l1, wait for partners to load first (they come from partners table)
-      if (userRole === 'credit_team_l1' && partnersLoading) {
+      // Users with both L1+L2 roles should also wait for partners (they have L1 functionality)
+      if (hasL1Role && partnersLoading) {
         console.log('fetchSanctions: credit_l1 waiting for partners to load')
         return
       }
@@ -121,11 +128,12 @@ const CreditCaseDetail = () => {
       // But let's fetch anyway to get the latest sanction data
       
       try {
-        console.log('fetchSanctions: Calling API with id:', id, 'userRole:', userRole)
+        console.log('fetchSanctions: Calling API with id:', id, 'userRoles:', userRoles)
         
-        // For non-CREDIT_L1 roles, use the dedicated sanctions API
+        // For CREDIT_L1 roles (including users with both L1+L2), use the standard sanctions API
+        // For non-L1 roles (L2 only, CEO, MD), use the dedicated sanctions API
         // This API returns all sanctions without filtering by partner active status
-        const apiEndpoint = userRole === 'credit_team_l1' 
+        const apiEndpoint = hasL1Role 
           ? `/sanctions/${id}` 
           : `/sanctions/customer/${id}`
         
@@ -155,8 +163,9 @@ const CreditCaseDetail = () => {
           console.log('Extracted partners:', existingPartners)
           
           // For credit_team_l1: merge partners from partners table with partners from sanctions
+          // Users with both L1+L2 roles should also merge (they have L1 functionality)
           // For other roles: use partners from sanctions only
-          if (userRole === 'credit_team_l1') {
+          if (hasL1Role) {
             // Use functional update to get the current partners state from partners table
             setPartners(currentPartners => {
               // Merge: add sanction partners that don't exist in the current partners list
@@ -369,37 +378,42 @@ const CreditCaseDetail = () => {
   
   const isEditable = () => {
     if (!currentCase || !user) return false
-    const role = (user.role || '').toLowerCase()
     const status = currentCase.status
 
     // For Credit L1 - can edit sanction amount in submitted or credit_l1_review status
-    if (role === 'credit_team_l1' && (status === 'submitted' || status === 'credit_l1_review')) return true;
+    if (hasL1Role && (status === 'submitted' || status === 'credit_l1_review')) return true;
     // For Credit L2 - can edit sanction amount in credit_l1_approved or credit_l2_review status
     // Also allow credit_l2 to edit in other statuses for modification
-    if (role === 'credit_team_l2') return true;
+    if (hasL2Role) return true;
     // For CEO - can edit all sanction terms
-    if (role === 'ceo') return true;
+    if (userRoles.includes('ceo')) return true;
     // For RM - can edit in draft status
-    if (role === 'relationship_manager' && (status === 'draft' || status === 'submitted')) return true;
+    if (userRoles.includes('relationship_manager') && (status === 'draft' || status === 'submitted')) return true;
     // For MD - can edit in md_pending_terms status
-    if (role === 'md' && (status === 'ceo_approved' || status === 'md_pending_terms' || status === 'md_review')) return true;
+    if (userRoles.includes('md') && (status === 'ceo_approved' || status === 'md_pending_terms' || status === 'md_review')) return true;
     
     return false
   }
 
   // For backward compatibility - determine if user can take any action on the case
+  // Updated to support users with both L1 and L2 roles
   const canTakeAction = () => {
     if (!currentCase || !user) return false
-    const role = (user.role || '').toLowerCase()
     const status = currentCase.status
 
-    if (role === 'credit_team_l1' && (status === 'submitted' || status === 'credit_l1_review')) return true
-    if (role === 'credit_team_l2' && (status === 'credit_l1_approved' || status === 'credit_l2_review')) return true
-    if (role === 'ceo' && (status === 'credit_l2_approved' || status === 'ceo_review')) return true
-    if (role === 'md' && (status === 'ceo_approved' || status === 'md_pending_terms' || status === 'md_review')) return true
-    if (role === 'operations_team_l1' && (status === 'md_approved' || status === 'ops_l1_review')) return true
-    if (role === 'operations_head' && (status === 'ops_l1_approved' || status === 'ops_l2_review')) return true
-    if (role === 'relationship_manager' && (status === 'draft' || status === 'rejected')) return true
+    // Check if user has L1 role - can act on submitted status cases
+    if (hasL1Role && (status === 'submitted' || status === 'credit_l1_review')) return true
+    // Check if user has L2 role - can act on credit_l1_approved status cases
+    if (hasL2Role && (status === 'credit_l1_approved' || status === 'credit_l2_review')) return true
+    // CEO role
+    if (userRoles.includes('ceo') && (status === 'credit_l2_approved' || status === 'ceo_review')) return true
+    // MD role
+    if (userRoles.includes('md') && (status === 'ceo_approved' || status === 'md_pending_terms' || status === 'md_review')) return true
+    // Operations roles
+    if (userRoles.includes('operations_team_l1') && (status === 'md_approved' || status === 'ops_l1_review')) return true
+    if (userRoles.includes('operations_head') && (status === 'ops_l1_approved' || status === 'ops_l2_review')) return true
+    // RM role
+    if (userRoles.includes('relationship_manager') && (status === 'draft' || status === 'rejected')) return true
 
     return false
   }
@@ -473,17 +487,32 @@ const CreditCaseDetail = () => {
         partnerSanctions: sanctionsArray,
       }
 
-      if (userRole === 'credit_team_l2') {
-        await workflowService.approveCreditL2(id, true, remarks, {
-          partnerSanctions: sanctionsArray,
-        })
-      } else if (userRole === 'credit_team_l1') {
-        await workflowService.approveCreditL1(id, true, remarks, sanctionPayload)
-      } else if (userRole === 'ceo') {
+      // Determine which approval endpoint to call based on case status and user roles
+      // If case is in submitted status and user has L1 role -> call L1 approval
+      // If case is in credit_l1_approved status and user has L2 role -> call L2 approval
+      const caseStatus = currentCase.status
+      
+      if (caseStatus === 'submitted' || caseStatus === 'credit_l1_review') {
+        // Case is at L1 stage - need L1 approval
+        if (hasL1Role) {
+          await workflowService.approveCreditL1(id, true, remarks, sanctionPayload)
+        } else {
+          throw new Error('You do not have L1 role to approve this case')
+        }
+      } else if (caseStatus === 'credit_l1_approved' || caseStatus === 'credit_l2_review') {
+        // Case is at L2 stage - need L2 approval
+        if (hasL2Role) {
+          await workflowService.approveCreditL2(id, true, remarks, {
+            partnerSanctions: sanctionsArray,
+          })
+        } else {
+          throw new Error('You do not have L2 role to approve this case')
+        }
+      } else if (userRoles.includes('ceo')) {
         await workflowService.approveCEO(id, true, remarks, {
           partnerSanctions: sanctionsArray,
         })
-      } else if (userRole === 'md') {
+      } else if (userRoles.includes('md')) {
         const mdPartner = PARTNERS[0]?.code || 'FFPL';
         await workflowService.approveMD(id, true, remarks, partnerSanctions[mdPartner])
       } else {
@@ -608,7 +637,7 @@ const CreditCaseDetail = () => {
           <div className="card">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-semibold text-gray-900">Uploaded Documents</h2>
-              {!readOnly && (user?.role === 'credit_team_l1') && (
+              {!readOnly && hasL1Role && (
                 <DocumentUploader
                   onUpload={handleUpload}
                   documentTypes={[
@@ -635,7 +664,7 @@ const CreditCaseDetail = () => {
                               <span className="text-[9px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded-full font-bold">APPLICANT</span>
                             )}
                           </div>
-                          {!readOnly && (user?.role === 'credit_team_l1' || user?.role === 'credit_team_l2') ? (
+                          {!readOnly && (hasL1Role || hasL2Role) ? (
                             <select
                               value={doc.documentType}
                               onChange={(e) => handleUpdateDocType(doc.id, e.target.value)}
@@ -702,7 +731,7 @@ const CreditCaseDetail = () => {
                       </div>
                     </div>
 
-                    {!readOnly && (user?.role === 'credit_team_l1' || user?.role === 'credit_team_l2') && doc.status === 'pending' && (
+                    {!readOnly && (hasL1Role || hasL2Role) && doc.status === 'pending' && (
                       <div className="flex space-x-2 mt-4">
                         <button
                           onClick={() => handleVerifyDocument(doc.id, 'approved')}
@@ -748,11 +777,11 @@ const CreditCaseDetail = () => {
           <div className="card">
             <h2 className="text-xl font-semibold text-gray-900 mb-4">Sanction Details</h2>
             
-            {(user?.role === 'credit_team_l1' || user?.role === 'credit_team_l2' || user?.role === 'ceo') && (
+            {(hasL1Role || hasL2Role || userRoles.includes('ceo')) && (
               <div className="mb-4">
                 <p className="text-sm text-gray-600 mb-2">
-                  {user?.role === 'credit_team_l1' ? 'Enter sanction limits for each partner:' : 
-                   user?.role === 'credit_team_l2' ? 'View/modify sanction limits for each partner:' : 
+                  {hasL1Role ? 'Enter sanction limits for each partner:' : 
+                   hasL2Role ? 'View/modify sanction limits for each partner:' : 
                    'View/modify sanction limits for each partner:'}
                 </p>
               </div>

@@ -163,18 +163,33 @@ router.patch('/customers/:customerId/bank-details', checkRole(['relationship_man
  * CEO can edit tenure and interestRate.
  * Only MD can edit all fields.
  */
-router.post('/customers/:customerId/credit-l1', checkRole(['credit_team_l1']), async (req: Request, res: Response) => {
+router.post('/customers/:customerId/credit-l1', checkRole(['credit_team_l1', 'credit_team_l2']), async (req: Request, res: Response) => {
   try {
     const { customerId } = req.params;
     const { approved, remarks, partnerSanctions } = req.body;
     const user = (req as any).user;
-    const userRole = (user?.roles?.[0]?.name || '').toLowerCase();
+    const userRoles = (user?.roles || []).map((r: any) => r.name.toLowerCase());
+    const userRole = userRoles[0]?.toLowerCase() || '';
+    
+    // Check if user has L1 role - if they have both L1 and L2, they should have L1 access
+    // If they only have L2, deny access to L1 approval
+    const hasL1Role = userRoles.includes('credit_team_l1');
+    
+    // Allow access if user has L1 role (either alone or with L2)
+    if (!hasL1Role) {
+      res.status(403).json({
+        success: false,
+        message: 'You do not have Credit Team L1 role to approve L1 cases',
+      });
+      return;
+    }
 
     // Check if user is trying to modify sanction data
     const isModifyingSanctions = approved && partnerSanctions && Array.isArray(partnerSanctions) && partnerSanctions.length > 0;
     
     // Credit team can only modify sanctionAmount (not tenure, ROI, etc.)
-    if (isModifyingSanctions && userRole === 'credit_team_l1') {
+    // Check if user has L1 role
+    if (isModifyingSanctions && userRoles.includes('credit_team_l1')) {
       // Validate that credit team only sends sanctionAmount
       for (const ps of partnerSanctions) {
         if (ps.tenure || ps.interestRate || ps.penalCharges || ps.processingFees || ps.conditions) {
@@ -197,6 +212,26 @@ router.post('/customers/:customerId/credit-l1', checkRole(['credit_team_l1']), a
         }
       }
       sanctionData = { partnerSanctions };
+    }
+
+    // MAKER-CHECKER VALIDATION: If user has both L1 and L2 roles, they cannot approve their own cases
+    // This prevents conflict of interest - a user shouldn't review their own work
+    const hasBothRoles = userRoles.includes('credit_team_l1') && userRoles.includes('credit_team_l2');
+    if (hasBothRoles && approved) {
+      // Check if user already created any sanctions for this customer as L1
+      // We'll check the sanction history to see if this user was the creator
+      const { CreditSanction } = require('../entities');
+      const existingSanctions = await AppDataSource.getRepository(CreditSanction).find({
+        where: { customerId: parseInt(customerId) }
+      });
+      const userAsCreator = existingSanctions.find(s => s.creditOfficerId === user.id);
+      if (userAsCreator) {
+        res.status(403).json({
+          success: false,
+          message: 'You have both L1 and L2 roles. You already created sanctions for this case as L1, so you cannot approve it at L1. Please assign this case to another L1 reviewer.',
+        });
+        return;
+      }
     }
 
     const workflow = await customerOnboardingService.creditL1Approve(
@@ -261,12 +296,25 @@ router.get('/customers/:customerId/sanction-limits', async (req: Request, res: R
  * CEO can edit tenure and interestRate.
  * Only MD can edit all fields.
  */
-router.post('/customers/:customerId/credit-l2', checkRole(['credit_team_l2']), async (req: Request, res: Response) => {
+router.post('/customers/:customerId/credit-l2', checkRole(['credit_team_l1', 'credit_team_l2']), async (req: Request, res: Response) => {
   try {
     const { customerId } = req.params;
     const { approved, remarks, partnerSanctions, sanctionAmount, tenure, interestRate, conditions, penalCharges, processingFees } = req.body;
     const user = (req as any).user;
-    const userRole = (user?.roles?.[0]?.name || '').toLowerCase();
+    const userRoles = (user?.roles || []).map((r: any) => r.name.toLowerCase());
+    const userRole = userRoles[0]?.toLowerCase() || '';
+    
+    // Check if user has L2 role - if they have both L1 and L2, they should have L2 access
+    const hasL2Role = userRoles.includes('credit_team_l2');
+    
+    // Allow access if user has L2 role (either alone or with L1)
+    if (!hasL2Role) {
+      res.status(403).json({
+        success: false,
+        message: 'You do not have Credit Team L2 role to approve L2 cases',
+      });
+      return;
+    }
 
     // Check if user is trying to modify sanction data
     const isModifyingSanctions = approved && (sanctionAmount || partnerSanctions);
@@ -298,7 +346,8 @@ router.post('/customers/:customerId/credit-l2', checkRole(['credit_team_l2']), a
     
     // Credit L2 can only modify sanctionAmount (not tenure, ROI, etc.)
     // But can modify sanctionAmount for all partners via partnerSanctions
-    if (isModifyingSanctions && userRole === 'credit_team_l2') {
+    // Check if user has L2 role
+    if (isModifyingSanctions && userRoles.includes('credit_team_l2')) {
       // If using partnerSanctions format, validate each entry
       if (partnerSanctions && Array.isArray(partnerSanctions)) {
         for (const ps of partnerSanctions) {
@@ -322,6 +371,30 @@ router.post('/customers/:customerId/credit-l2', checkRole(['credit_team_l2']), a
     }
 
     const sanctionData = partnerSanctions ? { partnerSanctions } : (sanctionAmount ? { sanctionAmount, tenure, interestRate, conditions, penalCharges, processingFees } : undefined);
+
+    // MAKER-CHECKER VALIDATION: If user has both L1 and L2 roles, they cannot approve their own L1 approvals
+    // This prevents conflict of interest - user who approved at L1 shouldn't approve at L2
+    const hasBothRoles = userRoles.includes('credit_team_l1') && userRoles.includes('credit_team_l2');
+    if (hasBothRoles && approved) {
+      // Check if this user already approved this case at L1
+      const { CaseStatusHistory } = require('../entities');
+      const historyRepo = AppDataSource.getRepository(CaseStatusHistory);
+      const l1Approval = await historyRepo.findOne({
+        where: { 
+          caseWorkflow: { customerId: parseInt(customerId) },
+          status: 'credit_l1_approved'
+        },
+        relations: ['caseWorkflow', 'changedByUser'],
+        order: { createdAt: 'DESC' }
+      });
+      if (l1Approval && l1Approval.changedByUser?.id === user.id) {
+        res.status(403).json({
+          success: false,
+          message: 'You have both L1 and L2 roles. You already approved this case at L1, so you cannot approve it at L2. Please assign this case to another L2 reviewer.',
+        });
+        return;
+      }
+    }
 
     const workflow = await customerOnboardingService.creditL2Approve(
       parseInt(customerId),
@@ -362,7 +435,8 @@ router.post('/customers/:customerId/ceo-approve', checkRole(['ceo']), async (req
     
     // CEO can ONLY modify sanctionAmount (not tenure, ROI, etc.)
     // These fields should not be sent by frontend for CEO role
-    if (isModifyingSanctions && userRole === 'ceo') {
+    const userRolesForCheck = (user?.roles || []).map((r: any) => r.name.toLowerCase());
+    if (isModifyingSanctions && userRolesForCheck.includes('ceo')) {
       // If using old format (single sanction), check for forbidden fields
       if (sanctionAmount && (tenure || interestRate || penalCharges || processingFees || conditions)) {
         res.status(403).json({
