@@ -10,6 +10,7 @@ declare global {
       user?: User & { roles?: any[] };
       userId?: number;
       userRole?: string;
+      userRoles?: string[]; // Array of all role names
     }
   }
 }
@@ -29,11 +30,9 @@ export const authMiddleware = async (
     }
 
     const token = authHeader.substring(7); // Remove 'Bearer ' prefix
-   // console.log('[AUTH] Token received, length:', token.length);
 
     // Verify token
     const decoded = verifyToken(token) as JWTPayload;
-   // console.log('[AUTH] Token decoded, userId:', decoded.userId, 'role:', decoded.role);
 
     // Get user from database
     const userRepository = AppDataSource.getRepository(User);
@@ -47,22 +46,25 @@ export const authMiddleware = async (
       return;
     }
 
-    // Get user roles
+    // Get user roles from database
     const userRoleRepository = AppDataSource.getRepository(UserRole);
     const userRoles = await userRoleRepository.find({
       where: { userId: user.id, isActive: true },
       relations: ['role'],
     });
-   // console.log('[AUTH] User roles:', userRoles);
-    // Attach user to request with roles
+
+    // Extract role names
+    const roleNames = userRoles.map(ur => ur.role.name);
+
+    // Attach user to request with all roles
     req.user = {
       ...user,
       roles: userRoles.map(ur => ur.role),
     };
     req.userId = user.id;
-    req.userRole = decoded.role;
+    req.userRole = decoded.role; // Primary role from JWT
+    req.userRoles = roleNames; // All roles array for multi-role checking
 
-    //console.log('[AUTH] Success, user:', user.email);
     next();
   } catch (error: any) {
     // Provide more specific error messages

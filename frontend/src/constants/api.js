@@ -142,4 +142,13 @@ DASHBOARD_OPERATIONS_SUPPLIERS: '/workflows/suppliers/dashboard/operations',
   PAN_OCR: 'https://sandbox.fintreelms.com/ocr/v1/pan',
   // Cheque OCR (Direct frontend call)
   CHEQUE_OCR: 'https://sandbox.fintreelms.com/ocr/v1/cheque',
+
+  // User Performance (SuperAdmin)
+  USER_PERFORMANCE_SUMMARY: '/superadmin/user-performance/summary',
+  USER_PERFORMANCE_LIST: '/superadmin/user-performance/list',
+  USER_PERFORMANCE_USERS: '/superadmin/user-performance/users',
+  USER_PERFORMANCE_DETAIL: (userId) => `/superadmin/user-performance/${userId}`,
+  
+  // Cases (SuperAdmin)
+  SUPERADMIN_CASES: '/superadmin/cases',
 }

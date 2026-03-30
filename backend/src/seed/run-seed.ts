@@ -45,6 +45,7 @@ async function seed() {
     // Create Roles
     console.log('Creating roles...');
     const roles = [
+      { name: ROLES.SUPERADMIN, label: 'Super Admin', description: 'Super Administrator - Full system access' },
       { name: ROLES.ADMIN, label: 'Admin', description: 'System Administrator' },
       { name: ROLES.RELATIONSHIP_MANAGER, label: 'Relationship Manager', description: 'Manages customer relationships' },
       { name: ROLES.CREDIT_TEAM_L1, label: 'Credit Team L1', description: 'Credit Team Level 1 - Initial review' },
@@ -75,16 +76,19 @@ async function seed() {
     // Create Users
     console.log('Creating users...');
     const users = [
-      { email: 'admin@scf.com', name: 'Admin User', role: ROLES.ADMIN },
-      { email: 'rm@scf.com', name: 'John Doe - RM', role: ROLES.RELATIONSHIP_MANAGER },
-      { email: 'credit_l1@scf.com', name: 'Credit Officer L1', role: ROLES.CREDIT_TEAM_L1 },
-      { email: 'credit_l2@scf.com', name: 'Credit Officer L2', role: ROLES.CREDIT_TEAM_L2 },
-      { email: 'ops_l1@scf.com', name: 'Operations Officer L1', role: ROLES.OPERATIONS_TEAM_L1 },
-      { email: 'ops_l2@scf.com', name: 'Operations Officer L2', role: ROLES.OPERATIONS_TEAM_L2 },
-      { email: 'ops_head@scf.com', name: 'Operations Head', role: ROLES.OPERATIONS_HEAD },
-      { email: 'ceo@scf.com', name: 'CEO', role: ROLES.CEO },
-      { email: 'cfo@scf.com', name: 'CFO', role: ROLES.CFO },
-      { email: 'md@scf.com', name: 'Managing Director', role: ROLES.MD },
+      { email: 'superadmin@scf.com', name: 'Super Admin', roles: [ROLES.SUPERADMIN] },
+      { email: 'admin@scf.com', name: 'Admin User', roles: [ROLES.ADMIN] },
+      { email: 'rm@scf.com', name: 'John Doe - RM', roles: [ROLES.RELATIONSHIP_MANAGER] },
+      { email: 'credit_l1@scf.com', name: 'Credit Officer L1', roles: [ROLES.CREDIT_TEAM_L1] },
+      { email: 'credit_l2@scf.com', name: 'Credit Officer L2', roles: [ROLES.CREDIT_TEAM_L2] },
+      { email: 'ops_l1@scf.com', name: 'Operations Officer L1', roles: [ROLES.OPERATIONS_TEAM_L1] },
+      { email: 'ops_l2@scf.com', name: 'Operations Officer L2', roles: [ROLES.OPERATIONS_TEAM_L2] },
+      { email: 'ops_head@scf.com', name: 'Operations Head', roles: [ROLES.OPERATIONS_HEAD] },
+      { email: 'ceo@scf.com', name: 'CEO', roles: [ROLES.CEO] },
+      { email: 'cfo@scf.com', name: 'CFO', roles: [ROLES.CFO] },
+      { email: 'md@scf.com', name: 'Managing Director', roles: [ROLES.MD] },
+      // User with multiple roles for testing
+      { email: 'harish@scf.com', name: 'Harish - SuperAdmin + CEO', roles: [ROLES.SUPERADMIN, ROLES.CEO] },
     ];
 
     const savedUsers: User[] = [];
@@ -93,20 +97,22 @@ async function seed() {
         email: userData.email,
         name: userData.name,
         password: defaultPassword,
-        defaultRole: userData.role,
+        defaultRole: userData.roles[0], // Set primary role as default
       });
       const savedUser = await userRepository.save(user);
       savedUsers.push(savedUser);
 
-      // Assign role
-      const role = savedRoles.find(r => r.name === userData.role);
-      if (role) {
-        const userRole = userRoleRepository.create({
-          userId: savedUser.id,
-          roleId: role.id,
-          assignedBy: savedUsers[0].id, // Admin assigns
-        });
-        await userRoleRepository.save(userRole);
+      // Assign all roles
+      for (const roleName of userData.roles) {
+        const role = savedRoles.find(r => r.name === roleName);
+        if (role) {
+          const userRole = userRoleRepository.create({
+            userId: savedUser.id,
+            roleId: role.id,
+            assignedBy: savedUsers[0]?.id || 1, // Admin assigns
+          });
+          await userRoleRepository.save(userRole);
+        }
       }
     }
     console.log('✅ Users created');

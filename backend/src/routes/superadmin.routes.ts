@@ -4,6 +4,8 @@ import { taskTimeTrackingService } from '../services/task-time-tracking.service'
 import { taskBucketService } from '../services/task-bucket.service';
 import { rewardService } from '../services/reward.service';
 import { superAdminAnalyticsService } from '../services/superadmin-analytics.service';
+import { userPerformanceService } from '../services/user-performance.service';
+import { CustomerOnboardingService } from '../services/customer-onboarding.service';
 import { roleMiddleware } from '../middlewares/role.middleware';
 import { ROLES } from '../config/constants';
 
@@ -555,6 +557,157 @@ router.get('/users/:userId/check-access', async (req: Request, res: Response) =>
         isRewardEligible: isEligible,
       },
     });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// ==========================================
+// User Performance Routes (SUPERADMIN only)
+// ==========================================
+
+/**
+ * GET /api/superadmin/user-performance/summary
+ * Get overall performance summary
+ */
+router.get('/user-performance/summary', roleMiddleware([ROLES.SUPERADMIN]), async (req: Request, res: Response) => {
+  try {
+    const summary = await userPerformanceService.getOverallSummary();
+    res.json({ success: true, data: summary });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+/**
+ * GET /api/superadmin/user-performance/list
+ * Get user performance list with filters
+ */
+router.get('/user-performance/list', roleMiddleware([ROLES.SUPERADMIN]), async (req: Request, res: Response) => {
+  try {
+    const { 
+      startDate, 
+      endDate, 
+      stage, 
+      userId, 
+      limit, 
+      offset, 
+      sortBy, 
+      sortOrder 
+    } = req.query;
+
+    const filters = {
+      startDate: startDate ? new Date(startDate as string) : undefined,
+      endDate: endDate ? new Date(endDate as string) : undefined,
+      stage: stage as string,
+      userId: userId ? parseInt(userId as string) : undefined,
+      limit: limit ? parseInt(limit as string) : 20,
+      offset: offset ? parseInt(offset as string) : 0,
+      sortBy: sortBy as string,
+      sortOrder: sortOrder as 'ASC' | 'DESC',
+    };
+
+    const result = await userPerformanceService.getUserPerformanceList(filters);
+    res.json({ success: true, data: result });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+/**
+ * GET /api/superadmin/user-performance/users
+ * Get all users for filter dropdown
+ */
+router.get('/user-performance/users', roleMiddleware([ROLES.SUPERADMIN]), async (req: Request, res: Response) => {
+  try {
+    const users = await userPerformanceService.getAllUsersForFilter();
+    res.json({ success: true, data: users });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+/**
+ * GET /api/superadmin/user-performance/:userId
+ * Get detailed performance for a specific user
+ */
+router.get('/user-performance/:userId', roleMiddleware([ROLES.SUPERADMIN]), async (req: Request, res: Response) => {
+  try {
+    const userId = parseInt(req.params.userId);
+    const { startDate, endDate, stage } = req.query;
+
+    const filters = {
+      startDate: startDate ? new Date(startDate as string) : undefined,
+      endDate: endDate ? new Date(endDate as string) : undefined,
+      stage: stage as string,
+    };
+
+    const detail = await userPerformanceService.getUserPerformanceDetail(userId, filters);
+    
+    if (!detail) {
+      res.status(404).json({ success: false, message: 'User not found' });
+      return;
+    }
+
+    // Get recent completed cases
+    const recentCases = await userPerformanceService.getUserRecentCompletedCases(userId, 10);
+
+    res.json({ success: true, data: { ...detail, recentCases } });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+/**
+ * GET /api/superadmin/cases
+ * Get all cases across all users for SUPERADMIN view
+ * Uses workflow data similar to user dashboards
+ * Supports filtering by stage (credit_l1, credit_l2, ops, rm)
+ */
+router.get('/cases', roleMiddleware([ROLES.SUPERADMIN]), async (req: Request, res: Response) => {
+  try {
+    const { stage, limit, page } = req.query;
+
+    const customerService = new CustomerOnboardingService();
+    let allCases: any[] = [];
+
+    // Map stage to role for fetching workflow data
+    const stageToRole: Record<string, string> = {
+      'credit_l1': 'CREDIT_TEAM_L1',
+      'credit_l2': 'CREDIT_TEAM_L2',
+      'ps_l1': 'OPERATIONS_HEAD',
+      'ps_l2': 'OPERATIONS_HEAD',
+      'rm': 'RELATIONSHIP_MANAGER',
+    };
+
+    const stageFilter = stage as string;
+
+    if (stageFilter && stageToRole[stageFilter]) {
+      // Get cases for specific role
+      const roleName = stageToRole[stageFilter];
+      const dashboard = await customerService.getCreditTeamPending(roleName);
+      allCases = [...(dashboard.pending || []), ...(dashboard.handled || [])];
+    } else {
+      // Get ALL cases from all roles
+      const roles = ['CREDIT_TEAM_L1', 'CREDIT_TEAM_L2', 'OPERATIONS_HEAD', 'RELATIONSHIP_MANAGER'];
+      for (const role of roles) {
+        const dashboard = await customerService.getCreditTeamPending(role);
+        allCases = [...allCases, ...(dashboard.pending || []), ...(dashboard.handled || [])];
+      }
+    }
+
+    // Remove duplicates
+    allCases = Array.from(new Map(allCases.map(item => [item.id, item])).values());
+
+    // Apply pagination
+    const limitNum = limit ? parseInt(limit as string) : 10;
+    const pageNum = page ? parseInt(page as string) : 1;
+    const offsetNum = (pageNum - 1) * limitNum;
+    const total = allCases.length;
+    const totalPages = Math.ceil(total / limitNum);
+    const paginatedCases = allCases.slice(offsetNum, offsetNum + limitNum);
+
+    res.json({ success: true, data: { cases: paginatedCases, total, page: pageNum, totalPages } });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
   }

@@ -22,6 +22,9 @@ import CaseAuditDetail from './pages/admin/CaseAuditDetail'
 
 // SuperAdmin Pages
 import SuperAdminDashboard from './pages/superadmin/SuperAdminDashboard'
+import UserPerformance from './pages/superadmin/UserPerformance'
+import AllCases from './pages/superadmin/AllCases'
+import Analytics from './pages/superadmin/Analytics'
 
 // RM Pages
 import RMDashboard from './pages/rm/RMDashboard'
@@ -36,6 +39,7 @@ import CreditCaseDetail from './pages/credit/CreditCaseDetail'
 // Management Pages
 import ManagementDashboard from './pages/management/ManagementDashboard'
 import ApprovalScreen from './pages/management/ApprovalScreen'
+import CEOPendingApprovals from './pages/management/CEOPendingApprovals'
 
 // Operations Pages
 import OperationsDashboard from './pages/operations/OperationsDashboard'
@@ -102,6 +106,30 @@ function App() {
             element={
               <ProtectedRoute allowedRoles={[ROLES.SUPERADMIN]}>
                 <SuperAdminDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="superadmin/performance"
+            element={
+              <ProtectedRoute allowedRoles={[ROLES.SUPERADMIN]}>
+                <UserPerformance />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="superadmin/cases"
+            element={
+              <ProtectedRoute allowedRoles={[ROLES.SUPERADMIN]}>
+                <AllCases />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="superadmin/analytics"
+            element={
+              <ProtectedRoute allowedRoles={[ROLES.SUPERADMIN]}>
+                <Analytics />
               </ProtectedRoute>
             }
           />
@@ -204,6 +232,14 @@ function App() {
             element={
               <ProtectedRoute allowedRoles={[ROLES.CEO, ROLES.CFO, ROLES.MD]}>
                 <ManagementDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="management/ceo-approvals"
+            element={
+              <ProtectedRoute allowedRoles={[ROLES.CEO]}>
+                <CEOPendingApprovals />
               </ProtectedRoute>
             }
           />
