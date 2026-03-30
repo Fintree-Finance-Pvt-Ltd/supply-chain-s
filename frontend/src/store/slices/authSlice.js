@@ -106,13 +106,19 @@ const authSlice = createSlice({
       })
       // Check Auth
       .addCase(checkAuth.fulfilled, (state, action) => {
+        // Decode JWT to get role if not in user object
+        const decoded = decodeJWT(action.payload.token)
+        
         // Get all roles from user object (multi-role support)
         const roles = action.payload.user.roles || []
+        
+        // Get primary role from user or JWT
+        const role = action.payload.user.role || action.payload.user.defaultRole || decoded?.role || roles[0]?.name || ''
         
         // Ensure role is set on user object
         const user = {
           ...action.payload.user,
-          role: action.payload.user.role || action.payload.user.defaultRole,
+          role: role,
           roles: roles,
         }
         state.user = user

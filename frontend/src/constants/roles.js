@@ -1,4 +1,5 @@
 export const ROLES = {
+  SUPERADMIN: 'superadmin',
   ADMIN: 'admin',
   RELATIONSHIP_MANAGER: 'relationship_manager',
   CREDIT_TEAM: 'credit_team',
@@ -15,6 +16,7 @@ export const ROLES = {
 }
 
 export const ROLE_LABELS = {
+  [ROLES.SUPERADMIN]: 'Super Administrator',
   [ROLES.ADMIN]: 'Admin',
   [ROLES.RELATIONSHIP_MANAGER]: 'Relationship Manager',
   [ROLES.CREDIT_TEAM]: 'Credit Team',

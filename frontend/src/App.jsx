@@ -20,6 +20,9 @@ import RoleManagement from './pages/admin/RoleManagement'
 import ApprovalFlowConfig from './pages/admin/ApprovalFlowConfig'
 import CaseAuditDetail from './pages/admin/CaseAuditDetail'
 
+// SuperAdmin Pages
+import SuperAdminDashboard from './pages/superadmin/SuperAdminDashboard'
+
 // RM Pages
 import RMDashboard from './pages/rm/RMDashboard'
 import NewCustomerOnboarding from './pages/rm/NewCustomerOnboarding'
@@ -87,8 +90,18 @@ function App() {
           <Route
             path="admin"
             element={
-              <ProtectedRoute allowedRoles={[ROLES.ADMIN]}>
+              <ProtectedRoute allowedRoles={[ROLES.ADMIN, ROLES.SUPERADMIN]}>
                 <AdminDashboard />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* SuperAdmin Routes */}
+          <Route
+            path="superadmin"
+            element={
+              <ProtectedRoute allowedRoles={[ROLES.SUPERADMIN]}>
+                <SuperAdminDashboard />
               </ProtectedRoute>
             }
           />

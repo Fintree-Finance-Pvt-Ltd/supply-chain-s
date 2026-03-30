@@ -35,4 +35,9 @@ export { Notification } from './Notification';
 export { RefreshToken } from './RefreshToken';
 export { Applicant } from './Applicant';
 
+// SUPERADMIN Analytics & RBAC Entities
+export { TaskTimeTracking } from './TaskTimeTracking';
+export { RewardPoint, RewardConfiguration } from './RewardPoint';
+export { TaskBucketMapping, PerformanceMetricsCache } from './TaskBucketMapping';
+
 

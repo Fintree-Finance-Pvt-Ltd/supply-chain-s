@@ -24,6 +24,12 @@ const Sidebar = () => {
 
   const getNavItems = () => {
     switch (userRole) {
+      case ROLES.SUPERADMIN:
+        return [
+          { path: '/superadmin', label: 'Dashboard', icon: FiHome },
+          { path: '/superadmin/analytics', label: 'Analytics', icon: FiFileText },
+        ]
+
       case ROLES.ADMIN:
         return [
           { path: '/admin', label: 'Dashboard', icon: FiHome },
@@ -75,6 +81,12 @@ const Sidebar = () => {
           { path: '/management/dashboard', label: 'Management Dashboard', icon: FiHome },
           { path: '/management/approvals', label: 'Pending Approvals', icon: FiCheckCircle },
           { path: '/invoice-discounting/md', label: 'Invoice Discounting', icon: FiFileText },
+        ]
+
+      case ROLES.SUPERADMIN:
+        return [
+          { path: '/superadmin', label: 'Dashboard', icon: FiHome },
+          { path: '/superadmin/analytics', label: 'Analytics', icon: FiFileText },
         ]
 
       default:

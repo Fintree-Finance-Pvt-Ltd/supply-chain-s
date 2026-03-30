@@ -17,6 +17,7 @@ const MainLayout = () => {
       const currentRole = userRole || user?.role || user?.defaultRole
 
       const roleRoutes = {
+        superadmin: '/superadmin',
         admin: '/admin',
         relationship_manager: '/rm/dashboard',
         credit_team: '/credit/dashboard',

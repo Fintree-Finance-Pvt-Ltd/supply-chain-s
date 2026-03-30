@@ -16,6 +16,7 @@ import migrationRoutes from './migration.routes';
 import onboardingRoutes from './onboarding.routes';
 import partnerRoutes from './partner.routes';
 import invoiceDisbursementRoutes from './invoice-disbursement.routes';
+import superAdminRoutes from './superadmin.routes';
 import { authMiddleware } from '../middlewares/auth.middleware';
 
 const router = Router();
@@ -50,5 +51,12 @@ router.use('/debug', debugRoutes);
 router.use('/migration', migrationRoutes);
 router.use('/partners', partnerRoutes);
 router.use('/v1/invoice-disbursement', invoiceDisbursementRoutes);
+
+// SUPERADMIN Routes - Global Analytics, RBAC, Rewards, Task Tracking
+// Apply authMiddleware first to authenticate the user, then superAdminRoutes for authorization
+router.use('/superadmin', authMiddleware, superAdminRoutes);
+router.use('/tasks', authMiddleware, superAdminRoutes); // Task tracking routes
+router.use('/rewards', authMiddleware, superAdminRoutes); // Reward points routes
+router.use('/buckets', authMiddleware, superAdminRoutes); // Bucket mapping routes
 
 export default router;

@@ -14,8 +14,7 @@ const ProtectedRoute = ({ children, allowedRoles = [] }) => {
   }
 
   // Get role from user object (could be user.role or user.defaultRole)
-  const userRole = user?.role || user?.defaultRole
-
+  const userRole = user?.role || user?.defaultRole || user?.roles?.[0]?.name
   // Check if user has access
   const hasAccess = allowedRoles.length === 0 || allowedRoles.some((allowedRole) => {
     // Exact match first

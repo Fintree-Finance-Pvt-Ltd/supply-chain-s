@@ -41,6 +41,7 @@ import { RefreshToken } from '../entities/RefreshToken';
 import { Applicant } from '../entities/Applicant';
 import { Partner } from '../entities/Partner';
 import { LanSequence } from '../entities/LanSequence';
+import { PerformanceMetricsCache, RewardConfiguration, RewardPoint, TaskBucketMapping, TaskTimeTracking } from '../entities';
 
 // Export entities array for use in DataSource
 const entities = [
@@ -81,6 +82,11 @@ const entities = [
   Notification,
   RefreshToken,
   Applicant,
+  RewardPoint,
+  RewardConfiguration,
+  PerformanceMetricsCache,
+  TaskBucketMapping,
+  TaskTimeTracking
 ];
 
 // Always use .js files since we're running compiled code

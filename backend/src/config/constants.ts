@@ -1,5 +1,6 @@
 // User Roles
 export const ROLES = {
+  SUPERADMIN: 'superadmin',
   ADMIN: 'admin',
   RELATIONSHIP_MANAGER: 'relationship_manager',
   CREDIT_TEAM_L1: 'credit_team_l1',
@@ -11,7 +12,32 @@ export const ROLES = {
   CFO: 'cfo',
   CEO: 'ceo',
   MD: 'md',
+  ANALYST: 'analyst',
+  REVIEWER: 'reviewer',
+  MANAGER: 'manager',
 } as const;
+
+// Roles NOT eligible for reward points
+export const REWARD_INELIGIBLE_ROLES = [ROLES.CEO, ROLES.MD] as const;
+
+// Role hierarchy for access levels (higher number = more access)
+export const ROLE_HIERARCHY: Record<string, number> = {
+  [ROLES.SUPERADMIN]: 100,
+  [ROLES.ADMIN]: 90,
+  [ROLES.CFO]: 85,
+  [ROLES.MD]: 80,
+  [ROLES.CEO]: 75,
+  [ROLES.OPERATIONS_HEAD]: 60,
+  [ROLES.CREDIT_SANCTION_CUSTOMER_APPROVAL]: 50,
+  [ROLES.MANAGER]: 40,
+  [ROLES.REVIEWER]: 30,
+  [ROLES.CREDIT_TEAM_L2]: 25,
+  [ROLES.CREDIT_TEAM_L1]: 20,
+  [ROLES.OPERATIONS_TEAM_L2]: 15,
+  [ROLES.OPERATIONS_TEAM_L1]: 10,
+  [ROLES.RELATIONSHIP_MANAGER]: 5,
+  [ROLES.ANALYST]: 3,
+};
 
 // Case Status
 export const CASE_STATUS = {
