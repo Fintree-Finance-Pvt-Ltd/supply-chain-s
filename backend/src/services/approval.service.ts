@@ -474,6 +474,14 @@ export class ApprovalService {
         return false;
       }
 
+      // 🔧 FIX: Filter by assigned user for exclusive visibility
+      // If case has assignedUserId, only show to that specific user
+      if (instance.creditSanction?.customer?.assignedUserId) {
+        if (instance.creditSanction.customer.assignedUserId !== userId) {
+          return false; // Not assigned to this user
+        }
+      }
+
       // Step 5: If user has both Maker and Checker roles, handle the case properly
       if (hasBothRoles) {
         const isCurrentStepMaker = makerRoles.includes(currentStepRoleName);

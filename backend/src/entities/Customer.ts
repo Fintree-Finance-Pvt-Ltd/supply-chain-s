@@ -109,6 +109,12 @@ export class Customer {
   @Column({ type: 'int' })
   rmId: number;
 
+  @Column({ type: 'int', nullable: true })
+  assignedUserId: number;
+
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  assignedStage: string;
+
   @Column({ type: 'text', nullable: true })
   remarks: string;
 

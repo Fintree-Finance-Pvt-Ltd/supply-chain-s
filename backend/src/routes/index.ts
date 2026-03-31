@@ -17,6 +17,7 @@ import onboardingRoutes from './onboarding.routes';
 import partnerRoutes from './partner.routes';
 import invoiceDisbursementRoutes from './invoice-disbursement.routes';
 import superAdminRoutes from './superadmin.routes';
+import taskDistributionRoutes from './task-distribution.routes';
 import { authMiddleware } from '../middlewares/auth.middleware';
 
 const router = Router();
@@ -58,5 +59,6 @@ router.use('/superadmin', authMiddleware, superAdminRoutes);
 router.use('/tasks', authMiddleware, superAdminRoutes); // Task tracking routes
 router.use('/rewards', authMiddleware, superAdminRoutes); // Reward points routes
 router.use('/buckets', authMiddleware, superAdminRoutes); // Bucket mapping routes
+router.use('/task-distribution', authMiddleware, taskDistributionRoutes); // Task distribution routes
 
 export default router;

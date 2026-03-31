@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { CustomerService } from '../services/customer.service';
+import { TaskDistributionService } from '../services/task-distribution.service';
 import { LMSDataSource } from '../config/lmsDatabase';
 
 export class CustomerController {
@@ -117,6 +118,39 @@ export class CustomerController {
         req.userId!,
         'Case submitted to credit team'
       );
+
+      // 🔧 FIX: Trigger task distribution on case submission for round-robin assignment
+      try {
+        const taskDistributionService = new TaskDistributionService();
+        
+        // Determine workflow stage from status
+        const workflowStage = taskDistributionService.getWorkflowStageFromStatus('submitted');
+        
+        // Assign case to an eligible user using round-robin
+        const assignmentResult = await taskDistributionService.assignCase(
+          id,
+          'CUSTOMER_ONBOARDING',
+          'submitted',
+          workflowStage
+        );
+
+        // Update customer with assigned user information
+        if (assignmentResult.assignedUserId) {
+          customer.assignedUserId = assignmentResult.assignedUserId;
+          customer.assignedStage = workflowStage;
+          await this.customerService.updateCustomer(Number(id), {
+            assignedUserId: assignmentResult.assignedUserId,
+            assignedStage: workflowStage,
+          });
+          
+          console.log(`[TaskDistribution] Case ${id} assigned to user ${assignmentResult.assignedUserId} (${assignmentResult.assignedUserName})`);
+        } else {
+          console.warn(`[TaskDistribution] No eligible user found for case ${id}`);
+        }
+      } catch (assignmentError) {
+        // Log error but don't fail the case submission
+        console.error('[TaskDistribution] Error assigning case:', assignmentError);
+      }
 
       res.json({
         success: true,

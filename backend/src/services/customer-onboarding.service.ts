@@ -12,6 +12,7 @@ import { Partner } from '../entities/Partner';
 import { KycDetail } from '../entities/KycDetail';
 import { CustomerAddress } from '../entities/CustomerAddress';
 import { OnboardingIntegrationService } from './onboarding-integration.service';
+import { TaskDistributionService } from './task-distribution.service';
 import { DEFAULT_PARTNER_CODES } from '../config/constants';
 import axios from 'axios';
 
@@ -327,6 +328,38 @@ private async upsertLoanAccount(
     workflow.currentStatus = 'submitted';
     workflow.currentApproverRoleName = 'CREDIT_TEAM_L1';
     workflow.remarks = remarks;
+
+    // 🔧 FIX: Trigger task distribution and assign user
+    try {
+      const taskDistributionService = new TaskDistributionService();
+      const workflowStage = taskDistributionService.getWorkflowStageFromStatus('submitted');
+      
+      const assignmentResult = await taskDistributionService.assignCase(
+        customerId.toString(),
+        'CUSTOMER_ONBOARDING',
+        'submitted',
+        workflowStage
+      );
+
+      if (assignmentResult.assignedUserId) {
+        // Update workflow with assigned user
+        workflow.assignedUserId = assignmentResult.assignedUserId;
+        workflow.assignedStage = workflowStage;
+        
+        // Also update customer record
+        await this.customerRepository.update(customerId, {
+          assignedUserId: assignmentResult.assignedUserId,
+          assignedStage: workflowStage,
+        });
+        
+        console.log(`[TaskDistribution] Case ${customerId} assigned to user ${assignmentResult.assignedUserId} (${assignmentResult.assignedUserName})`);
+      } else {
+        console.warn(`[TaskDistribution] No eligible user found for case ${customerId}`);
+      }
+    } catch (assignmentError) {
+      console.error('[TaskDistribution] Error assigning case:', assignmentError);
+    }
+
     await this.workflowRepository.save(workflow);
 
     // Sync customer status and pushedTo
@@ -1454,16 +1487,32 @@ async mdApprove(
     const statusFilter = r === 'CREDIT_TEAM_L2' ? 'credit_l1_approved' : 'submitted';
     console.log(r)  ; 
      console.log(statusFilter)
-    // Pending cases
+    
+    // 🔧 FIX: Filter by assignedUserId for user-specific visibility
+    // If userId provided, only show cases assigned to this user
+    const whereConditions: any = {
+      workflowType: 'CUSTOMER_ONBOARDING',
+      currentStatus: statusFilter as any,
+      currentApproverRoleName: r
+    };
+    
+    // Get pending workflows (base query)
     const pendingWorkflows = await this.workflowRepository.find({
-      where: {
-        workflowType: 'CUSTOMER_ONBOARDING',
-        currentStatus: statusFilter as any,
-        currentApproverRoleName: r
-      },
+      where: whereConditions,
       relations: ['customer'],
     });
-//  console.log(pendingWorkflows)
+    
+    // 🔧 FIX: Filter by assignedUserId - only show cases assigned to this specific user
+    // Check both case_workflow.assignedUserId and customer.assignedUserId
+    let filteredPending = pendingWorkflows;
+    if (userId) {
+      filteredPending = pendingWorkflows.filter(w => 
+        w.assignedUserId === userId || 
+        w.customer?.assignedUserId === userId ||
+        (!w.assignedUserId && !w.customer?.assignedUserId)
+      );
+    }
+    
     // Handled cases (read-only)
     let handledWorkflows: any[] = [];
     if (userId) {
@@ -1479,11 +1528,11 @@ async mdApprove(
       });
 
       // Filter out those already in pending
-      const pendingIds = pendingWorkflows.map(w => w.id);
+      const pendingIds = filteredPending.map(w => w.id);
       handledWorkflows = handledWorkflows.filter(w => !pendingIds.includes(w.id));
     }
 
-    return { pending: pendingWorkflows, handled: handledWorkflows };
+    return { pending: filteredPending, handled: handledWorkflows };
   }
 
   async getExecutivePending(role: string, userId?: number) {

@@ -38,6 +38,12 @@ export class CaseWorkflow {
   @Column({ type: 'int', nullable: true })
   currentApproverRoleId: number; // Role awaiting approval
 
+  @Column({ type: 'int', nullable: true })
+  assignedUserId: number; // User assigned to this case
+
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  assignedStage: string; // Current assignment stage
+
   @Column({ type: 'varchar', length: 500, nullable: true })
   currentApproverRoleName: string; // Cache for quick access
 
