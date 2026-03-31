@@ -4,7 +4,7 @@ import { ROLES } from '../constants/roles'
 // Menu configuration for each role - defines what sidebar items each role has
 export const ROLE_MENU_CONFIG = {
   [ROLES.ADMIN]: [
-    { path: '/admin', label: 'Dashboard', icon: 'FiHome' },
+    { path: '/admin', label: 'Admin Dashboard', icon: 'FiHome' },
     { path: '/admin/users', label: 'User Management', icon: 'FiUsers' },
     { path: '/admin/roles', label: 'Role Management', icon: 'FiShield' },
     { path: '/admin/approval-flows', label: 'Approval Flows', icon: 'FiGitBranch' },
@@ -41,7 +41,7 @@ export const ROLE_MENU_CONFIG = {
     { path: '/invoice-discounting/ops-head', label: 'Invoice Discounting', icon: 'FiFileText' },
   ],
   [ROLES.CEO]: [
-    { path: '/management/dashboard', label: 'Management Dashboard', icon: 'FiHome' },
+    { path: '/management/dashboard', label: 'Ceo Dashboard', icon: 'FiHome' },
     { path: '/management/ceo-approvals', label: 'Pending Approvals', icon: 'FiCheckCircle' },
   ],
   [ROLES.CFO]: [
@@ -53,7 +53,7 @@ export const ROLE_MENU_CONFIG = {
     { path: '/invoice-discounting/md', label: 'Invoice Discounting', icon: 'FiFileText' },
   ],
   [ROLES.SUPERADMIN]: [
-    { path: '/superadmin', label: 'Dashboard', icon: 'FiHome' },
+    { path: '/superadmin', label: 'Super Dashboard', icon: 'FiHome' },
     { path: '/superadmin/analytics', label: 'Analytics', icon: 'FiFileText' },
     { path: '/superadmin/cases', label: 'All Cases', icon: 'FiFolder' },
     { path: '/superadmin/performance', label: 'User Performance', icon: 'FiBarChart' },

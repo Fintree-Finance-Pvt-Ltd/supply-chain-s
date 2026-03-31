@@ -57,6 +57,37 @@ export class RewardService {
   }
 
   /**
+   * Award fixed points for approval status changes
+   * Returns null if user is not eligible (CEO/MD)
+   */
+  async awardApprovalPoints(data: {
+    userId: number;
+    taskId: string;
+    points: number;
+    description: string;
+    taskType?: string;
+  }): Promise<RewardPoint | null> {
+    // Check if user is eligible for rewards
+    const isEligible = await permissionService.isEligibleForRewards(data.userId);
+    if (!isEligible) {
+      console.log(`User ${data.userId} is not eligible for rewards (CEO/MD)`);
+      return null;
+    }
+
+    const rewardPoint = new RewardPoint();
+    rewardPoint.userId = data.userId;
+    rewardPoint.taskId = data.taskId;
+    rewardPoint.points = data.points;
+    rewardPoint.completionSpeedCategory = 'approval';
+    rewardPoint.completionTimeMinutes = 0;
+    rewardPoint.bucket = null;
+    rewardPoint.taskType = data.taskType || 'APPROVAL';
+    rewardPoint.description = data.description;
+
+    return await this.rewardPointRepository.save(rewardPoint);
+  }
+
+  /**
    * Calculate points based on completion time
    */
   async calculatePoints(completionTimeMinutes: number): Promise<{

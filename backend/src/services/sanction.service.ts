@@ -13,6 +13,7 @@ import { AuditService } from './audit.service';
 import { Invoice } from '../entities/Invoice';
 import { Partner, PARTNER_STATUS } from '../entities/Partner';
 import { DEFAULT_PARTNER_CODES } from '../config/constants';
+import { RewardService } from './reward.service';
 
 
 export class SanctionService {
@@ -29,6 +30,7 @@ export class SanctionService {
 
   private lanGenerator = new LanGeneratorService();
   private auditService = new AuditService();
+  private rewardService = new RewardService();
 
   /**
    * Get default partner (FFPL) for backward compatibility
@@ -389,6 +391,13 @@ export class SanctionService {
       console.log('[SanctionService] Credit approval processed: customerId=' + customerId + 
         ', role=' + role + ', approved=' + approved + ', newStatus=' + newStatus);
 
+      // ========================================
+      // Award reward points for approval status changes
+      // ========================================
+      if (approved) {
+        await this.awardApprovalRewards(customerId, userId, previousStatus, newStatus, role);
+      }
+
       return { workflow, customer };
     });
   }
@@ -476,6 +485,119 @@ export class SanctionService {
       'rejected': 'NONE',
     };
     return map[status] || 'NONE';
+  }
+
+  /**
+   * Award reward points for approval status changes
+   * Points are calculated based on TIME TAKEN to complete the approval
+   * Using reward configuration table:
+   * - Fast (0-30 min): 5 points
+   * - Medium (31-120 min): 3 points
+   * - Slow (121+ min): 1 point
+   */
+  private async awardApprovalRewards(
+    customerId: number,
+    userId: number,
+    previousStatus: string,
+    newStatus: string,
+    approverRole: string
+  ): Promise<void> {
+    try {
+      // Define approval milestones
+      const approvalTransitions: Record<string, { from: string; to: string; description: string }> = {
+        'rm_submit': {
+          from: 'draft',
+          to: 'submitted',
+          description: 'RM submitted case for credit review'
+        },
+        'credit_l1_approve': {
+          from: 'submitted',
+          to: 'credit_l1_approved',
+          description: 'Credit L1 approved the case'
+        },
+        'credit_l2_approve': {
+          from: 'credit_l1_approved',
+          to: 'credit_l2_approved',
+          description: 'Credit L2 approved the case'
+        },
+        'ceo_approve': {
+          from: 'credit_l2_approved',
+          to: 'ceo_approved',
+          description: 'CEO approved the case'
+        },
+        'md_approve': {
+          from: 'ceo_approved',
+          to: 'md_approved',
+          description: 'MD approved and sanctioned the case'
+        },
+        'ops_l1_approve': {
+          from: 'ops_l1_review',
+          to: 'ops_l1_approved',
+          description: 'Operations L1 approved the case'
+        },
+        'ops_head_approve': {
+          from: 'ops_l1_approved',
+          to: 'ops_head_approved',
+          description: 'Operations Head approved the case'
+        },
+      };
+
+      // Find matching approval transition
+      for (const key of Object.keys(approvalTransitions)) {
+        const transition = approvalTransitions[key];
+        if (previousStatus === transition.from && newStatus === transition.to) {
+          // Calculate time taken for this approval stage
+          const timeTakenMinutes = await this.calculateApprovalTime(customerId, previousStatus);
+          
+          // Get points based on time using reward configuration
+          const { category, points } = await this.rewardService.calculatePoints(timeTakenMinutes);
+
+          // Award points to the person who performed the action
+          await this.rewardService.awardApprovalPoints({
+            userId: userId,
+            taskId: `approval_${customerId}_${newStatus}`,
+            points: points,
+            description: `${transition.description} (${category}: ${timeTakenMinutes} min)`,
+            taskType: 'APPROVAL'
+          });
+
+          console.log(`[SanctionService] Reward awarded: userId=${userId}, points=${points}, category=${category}, timeTaken=${timeTakenMinutes}min`);
+          break;
+        }
+      }
+    } catch (error) {
+      console.error('[SanctionService] Error awarding approval rewards:', error);
+    }
+  }
+
+  /**
+   * Calculate time taken for approval based on previous status timestamp
+   */
+  private async calculateApprovalTime(customerId: number, previousStatus: string): Promise<number> {
+    try {
+      // Get the most recent history entry for this customer with the previous status
+      const historyRepo = AppDataSource.getRepository(CaseStatusHistory);
+      const history = await historyRepo.find({
+        where: { customerId },
+        order: { createdAt: 'DESC' },
+        take: 10
+      });
+
+
+      // Find the entry where status matches previousStatus
+      for (const entry of history) {
+        if (entry.status === previousStatus) {
+          const diff = new Date().getTime() - new Date(entry.createdAt).getTime();
+          return Math.round(diff / 60000); // Convert to minutes
+        }
+      }
+
+      // If no history found, assume it was quick (use fast category)
+      return 0;
+    } catch (error) {
+      console.error('[SanctionService] Error calculating approval time:', error);
+      return 0;
+    }
   }
 
   // ========================================

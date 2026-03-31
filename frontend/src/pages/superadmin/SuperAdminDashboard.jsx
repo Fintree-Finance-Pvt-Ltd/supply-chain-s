@@ -44,7 +44,7 @@ const SuperAdminDashboard = () => {
 
   const fetchRewardConfig = async () => {
     try {
-      const response = await api.get('/rewards/config');
+      const response = await api.get('/rewards/rewards/config');
       if (response.data.success) {
         setRewardConfig(response.data.data);
       }
@@ -55,7 +55,7 @@ const SuperAdminDashboard = () => {
 
   const fetchBuckets = async () => {
     try {
-      const response = await api.get('/buckets');
+      const response = await api.get('/buckets/buckets');
       if (response.data.success) {
         setBuckets(response.data.data);
       }
