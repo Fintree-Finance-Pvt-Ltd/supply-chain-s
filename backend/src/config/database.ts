@@ -41,6 +41,7 @@ import { RefreshToken } from '../entities/RefreshToken';
 import { Applicant } from '../entities/Applicant';
 import { Partner } from '../entities/Partner';
 import { LanSequence } from '../entities/LanSequence';
+import { RepaymentUpload } from '../entities/RepaymentUpload';
 import { PerformanceMetricsCache, RewardConfiguration, RewardPoint, TaskBucketMapping, TaskTimeTracking } from '../entities';
 
 // Export entities array for use in DataSource
@@ -82,6 +83,7 @@ const entities = [
   Notification,
   RefreshToken,
   Applicant,
+  RepaymentUpload,
   RewardPoint,
   RewardConfiguration,
   PerformanceMetricsCache,

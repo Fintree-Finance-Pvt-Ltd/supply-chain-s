@@ -27,18 +27,21 @@ export const ROLE_MENU_CONFIG = {
     { path: '/operations/pending', label: 'Pending Checks', icon: 'FiCheckCircle' },
     { path: '/operations/suppliers', label: 'Supplier Onboarding', icon: 'FiUserPlus' },
     { path: '/invoice-discounting/ops-l1', label: 'Invoice Discounting', icon: 'FiFileText' },
+    { path: '/operations/repayment-upload', label: 'Repayment Upload', icon: 'FiDollarSign' },
   ],
   [ROLES.OPERATIONS_TEAM_L2]: [
     { path: '/operations/dashboard', label: 'Ops Dashboard', icon: 'FiHome' },
     { path: '/operations/pending', label: 'Pending Checks', icon: 'FiCheckCircle' },
     { path: '/operations/suppliers', label: 'Supplier Onboarding', icon: 'FiUserPlus' },
     { path: '/invoice-discounting/ops-l2', label: 'Invoice Discounting', icon: 'FiFileText' },
+    { path: '/operations/repayment-upload', label: 'Repayment Upload', icon: 'FiDollarSign' },
   ],
   [ROLES.OPERATIONS_HEAD]: [
     { path: '/operations/dashboard', label: 'Ops Dashboard', icon: 'FiHome' },
     { path: '/operations/pending', label: 'Pending Checks', icon: 'FiCheckCircle' },
     { path: '/operations/suppliers', label: 'Supplier Onboarding', icon: 'FiUserPlus' },
     { path: '/invoice-discounting/ops-head', label: 'Invoice Discounting', icon: 'FiFileText' },
+    { path: '/operations/repayment-upload', label: 'Repayment Upload', icon: 'FiDollarSign' },
   ],
   [ROLES.CEO]: [
     { path: '/management/dashboard', label: 'Ceo Dashboard', icon: 'FiHome' },

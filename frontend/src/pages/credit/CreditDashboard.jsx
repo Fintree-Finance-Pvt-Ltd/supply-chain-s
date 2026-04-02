@@ -44,12 +44,12 @@ const CreditDashboard = () => {
     {
       key: 'name',
       label: 'Customer Name',
-      render: (_, row) => row.customer?.customerName || row.name || 'N/A'
+      render: (_, row) => row.customer?.customerName || row.customer.name || row.customer.companyName  || 'N/A'
     },
     {
       key: 'code',
       label: 'Customer Code',
-      render: (_, row) => row.customer?.customerCode || 'N/A'
+      render: (_, row) => row.customer?.customerCode || row.customer?.id|| 'N/A'
     },
     {
       key: 'status',

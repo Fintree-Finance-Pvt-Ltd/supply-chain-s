@@ -656,6 +656,9 @@ export class UserPerformanceService {
   /**
    * Calculate efficiency score (0-100)
    * Based on: completion rate, average time, and rewards
+   * 
+   * NOTE: Reward points are already calculated based on time taken (fast=5, medium=3, slow=1)
+   * To avoid double-counting time, we use a time-based expected points calculation
    */
   private calculatePerformanceScore(
     completedCases: number,
@@ -679,9 +682,16 @@ export class UserPerformanceService {
       else timeScore = 15;
     }
 
-    // Reward score (normalized to 100 based on max possible)
-    // Assuming average 3 points per task
-    const expectedPoints = completedCases * 3;
+    // Reward score - Calculate expected points based on average time
+    // This aligns with the reward configuration: fast(≤30min)=5pts, medium(≤120min)=3pts, slow(>120min)=1pt
+    let expectedPointsPerTask = 3; // default medium
+    if (avgTimeMinutes !== null && avgTimeMinutes > 0) {
+      if (avgTimeMinutes <= 30) expectedPointsPerTask = 5;      // fast
+      else if (avgTimeMinutes <= 120) expectedPointsPerTask = 3; // medium
+      else expectedPointsPerTask = 1; // slow
+    }
+    
+    const expectedPoints = completedCases * expectedPointsPerTask;
     const rewardScore = expectedPoints > 0 ? Math.min(100, (rewards / expectedPoints) * 100) : 0;
 
     // Weighted average

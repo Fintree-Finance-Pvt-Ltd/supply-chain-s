@@ -127,6 +127,14 @@ DASHBOARD_OPERATIONS_SUPPLIERS: '/workflows/suppliers/dashboard/operations',
   OPERATIONS_PENDING: '/operations/pending',
   OPERATIONS_BY_ID: (id) => `/operations/${id}`,
 
+  // Repayment Uploads
+  REPAYMENTS_UPLOAD: '/operations/repayments/upload',
+  REPAYMENTS_LIST: '/operations/repayments',
+  REPAYMENT_BY_ID: (id) => `/operations/repayments/${id}`,
+  REPAYMENT_RETRY: (id) => `/operations/repayments/${id}/retry`,
+  REPAYMENT_LENDERS: '/operations/repayments/lenders',
+  REPAYMENT_LANS: '/operations/repayments/lans',
+
   // Onboarding Integrations
   ONBOARDING_MOBILE_SEND_OTP: '/onboarding/mobile/send-otp',
   ONBOARDING_MOBILE_VERIFY_OTP: '/onboarding/mobile/verify-otp',

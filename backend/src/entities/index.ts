@@ -34,6 +34,7 @@ export { Drawdown } from './Drawdown';
 export { Notification } from './Notification';
 export { RefreshToken } from './RefreshToken';
 export { Applicant } from './Applicant';
+export { RepaymentUpload, REPAYMENT_UPLOAD_STATUS } from './RepaymentUpload';
 
 // SUPERADMIN Analytics & RBAC Entities
 export { TaskTimeTracking } from './TaskTimeTracking';

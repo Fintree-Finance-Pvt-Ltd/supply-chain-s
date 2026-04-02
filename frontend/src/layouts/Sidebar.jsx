@@ -17,6 +17,7 @@ import {
   FiChevronDown,
   FiChevronUp,
   FiLayers,
+  FiDollarSign,
 } from 'react-icons/fi'
 
 // Icon mapping
@@ -32,6 +33,7 @@ const iconMap = {
   FiBarChart,
   FiFolder,
   FiLayers,
+  FiDollarSign,
 }
 
 const Sidebar = () => {

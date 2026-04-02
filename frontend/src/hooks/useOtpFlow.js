@@ -104,6 +104,12 @@ export default function useOtpFlow({
       if (res?.success && customerId) {
         await loadVerificationStatuses(customerId);
       }
+
+      // 🔥 Bind new coApplicantId to UI if created during verification
+      if (res?.coApplicantId && otpData.coApplicantId !== res.coApplicantId) {
+        // The coApplicantId was created during verification, update the UI
+        // This is handled by the parent component through onVerify callback
+      }
     }
 
     // ----------------------------------

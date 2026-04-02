@@ -392,7 +392,7 @@ checkBureau: async ({
         // Create FormData
         const formData = new FormData();
         formData.append('imageUrl', file);
-        formData.append('clientRefId', 'cheque_ocr_' + Date.now());
+        // formData.append('clientRefId', 'cheque_ocr_' + Date.now());
         if (accountHolderName) {
             formData.append('accountHolderName', accountHolderName);
         }

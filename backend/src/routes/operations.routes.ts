@@ -9,17 +9,51 @@ const operationsController = new OperationsController();
 
 router.use(authMiddleware);
 
+// IMPORTANT: More specific routes must come BEFORE generic /:id route
+
+// Repayment Upload Routes (OPS L1/L2)
+router.post(
+  '/repayments/upload',
+  roleMiddleware([ROLES.OPERATIONS_TEAM_L1, ROLES.OPERATIONS_TEAM_L2, ROLES.OPERATIONS_HEAD]),
+  operationsController.uploadRepayments
+);
+
+router.get(
+  '/repayments',
+  roleMiddleware([ROLES.OPERATIONS_TEAM_L1, ROLES.OPERATIONS_TEAM_L2, ROLES.OPERATIONS_HEAD]),
+  operationsController.getRepaymentUploads
+);
+
+// Lender and LAN endpoints - must come before /:id
+router.get(
+  '/repayments/lenders',
+  roleMiddleware([ROLES.OPERATIONS_TEAM_L1, ROLES.OPERATIONS_TEAM_L2, ROLES.OPERATIONS_HEAD]),
+  operationsController.getLenders
+);
+
+router.get(
+  '/repayments/lans/:partnerId',
+  roleMiddleware([ROLES.OPERATIONS_TEAM_L1, ROLES.OPERATIONS_TEAM_L2, ROLES.OPERATIONS_HEAD]),
+  operationsController.getLansByLender
+);
+
+router.get(
+  '/repayments/:id',
+  roleMiddleware([ROLES.OPERATIONS_TEAM_L1, ROLES.OPERATIONS_TEAM_L2, ROLES.OPERATIONS_HEAD]),
+  operationsController.getRepaymentUploadById
+);
+
+router.post(
+  '/repayments/:id/retry',
+  roleMiddleware([ROLES.OPERATIONS_TEAM_L1, ROLES.OPERATIONS_TEAM_L2, ROLES.OPERATIONS_HEAD]),
+  operationsController.retryRepaymentUpload
+);
+
+// Operations check routes
 router.get(
   '/pending',
   roleMiddleware([ROLES.OPERATIONS_TEAM_L1, ROLES.OPERATIONS_TEAM_L2, ROLES.OPERATIONS_HEAD]),
   operationsController.getPendingChecks
-);
-
-router.get('/:id', operationsController.getCheckById);
-router.put(
-  '/:id',
-  roleMiddleware([ROLES.OPERATIONS_TEAM_L1, ROLES.OPERATIONS_TEAM_L2, ROLES.OPERATIONS_HEAD]),
-  operationsController.updateCheck
 );
 
 // RM submits post-sanction completion
@@ -29,7 +63,12 @@ router.post(
   operationsController.submitPostSanction
 );
 
+// Generic /:id route - must be LAST
+router.get('/:id', operationsController.getCheckById);
+router.put(
+  '/:id',
+  roleMiddleware([ROLES.OPERATIONS_TEAM_L1, ROLES.OPERATIONS_TEAM_L2, ROLES.OPERATIONS_HEAD]),
+  operationsController.updateCheck
+);
+
 export default router;
-
-
-
