@@ -10,7 +10,8 @@ export default function useOtpFlow({
   customerId,
   formData,
   loadVerificationStatuses,
-  navigate
+  navigate,
+  onCoApplicantCreated
 }) {
   const [showOtpModal, setShowOtpModal] = useState(false);
   const [otpValue, setOtpValue] = useState("");
@@ -107,8 +108,9 @@ export default function useOtpFlow({
 
       // 🔥 Bind new coApplicantId to UI if created during verification
       if (res?.coApplicantId && otpData.coApplicantId !== res.coApplicantId) {
-        // The coApplicantId was created during verification, update the UI
-        // This is handled by the parent component through onVerify callback
+        if (onCoApplicantCreated) {
+          onCoApplicantCreated(res.coApplicantId);
+        }
       }
     }
 

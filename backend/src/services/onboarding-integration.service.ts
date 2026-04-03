@@ -61,28 +61,7 @@ export class OnboardingIntegrationService {
     ownerType: KycOwnerType,
     applicantId?: number,
     coApplicantId?: number
-  ): Promise<{ coApplicantId?: number }> {
-
-    const coApplicantRepo = AppDataSource.getRepository(CoApplicant);
-
-    if (ownerType === KycOwnerType.CO_APPLICANT && !coApplicantId) {
-
-      if (!customerId)
-        throw new Error("customerId required for co-applicant");
-
-      const coApplicant = await coApplicantRepo.save(
-        coApplicantRepo.create({
-          customerId: customerId as number,
-          mobile: mobileNumber,
-          name: '',
-          email: undefined,
-          gender: undefined,
-          pan: undefined,
-        } as Partial<CoApplicant>)
-      );
-
-      coApplicantId = coApplicant.id;
-    }
+  ): Promise<{}> {
 
     // ✅ prevent spam: if valid OTP already sent for same owner, block
     const recentSession = await this.otpSessionRepository.findOne({
@@ -113,7 +92,6 @@ export class OnboardingIntegrationService {
       expiresAt: session.expiresAt,
       status: OtpSessionStatus.SENT,
 
-      // ✅ NEW FIELDS (must exist in entity)
       ownerType,
       applicantId: ownerType === KycOwnerType.APPLICANT ? applicantId ?? null : null,
       coApplicantId: ownerType === KycOwnerType.CO_APPLICANT ? coApplicantId ?? null : null,
@@ -125,9 +103,7 @@ export class OnboardingIntegrationService {
 
     await this.smsProvider.sendSms(mobileNumber, message);
 
-    return ownerType === KycOwnerType.CO_APPLICANT
-      ? { coApplicantId }
-      : {};
+    return {};
 
   }
 
@@ -299,7 +275,7 @@ export class OnboardingIntegrationService {
     applicantId?: number,
     coApplicantId?: number,
     companyInfo?: { companyType: string; companyName: string; rmId: number }
-  ): Promise<{ success: boolean; customerId: number }> {
+  ): Promise<{ success: boolean; customerId: number; coApplicantId?: number }> {
 
     const otpRepo = AppDataSource.getRepository(OtpSession);
     const customerRepo = AppDataSource.getRepository(Customer);
@@ -422,18 +398,40 @@ export class OnboardingIntegrationService {
     }
 
     if (ownerType === KycOwnerType.CO_APPLICANT) {
-      if (!coApplicantId) throw new Error("coApplicantId required");
+      let coApp: CoApplicant | null = null;
 
-      const coApp = await coApplicantRepo.findOne({
-        where: { id: coApplicantId, customerId: finalCustomer.id }
-      });
+      if (coApplicantId) {
+        coApp = await coApplicantRepo.findOne({
+          where: { id: coApplicantId, customerId: finalCustomer.id }
+        });
 
-      if (!coApp) throw new Error("Co-applicant not found");
+        if (!coApp) throw new Error("Co-applicant not found");
 
-      await coApplicantRepo.update(
-        { id: coApplicantId },
-        { mobile: mobileNumber }
-      );
+        await coApplicantRepo.update(
+          { id: coApplicantId },
+          { mobile: mobileNumber }
+        );
+      } else {
+        // ✅ Check for existing co-applicant with same mobile to prevent duplicates
+        coApp = await coApplicantRepo.findOne({
+          where: { customerId: finalCustomer.id, mobile: mobileNumber }
+        });
+
+        if (!coApp) {
+          coApp = await coApplicantRepo.save(
+            coApplicantRepo.create({
+              customerId: finalCustomer.id,
+              mobile: mobileNumber,
+              name: '',
+              email: undefined,
+              gender: undefined,
+              pan: undefined,
+            } as Partial<CoApplicant>)
+          );
+        }
+
+        coApplicantId = coApp.id;
+      }
     }
 
     // ---------------------------------------------------
@@ -453,7 +451,11 @@ export class OnboardingIntegrationService {
     await this.getOrCreateKycStatus(finalCustomer.id, KycOwnerType.COMPANY);
     await this.getOrCreateKycStatus(finalCustomer.id, KycOwnerType.APPLICANT, applicant.id);
 
-    return { success: true, customerId: finalCustomer.id };
+    return {
+      success: true,
+      customerId: finalCustomer.id,
+      coApplicantId: ownerType === KycOwnerType.CO_APPLICANT ? coApplicantId : undefined
+    };
   }
 
 

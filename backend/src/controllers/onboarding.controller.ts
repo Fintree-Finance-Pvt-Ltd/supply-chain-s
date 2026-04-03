@@ -30,8 +30,7 @@ export class OnboardingController {
       );
 
       res.json({
-        success: true, message: "Mobile OTP sent successfully",
-        coApplicantId: result?.coApplicantId
+        success: true, message: "Mobile OTP sent successfully"
       });
     } catch (error: any) {
       res.status(400).json({ success: false, message: error.message || "Failed to send mobile OTP" });
@@ -63,6 +62,7 @@ export class OnboardingController {
         success: true,
         message: "Mobile verified successfully",
         customerId: result.customerId,
+        coApplicantId: result.coApplicantId,
       });
 
     } catch (error: any) {

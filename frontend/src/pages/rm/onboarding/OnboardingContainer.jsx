@@ -228,6 +228,15 @@ const OnboardingContainer = () => {
     formData,
     loadVerificationStatuses,
     navigate,
+    onCoApplicantCreated: (newCoApplicantId) => {
+      setCoApplicants((prev) =>
+        prev.map((c) =>
+          !c.id && c.localKey
+            ? { ...c, id: newCoApplicantId }
+            : c
+        )
+      );
+    },
   });
 
   // ----- Verify handlers (PAN/GST/OTP send)
@@ -506,18 +515,6 @@ const OnboardingContainer = () => {
           applicantId,
           coApplicantId,
         });
-
-        // 🔥 bind new coApplicantId to UI
-        if (!coApplicantId && res?.coApplicantId && localKey) {
-          setCoApplicants((prev) =>
-            prev.map((c) =>
-              c.localKey === localKey
-                ? { ...c, id: res.coApplicantId }
-                : c
-            )
-          );
-          coApplicantId = res.coApplicantId;
-        }
 
         setLoading(loadingKey, false);
 
