@@ -103,7 +103,7 @@ const BasicKycTab = ({
               >
                 {loadingStates["companyMobile_main"]
                   ? <LoadingSpinner size="sm" />
-                  : mainVerified.mobile ? "✓ Verified" : "Verify"}
+                  : mainVerified.mobile ? "✓ Verified" : "Register"}
               </button>
             </div>
             {errors.companyMobile && <p className="text-red-500 text-xs mt-1">{errors.companyMobile}</p>}
@@ -128,7 +128,7 @@ const BasicKycTab = ({
               >
                 {loadingStates["companyEmail_main"]
                   ? <LoadingSpinner size="sm" />
-                  : mainVerified.email ? "✓ Verified" : "Verify"}
+                  : mainVerified.email ? "✓ Verified" : "Register"}
               </button>
             </div>
             {errors.companyEmail && <p className="text-red-500 text-xs mt-1">{errors.companyEmail}</p>}
@@ -263,7 +263,7 @@ const BasicKycTab = ({
                   ? <LoadingSpinner size="sm" />
                   : applicantVerified.mobile
                     ? "✓ Verified"
-                    : "Verify"}
+                    : "Register"}
               </button>
 
             </div>
@@ -291,11 +291,11 @@ const BasicKycTab = ({
               }
               className={`btn-${applicantVerified.email ? "success" : "secondary"} min-w-[110px]`}
             >
-              {loadingStates["applicantEmail_main"]
-                ? <LoadingSpinner size="sm" />
-                : applicantVerified.email
-                  ? "✓ Verified"
-                  : "Verify"}
+{loadingStates["applicantEmail_main"]
+                  ? <LoadingSpinner size="sm" />
+                  : applicantVerified.email
+                    ? "✓ Verified"
+                    : "Register"}
             </button>
 
             {errors.applicantEmail && <p className="text-red-500 text-xs mt-1">{errors.applicantEmail}</p>}

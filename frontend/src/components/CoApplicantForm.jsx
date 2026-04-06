@@ -512,7 +512,7 @@ const CoApplicantForm = ({
                 ? '✓ Verified'
                 : loadingStates[`coApplicantMobile_${data.id || data.localKey}`]
                   ? <LoadingSpinner size="sm" />
-                  : 'Verify'}
+                  : 'Register'}
             </button>
           </div>
           {errors.mobile && <p className="text-red-500 text-xs mt-1">{errors.mobile}</p>}
@@ -545,7 +545,7 @@ const CoApplicantForm = ({
                 ? '✓ Verified'
                 : loadingStates[`coApplicantEmail_${data.id || data.localKey}`]
                   ? <LoadingSpinner size="sm" />
-                  : 'Verify'}
+                  : 'Register'}
             </button>
           </div>
           {errors.email && <p className="text-red-500 text-xs mt-1">{errors.email}</p>}

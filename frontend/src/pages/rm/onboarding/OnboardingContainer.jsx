@@ -460,7 +460,7 @@ const OnboardingContainer = () => {
     }
 
     if (!customerId && field !== "companyMobile") {
-      toast.info("Verify company mobile first (customer must exist)");
+      toast.info("Register company mobile first (customer must exist)");
       return;
     }
 
@@ -896,7 +896,7 @@ const OnboardingContainer = () => {
           toast.error("Live photo upload failed: " + (e?.response?.data?.message || e.message));
         }
       } else {
-        toast.info("Verify company mobile first (customer must exist) before uploading documents.");
+        toast.info("Register company mobile first (customer must exist) before uploading documents.");
       }
     }
 
@@ -1083,7 +1083,7 @@ const OnboardingContainer = () => {
           toast.info("Company mobile is required to create customer");
           return;
         }
-        toast.info("Please click Verify button next to company mobile to create customer");
+        toast.info("Please click Register button next to company mobile to create customer");
         return;
       }
       await persistFullCustomer(customerId);
@@ -1115,7 +1115,7 @@ const OnboardingContainer = () => {
           toast.info("Company mobile is required to create customer");
           return;
         }
-        toast.info("Please click Verify button next to company mobile to create customer");
+        toast.info("Please click Register button next to company mobile to create customer");
         return;
       }
 
@@ -1153,11 +1153,11 @@ const OnboardingContainer = () => {
       <div>
         <h1 className="text-3xl font-bold text-gray-900">New Customer Onboarding</h1>
         <p className="text-gray-600 mt-2">
-          Step 1: Enter company mobile and click Verify to create customer. Then complete KYC & docs.
+          Step 1: Enter company mobile and click Register to create customer. Then complete KYC & docs.
         </p>
         {!customerId && formData.companyMobile && (
           <p className="mt-2 text-sm text-orange-600">
-            ⚠️ Customer not created yet. Click Verify button next to company mobile to generate ID.
+            ⚠️ Customer not created yet. Click Register button next to company mobile to generate ID.
           </p>
         )}
       </div>
