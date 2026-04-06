@@ -303,30 +303,32 @@ let session: OtpSession | null = null;
       if (!session) throw new Error('No valid OTP session found');
     }
 
+    const otpSession = session!;
+
     if (!skipOtpValidation) {
       try {
         this.otpService.verifyOtp(
           {
-            otp: session.otp,
-            expiresAt: session.expiresAt,
-            attempts: session.attempts,
-            lastSentAt: session.createdAt
+            otp: otpSession.otp,
+            expiresAt: otpSession.expiresAt,
+            attempts: otpSession.attempts,
+            lastSentAt: otpSession.createdAt
           },
           otp
         );
 
         await otpRepo.update(
-          { id: session.id },
+          { id: otpSession.id },
           { status: OtpSessionStatus.VERIFIED }
         );
 
       } catch (error: any) {
 
         await otpRepo.update(
-          { id: session.id },
+          { id: otpSession.id },
           {
-            attempts: session.attempts + 1,
-            status: session.attempts + 1 >= 3
+            attempts: otpSession.attempts + 1,
+            status: otpSession.attempts + 1 >= 3
               ? OtpSessionStatus.FAILED
               : OtpSessionStatus.SENT
           }
@@ -335,12 +337,10 @@ let session: OtpSession | null = null;
         throw error;
       }
     } else {
-      if (session) {
-        await otpRepo.update(
-          { id: session.id },
-          { status: OtpSessionStatus.VERIFIED }
-        );
-      }
+      await otpRepo.update(
+        { id: otpSession.id },
+        { status: OtpSessionStatus.VERIFIED }
+      );
     }
 
     // ---------------------------------------------------
