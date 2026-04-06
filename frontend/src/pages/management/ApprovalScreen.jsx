@@ -455,6 +455,7 @@ const ApprovalScreen = () => {
                           <input
                             type="number"
                             value={ps.sanctionAmount}
+                            onWheel={(e) => e.target.blur()}
                             onChange={(e) => {
                               const updated = [...partnerSanctions];
                               updated[index].sanctionAmount =
@@ -501,6 +502,7 @@ const ApprovalScreen = () => {
                           <input
                             type="number"
                             value={ps.sanctionAmount}
+                            onWheel={(e) => e.target.blur()}
                             onChange={(e) => {
                               const updated = [...partnerSanctions];
                               updated[index].sanctionAmount =
@@ -629,6 +631,7 @@ const ApprovalScreen = () => {
                       value={sanctionData.sanctionAmount}
                       className="input-field text-sm bg-gray-100"
                       readOnly={true}
+                      onWheel={(e) => e.target.blur()}
                     />
                   </div>
                   <div>

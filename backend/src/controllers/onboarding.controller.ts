@@ -51,8 +51,7 @@ export class OnboardingController {
         return;
       }
 
-      const currentUserId = (req as any).user?.id || 1;
-
+      const currentUserId = (req as any).user?.id ?? 1;
       const result = await this.onboardingService.verifyMobileOtp(
         customerId ? Number(customerId) : undefined,
         skipOtpValidation ? 'SKIP' : otp,

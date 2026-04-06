@@ -1,25 +1,36 @@
-import { AppDataSource } from '../config/database';
-import { Customer, KycDetail, OtpSession, KycVerificationStatus, CoApplicant } from '../entities';
-import { OtpSessionStatus, IdentifierType as OtpIdentifierType } from '../entities/OtpSession';
-import { KycOwnerType, KycStatus } from '../entities/KycVerificationStatus';
-import { OtpService } from '../integrations/otp/otp.service';
-import { AlotSmsProvider } from '../integrations/notifications/sms/alot.provider';
-import { NodemailerProvider } from '../integrations/notifications/email/nodemailer.provider';
-import { PanService } from '../integrations/pan/pan.service';
-import { GstService } from '../integrations/gst/zoop/gst.service';
-import { AadhaarService } from '../integrations/aadhaar/digitap/aadhaar.service';
-import { BureauService } from '../integrations/bureau/bureau.service';
-import { OcrService } from '../integrations/ocr/ocr.service';
-import { IsNull, MoreThan } from 'typeorm';
-import { CASE_STATUS } from '../config/constants';
-import { Applicant } from '../entities/Applicant';
-import { randomUUID } from 'crypto';
+import { AppDataSource } from "../config/database";
+import {
+  Customer,
+  KycDetail,
+  OtpSession,
+  KycVerificationStatus,
+  CoApplicant,
+} from "../entities";
+import {
+  OtpSessionStatus,
+  IdentifierType as OtpIdentifierType,
+} from "../entities/OtpSession";
+import { KycOwnerType, KycStatus } from "../entities/KycVerificationStatus";
+import { OtpService } from "../integrations/otp/otp.service";
+import { AlotSmsProvider } from "../integrations/notifications/sms/alot.provider";
+import { NodemailerProvider } from "../integrations/notifications/email/nodemailer.provider";
+import { PanService } from "../integrations/pan/pan.service";
+import { GstService } from "../integrations/gst/zoop/gst.service";
+import { AadhaarService } from "../integrations/aadhaar/digitap/aadhaar.service";
+import { BureauService } from "../integrations/bureau/bureau.service";
+import { OcrService } from "../integrations/ocr/ocr.service";
+import { IsNull, MoreThan } from "typeorm";
+import { CASE_STATUS } from "../config/constants";
+import { Applicant } from "../entities/Applicant";
+import { randomUUID } from "crypto";
 
 export class OnboardingIntegrationService {
   private customerRepository = AppDataSource.getRepository(Customer);
   private kycRepository = AppDataSource.getRepository(KycDetail);
   private otpSessionRepository = AppDataSource.getRepository(OtpSession);
-  private kycStatusRepository = AppDataSource.getRepository(KycVerificationStatus);
+  private kycStatusRepository = AppDataSource.getRepository(
+    KycVerificationStatus,
+  );
 
   private otpService = new OtpService();
   private panService = new PanService();
@@ -60,9 +71,8 @@ export class OnboardingIntegrationService {
     mobileNumber: string,
     ownerType: KycOwnerType,
     applicantId?: number,
-    coApplicantId?: number
+    coApplicantId?: number,
   ): Promise<{}> {
-
     // ✅ prevent spam: if valid OTP already sent for same owner, block
     const recentSession = await this.otpSessionRepository.findOne({
       where: {
@@ -72,8 +82,14 @@ export class OnboardingIntegrationService {
         status: OtpSessionStatus.VERIFIED,
         expiresAt: MoreThan(new Date()),
         ownerType,
-        applicantId: ownerType === KycOwnerType.APPLICANT ? applicantId ?? IsNull() : IsNull(),
-        coApplicantId: ownerType === KycOwnerType.CO_APPLICANT ? coApplicantId ?? IsNull() : IsNull(),
+        applicantId:
+          ownerType === KycOwnerType.APPLICANT
+            ? (applicantId ?? IsNull())
+            : IsNull(),
+        coApplicantId:
+          ownerType === KycOwnerType.CO_APPLICANT
+            ? (coApplicantId ?? IsNull())
+            : IsNull(),
       } as any,
       order: { createdAt: "DESC" as any },
     });
@@ -93,8 +109,12 @@ export class OnboardingIntegrationService {
       status: OtpSessionStatus.SENT,
 
       ownerType,
-      applicantId: ownerType === KycOwnerType.APPLICANT ? applicantId ?? null : null,
-      coApplicantId: ownerType === KycOwnerType.CO_APPLICANT ? coApplicantId ?? null : null,
+      applicantId:
+        ownerType === KycOwnerType.APPLICANT ? (applicantId ?? null) : null,
+      coApplicantId:
+        ownerType === KycOwnerType.CO_APPLICANT
+          ? (coApplicantId ?? null)
+          : null,
     } as any);
 
     await this.otpSessionRepository.save(otpSession);
@@ -104,9 +124,7 @@ export class OnboardingIntegrationService {
     await this.smsProvider.sendSms(mobileNumber, message);
 
     return {};
-
   }
-
 
   // async verifyMobileOtp(
   //   customerId: number | undefined,
@@ -258,14 +276,9 @@ export class OnboardingIntegrationService {
   //   });
   // }
 
-
-
-
-
   // ---------------------------------------------------
   // 📧 Email OTP
   // ---------------------------------------------------
-
 
   async verifyMobileOtp(
     customerId: number | undefined,
@@ -275,16 +288,15 @@ export class OnboardingIntegrationService {
     applicantId?: number,
     coApplicantId?: number,
     companyInfo?: { companyType: string; companyName: string; rmId: number },
-    skipOtpValidation?: boolean
+    skipOtpValidation?: boolean,
   ): Promise<{ success: boolean; customerId: number; coApplicantId?: number }> {
-
     const otpRepo = AppDataSource.getRepository(OtpSession);
     const customerRepo = AppDataSource.getRepository(Customer);
     const applicantRepo = AppDataSource.getRepository(Applicant);
     const coApplicantRepo = AppDataSource.getRepository(CoApplicant);
     const kycStatusRepo = AppDataSource.getRepository(KycVerificationStatus);
 
-let session: OtpSession | null = null;
+    let session: OtpSession | null = null;
 
     if (!skipOtpValidation) {
       session = await otpRepo.findOne({
@@ -294,53 +306,93 @@ let session: OtpSession | null = null;
           status: OtpSessionStatus.SENT,
           expiresAt: MoreThan(new Date()),
           ownerType,
-          applicantId: ownerType === KycOwnerType.APPLICANT ? applicantId ?? IsNull() : IsNull(),
-          coApplicantId: ownerType === KycOwnerType.CO_APPLICANT ? coApplicantId ?? IsNull() : IsNull(),
+          applicantId:
+            ownerType === KycOwnerType.APPLICANT
+              ? (applicantId ?? IsNull())
+              : IsNull(),
+          coApplicantId:
+            ownerType === KycOwnerType.CO_APPLICANT
+              ? (coApplicantId ?? IsNull())
+              : IsNull(),
         } as any,
-        order: { createdAt: 'DESC' as any }
+        order: { createdAt: "DESC" as any },
       });
 
-      if (!session) throw new Error('No valid OTP session found');
+      if (!session) throw new Error("No valid OTP session found");
     }
 
-    const otpSession = session!;
+    // const otpSession = session!;
+
+    // if (!skipOtpValidation) {
+    //   try {
+    //     this.otpService.verifyOtp(
+    //       {
+    //         otp: otpSession.otp,
+    //         expiresAt: otpSession.expiresAt,
+    //         attempts: otpSession.attempts,
+    //         lastSentAt: otpSession.createdAt
+    //       },
+    //       otp
+    //     );
+
+    //     await otpRepo.update(
+    //       { id: otpSession.id },
+    //       { status: OtpSessionStatus.VERIFIED }
+    //     );
+
+    //   } catch (error: any) {
+
+    //     await otpRepo.update(
+    //       { id: otpSession.id },
+    //       {
+    //         attempts: otpSession.attempts + 1,
+    //         status: otpSession.attempts + 1 >= 3
+    //           ? OtpSessionStatus.FAILED
+    //           : OtpSessionStatus.SENT
+    //       }
+    //     );
+
+    //     throw error;
+    //   }
+    // } else {
+    //   await otpRepo.update(
+    //     { id: otpSession.id },
+    //     { status: OtpSessionStatus.VERIFIED }
+    //   );
+    // }
 
     if (!skipOtpValidation) {
+      const otpSession = session!;
+
       try {
         this.otpService.verifyOtp(
           {
             otp: otpSession.otp,
             expiresAt: otpSession.expiresAt,
             attempts: otpSession.attempts,
-            lastSentAt: otpSession.createdAt
+            lastSentAt: otpSession.createdAt,
           },
-          otp
+          otp,
         );
 
         await otpRepo.update(
           { id: otpSession.id },
-          { status: OtpSessionStatus.VERIFIED }
+          { status: OtpSessionStatus.VERIFIED },
         );
-
       } catch (error: any) {
-
         await otpRepo.update(
           { id: otpSession.id },
           {
             attempts: otpSession.attempts + 1,
-            status: otpSession.attempts + 1 >= 3
-              ? OtpSessionStatus.FAILED
-              : OtpSessionStatus.SENT
-          }
+            status:
+              otpSession.attempts + 1 >= 3
+                ? OtpSessionStatus.FAILED
+                : OtpSessionStatus.SENT,
+          },
         );
 
         throw error;
       }
-    } else {
-      await otpRepo.update(
-        { id: otpSession.id },
-        { status: OtpSessionStatus.VERIFIED }
-      );
     }
 
     // ---------------------------------------------------
@@ -350,7 +402,9 @@ let session: OtpSession | null = null;
 
     if (!customerId) {
       if (ownerType !== KycOwnerType.COMPANY) {
-        throw new Error("customerId is required for applicant/co-applicant verification");
+        throw new Error(
+          "customerId is required for applicant/co-applicant verification",
+        );
       }
 
       if (!companyInfo) {
@@ -358,7 +412,7 @@ let session: OtpSession | null = null;
       }
 
       const existing = await customerRepo.findOne({
-        where: { companyMobile: mobileNumber }
+        where: { companyMobile: mobileNumber },
       });
 
       if (existing) {
@@ -371,12 +425,12 @@ let session: OtpSession | null = null;
             companyMobile: mobileNumber,
             rmId: companyInfo.rmId,
             status: CASE_STATUS.DRAFT,
-          })
+          }),
         );
       }
     } else {
       const existingCustomer = await customerRepo.findOne({
-        where: { id: customerId }
+        where: { id: customerId },
       });
 
       if (!existingCustomer) throw new Error("Customer not found");
@@ -387,15 +441,15 @@ let session: OtpSession | null = null;
     // ✅ Ensure Applicant exists
     // ---------------------------------------------------
     let applicant = await applicantRepo.findOne({
-      where: { customerId: finalCustomer.id }
+      where: { customerId: finalCustomer.id },
     });
 
     if (!applicant) {
       applicant = await applicantRepo.save(
         applicantRepo.create({
           customerId: finalCustomer.id,
-          name: ''
-        })
+          name: "",
+        }),
       );
     }
 
@@ -405,7 +459,7 @@ let session: OtpSession | null = null;
     if (ownerType === KycOwnerType.APPLICANT) {
       await applicantRepo.update(
         { id: applicant.id },
-        { mobile: mobileNumber }
+        { mobile: mobileNumber },
       );
     }
 
@@ -414,19 +468,19 @@ let session: OtpSession | null = null;
 
       if (coApplicantId) {
         coApp = await coApplicantRepo.findOne({
-          where: { id: coApplicantId, customerId: finalCustomer.id }
+          where: { id: coApplicantId, customerId: finalCustomer.id },
         });
 
         if (!coApp) throw new Error("Co-applicant not found");
 
         await coApplicantRepo.update(
           { id: coApplicantId },
-          { mobile: mobileNumber }
+          { mobile: mobileNumber },
         );
       } else {
         // ✅ Check for existing co-applicant with same mobile to prevent duplicates
         coApp = await coApplicantRepo.findOne({
-          where: { customerId: finalCustomer.id, mobile: mobileNumber }
+          where: { customerId: finalCustomer.id, mobile: mobileNumber },
         });
 
         if (!coApp) {
@@ -434,11 +488,11 @@ let session: OtpSession | null = null;
             coApplicantRepo.create({
               customerId: finalCustomer.id,
               mobile: mobileNumber,
-              name: '',
+              name: "",
               email: undefined,
               gender: undefined,
               pan: undefined,
-            } as Partial<CoApplicant>)
+            } as Partial<CoApplicant>),
           );
         }
 
@@ -453,7 +507,7 @@ let session: OtpSession | null = null;
       finalCustomer.id,
       ownerType,
       ownerType === KycOwnerType.APPLICANT ? applicant.id : undefined,
-      ownerType === KycOwnerType.CO_APPLICANT ? coApplicantId : undefined
+      ownerType === KycOwnerType.CO_APPLICANT ? coApplicantId : undefined,
     );
 
     kycRow.mobileStatus = KycStatus.VERIFIED;
@@ -461,23 +515,26 @@ let session: OtpSession | null = null;
 
     // Ensure base rows exist
     await this.getOrCreateKycStatus(finalCustomer.id, KycOwnerType.COMPANY);
-    await this.getOrCreateKycStatus(finalCustomer.id, KycOwnerType.APPLICANT, applicant.id);
+    await this.getOrCreateKycStatus(
+      finalCustomer.id,
+      KycOwnerType.APPLICANT,
+      applicant.id,
+    );
 
     return {
       success: true,
       customerId: finalCustomer.id,
-      coApplicantId: ownerType === KycOwnerType.CO_APPLICANT ? coApplicantId : undefined
+      coApplicantId:
+        ownerType === KycOwnerType.CO_APPLICANT ? coApplicantId : undefined,
     };
   }
-
 
   async sendEmailOtp(
     customerId: number,
     ownerType: KycOwnerType,
     email: string,
-    coApplicantId?: number
+    coApplicantId?: number,
   ): Promise<{ coApplicantId?: number }> {
-
     const customerRepo = this.customerRepository;
     const applicantRepo = AppDataSource.getRepository(Applicant);
     const coApplicantRepo = AppDataSource.getRepository(CoApplicant);
@@ -487,13 +544,11 @@ let session: OtpSession | null = null;
     // ---------------------------------------------------
 
     if (ownerType === KycOwnerType.COMPANY) {
-
       const customer = await customerRepo.findOne({
-        where: { id: customerId }
+        where: { id: customerId },
       });
 
-      if (!customer)
-        throw new Error("Customer not found");
+      if (!customer) throw new Error("Customer not found");
 
       // 🔥 First-time save
       if (!customer.companyEmail) {
@@ -504,16 +559,12 @@ let session: OtpSession | null = null;
       // 🔒 Block if mismatch
       if (customer.companyEmail !== email)
         throw new Error("Email does not match registered company email");
-    }
-
-    else if (ownerType === KycOwnerType.APPLICANT) {
-
+    } else if (ownerType === KycOwnerType.APPLICANT) {
       const applicant = await applicantRepo.findOne({
-        where: { customerId }
+        where: { customerId },
       });
 
-      if (!applicant)
-        throw new Error("Applicant not found");
+      if (!applicant) throw new Error("Applicant not found");
 
       // 🔥 First-time save
       if (!applicant.email) {
@@ -530,9 +581,7 @@ let session: OtpSession | null = null;
     // ✅ AUTO-CREATE CO-APPLICANT (NEW)
     // ---------------------------------------------------
     else if (ownerType === KycOwnerType.CO_APPLICANT) {
-
-      if (!customerId)
-        throw new Error("customerId required for co-applicant");
+      if (!customerId) throw new Error("customerId required for co-applicant");
 
       let coApplicant: CoApplicant | null = null;
 
@@ -542,21 +591,20 @@ let session: OtpSession | null = null;
           coApplicantRepo.create({
             customerId,
             email,
-            name: '',
-            mobile: '',
+            name: "",
+            mobile: "",
             gender: undefined,
             pan: undefined,
-          } as Partial<CoApplicant>)
+          } as Partial<CoApplicant>),
         );
         coApplicantId = coApplicant.id;
       } else {
         coApplicant = await coApplicantRepo.findOne({
-          where: { id: coApplicantId, customerId }
+          where: { id: coApplicantId, customerId },
         });
       }
 
-      if (!coApplicant)
-        throw new Error("Co-applicant not found");
+      if (!coApplicant) throw new Error("Co-applicant not found");
 
       // 🔥 First-time save
       if (!coApplicant.email) {
@@ -577,12 +625,11 @@ let session: OtpSession | null = null;
         identifier: email,
         identifierType: OtpIdentifierType.EMAIL,
         status: OtpSessionStatus.SENT,
-        expiresAt: MoreThan(new Date())
-      }
+        expiresAt: MoreThan(new Date()),
+      },
     });
 
-    if (recentSession)
-      throw new Error("OTP already sent. Please wait.");
+    if (recentSession) throw new Error("OTP already sent. Please wait.");
 
     // ---------------------------------------------------
     // 🔐 Generate OTP
@@ -596,7 +643,7 @@ let session: OtpSession | null = null;
       identifierType: OtpIdentifierType.EMAIL,
       otp: session.otp,
       expiresAt: session.expiresAt,
-      status: OtpSessionStatus.SENT
+      status: OtpSessionStatus.SENT,
     });
 
     await this.otpSessionRepository.save(otpSession);
@@ -613,24 +660,17 @@ let session: OtpSession | null = null;
 
     await this.emailProvider.sendEmail(email, subject, html);
 
-    return ownerType === KycOwnerType.CO_APPLICANT
-      ? { coApplicantId }
-      : {};
+    return ownerType === KycOwnerType.CO_APPLICANT ? { coApplicantId } : {};
   }
-
-
-
 
   async verifyEmailOtp(
     customerId: number,
     otp: string,
     ownerType: KycOwnerType,
     coApplicantId?: number,
-    skipOtpValidation?: boolean
+    skipOtpValidation?: boolean,
   ): Promise<boolean> {
-
     return await AppDataSource.transaction(async (manager) => {
-
       const otpRepo = manager.getRepository(OtpSession);
       const applicantRepo = manager.getRepository(Applicant);
       const coApplicantRepo = manager.getRepository(CoApplicant);
@@ -643,14 +683,15 @@ let session: OtpSession | null = null;
           .createQueryBuilder("s")
           .setLock("pessimistic_write")
           .where("s.customerId = :customerId", { customerId })
-          .andWhere("s.identifierType = :type", { type: OtpIdentifierType.EMAIL })
+          .andWhere("s.identifierType = :type", {
+            type: OtpIdentifierType.EMAIL,
+          })
           .andWhere("s.status = :status", { status: OtpSessionStatus.SENT })
           .andWhere("s.expiresAt > NOW()")
           .orderBy("s.createdAt", "DESC")
           .getOne();
 
-        if (!session)
-          throw new Error("No valid OTP session found");
+        if (!session) throw new Error("No valid OTP session found");
 
         try {
           this.otpService.verifyOtp(
@@ -658,19 +699,16 @@ let session: OtpSession | null = null;
               otp: session.otp,
               expiresAt: session.expiresAt,
               attempts: session.attempts,
-              lastSentAt: session.createdAt
+              lastSentAt: session.createdAt,
             },
-            otp
+            otp,
           );
 
           session.status = OtpSessionStatus.VERIFIED;
-
         } catch (error: any) {
-
           session.attempts += 1;
 
-          if (session.attempts >= 3)
-            session.status = OtpSessionStatus.FAILED;
+          if (session.attempts >= 3) session.status = OtpSessionStatus.FAILED;
 
           await otpRepo.save(session);
           throw error;
@@ -681,7 +719,9 @@ let session: OtpSession | null = null;
         session = await otpRepo
           .createQueryBuilder("s")
           .where("s.customerId = :customerId", { customerId })
-          .andWhere("s.identifierType = :type", { type: OtpIdentifierType.EMAIL })
+          .andWhere("s.identifierType = :type", {
+            type: OtpIdentifierType.EMAIL,
+          })
           .andWhere("s.status = :status", { status: OtpSessionStatus.SENT })
           .orderBy("s.createdAt", "DESC")
           .getOne();
@@ -700,27 +740,21 @@ let session: OtpSession | null = null;
       let resolvedCoApplicantId: number | null = null;
 
       if (ownerType === KycOwnerType.APPLICANT) {
-
         const applicant = await applicantRepo.findOne({
-          where: { customerId }
+          where: { customerId },
         });
 
-        if (!applicant)
-          throw new Error("Applicant not found");
+        if (!applicant) throw new Error("Applicant not found");
 
         applicantId = applicant.id;
-
       } else if (ownerType === KycOwnerType.CO_APPLICANT) {
-
-        if (!coApplicantId)
-          throw new Error("coApplicantId required");
+        if (!coApplicantId) throw new Error("coApplicantId required");
 
         const coApplicant = await coApplicantRepo.findOne({
-          where: { id: coApplicantId, customerId }
+          where: { id: coApplicantId, customerId },
         });
 
-        if (!coApplicant)
-          throw new Error("CoApplicant not found");
+        if (!coApplicant) throw new Error("CoApplicant not found");
 
         resolvedCoApplicantId = coApplicant.id;
       }
@@ -734,12 +768,11 @@ let session: OtpSession | null = null;
           customerId,
           ownerType,
           applicantId: applicantId ?? IsNull(),
-          coApplicantId: resolvedCoApplicantId ?? IsNull()
-        }
+          coApplicantId: resolvedCoApplicantId ?? IsNull(),
+        },
       });
 
-      if (!kycRow)
-        throw new Error("KYC status row not found");
+      if (!kycRow) throw new Error("KYC status row not found");
 
       kycRow.emailStatus = KycStatus.VERIFIED;
 
@@ -748,9 +781,6 @@ let session: OtpSession | null = null;
       return true;
     });
   }
-
-
-
 
   // ---------------------------------------------------
   // 🔍 PAN Verification
@@ -761,39 +791,34 @@ let session: OtpSession | null = null;
     name: string,
     ownerType: KycOwnerType,
     applicantId?: number,
-    coApplicantId?: number
+    coApplicantId?: number,
   ): Promise<any> {
-
-
-
     return await AppDataSource.transaction(async (manager) => {
-
       const kycRepo = manager.getRepository(KycVerificationStatus);
       const applicantRepo = manager.getRepository(Applicant);
       const coApplicantRepo = manager.getRepository(CoApplicant);
       const customerRepo = manager.getRepository(Customer);
 
-
       if (ownerType === KycOwnerType.APPLICANT && !applicantId) {
-        const applicant = await applicantRepo.findOne({ where: { customerId } });
+        const applicant = await applicantRepo.findOne({
+          where: { customerId },
+        });
         if (applicant) {
           applicantId = applicant.id;
         }
       }
 
       if (ownerType === KycOwnerType.CO_APPLICANT && !coApplicantId) {
-
         const coApplicant = await coApplicantRepo.save(
           coApplicantRepo.create({
             customerId,
             name,
             pan,
-          })
+          }),
         );
 
         coApplicantId = coApplicant.id;
       }
-
 
       // ---------------------------------------------------
       // 🔐 Get or Create Correct KYC Row
@@ -803,7 +828,7 @@ let session: OtpSession | null = null;
         customerId,
         ownerType,
         applicantId,
-        coApplicantId
+        coApplicantId,
       );
 
       kycStatus.panStatus = KycStatus.INITIATED;
@@ -812,7 +837,6 @@ let session: OtpSession | null = null;
       await kycRepo.save(kycStatus);
 
       try {
-
         const result = await this.panService.validatePan(pan, name);
 
         kycStatus.panApiResponse = result;
@@ -825,7 +849,6 @@ let session: OtpSession | null = null;
         }
 
         if (result.success && result.verified) {
-
           kycStatus.panStatus = KycStatus.VERIFIED;
 
           // ---------------------------------------------------
@@ -835,33 +858,24 @@ let session: OtpSession | null = null;
           if (ownerType === KycOwnerType.COMPANY) {
             await customerRepo.update(
               { id: customerId },
-              { companyPan: pan, companyName: name }
+              { companyPan: pan, companyName: name },
             );
           }
 
           if (ownerType === KycOwnerType.APPLICANT) {
-            await applicantRepo.update(
-              { id: applicantId },
-              { pan, name }
-            );
+            await applicantRepo.update({ id: applicantId }, { pan, name });
           }
 
           if (ownerType === KycOwnerType.CO_APPLICANT) {
-            await coApplicantRepo.update(
-              { id: coApplicantId },
-              { pan, name }
-            );
+            await coApplicantRepo.update({ id: coApplicantId }, { pan, name });
           }
-
         } else {
           kycStatus.panStatus = KycStatus.FAILED;
         }
 
         await kycRepo.save(kycStatus);
         return result;
-
       } catch (error: any) {
-
         kycStatus.panStatus = KycStatus.FAILED;
         kycStatus.panApiResponse = { error: error.message };
 
@@ -871,9 +885,6 @@ let session: OtpSession | null = null;
     });
   }
 
-
-
-
   // ---------------------------------------------------
   // 🔍 GST Verification
   // ---------------------------------------------------
@@ -882,17 +893,17 @@ let session: OtpSession | null = null;
     gstNumber: string,
     ownerType: KycOwnerType,
     applicantId?: number,
-    coApplicantId?: number
+    coApplicantId?: number,
   ): Promise<any> {
-
     return await AppDataSource.transaction(async (manager) => {
-
       const kycRepo = manager.getRepository(KycVerificationStatus);
       const customerRepo = manager.getRepository(Customer);
       const applicantRepo = manager.getRepository(Applicant);
 
       if (ownerType === KycOwnerType.APPLICANT && !applicantId) {
-        const applicant = await applicantRepo.findOne({ where: { customerId } });
+        const applicant = await applicantRepo.findOne({
+          where: { customerId },
+        });
         if (applicant) {
           applicantId = applicant.id;
         }
@@ -902,7 +913,7 @@ let session: OtpSession | null = null;
         customerId,
         ownerType,
         applicantId,
-        coApplicantId
+        coApplicantId,
       );
 
       kycStatus.gstStatus = KycStatus.INITIATED;
@@ -911,32 +922,24 @@ let session: OtpSession | null = null;
       await kycRepo.save(kycStatus);
 
       try {
-
         const result = await this.gstService.getGstDetails(gstNumber);
 
         kycStatus.gstApiResponse = result;
 
         if (result.success) {
-
           kycStatus.gstStatus = KycStatus.VERIFIED;
 
           // Only company normally stores GST
           if (ownerType === KycOwnerType.COMPANY) {
-            await customerRepo.update(
-              { id: customerId },
-              { gstNumber }
-            );
+            await customerRepo.update({ id: customerId }, { gstNumber });
           }
-
         } else {
           kycStatus.gstStatus = KycStatus.FAILED;
         }
 
         await kycRepo.save(kycStatus);
         return result;
-
       } catch (error: any) {
-
         kycStatus.gstStatus = KycStatus.FAILED;
         kycStatus.gstApiResponse = { error: error.message };
 
@@ -946,7 +949,6 @@ let session: OtpSession | null = null;
     });
   }
 
-
   // ---------------------------------------------------
   // 🔍 Aadhaar Verification
   // ---------------------------------------------------
@@ -954,16 +956,15 @@ let session: OtpSession | null = null;
     customerId: number,
     ownerType: KycOwnerType,
     applicantId?: number,
-    coApplicantId?: number
+    coApplicantId?: number,
   ): Promise<any> {
-
     const applicantRepo = AppDataSource.getRepository(Applicant);
 
     // Resolve applicantId automatically if APPLICANT
     if (ownerType === KycOwnerType.APPLICANT && !applicantId) {
       const applicant = await applicantRepo.findOne({ where: { customerId } });
       if (!applicant) {
-        throw new Error('Applicant not found for customer');
+        throw new Error("Applicant not found for customer");
       }
       applicantId = applicant.id;
     }
@@ -973,16 +974,16 @@ let session: OtpSession | null = null;
       customerId,
       ownerType,
       applicantId,
-      coApplicantId
+      coApplicantId,
     );
 
     // Name MUST exist before Aadhaar
     if (!kycStatus.firstName) {
-      throw new Error('First name is required before Aadhaar KYC');
+      throw new Error("First name is required before Aadhaar KYC");
     }
 
     // Generate internal referenceId (used as Digitap uid)
-    const referenceId = `AADHAAR_${customerId}_${ownerType}_${applicantId || coApplicantId || 'MAIN'}_${randomUUID()}`;
+    const referenceId = `AADHAAR_${customerId}_${ownerType}_${applicantId || coApplicantId || "MAIN"}_${randomUUID()}`;
 
     // Mark initiated
     kycStatus.aadhaarStatus = KycStatus.INITIATED;
@@ -990,50 +991,54 @@ let session: OtpSession | null = null;
       referenceId,
       ownerType,
       applicantId,
-      coApplicantId
+      coApplicantId,
     };
 
     await this.kycStatusRepository.save(kycStatus);
 
     try {
       // Resolve contact details based on ownerType
-      const customer = await this.customerRepository.findOne({ where: { id: customerId } });
-      if (!customer) throw new Error('Customer not found');
+      const customer = await this.customerRepository.findOne({
+        where: { id: customerId },
+      });
+      if (!customer) throw new Error("Customer not found");
 
-      let mobileNumber = '';
-      let emailAddress = '';
+      let mobileNumber = "";
+      let emailAddress = "";
 
       if (ownerType === KycOwnerType.APPLICANT) {
         // Get applicant's mobile number
         const applicant = await AppDataSource.getRepository(Applicant).findOne({
-          where: { id: applicantId }
+          where: { id: applicantId },
         });
         if (applicant) {
-          mobileNumber = applicant.mobile || '';
-          emailAddress = applicant.email || '';
+          mobileNumber = applicant.mobile || "";
+          emailAddress = applicant.email || "";
         }
       } else if (ownerType === KycOwnerType.CO_APPLICANT) {
         // Get co-applicant's mobile number
-        const coApplicant = await AppDataSource.getRepository(CoApplicant).findOne({
-          where: { id: coApplicantId }
+        const coApplicant = await AppDataSource.getRepository(
+          CoApplicant,
+        ).findOne({
+          where: { id: coApplicantId },
         });
         if (coApplicant) {
-          mobileNumber = coApplicant.mobile || '';
-          emailAddress = coApplicant.email || '';
+          mobileNumber = coApplicant.mobile || "";
+          emailAddress = coApplicant.email || "";
         }
       } else {
         // COMPANY - use customer mobile
-        mobileNumber = customer.mobile || customer.companyMobile || '';
-        emailAddress = customer.email || '';
+        mobileNumber = customer.mobile || customer.companyMobile || "";
+        emailAddress = customer.email || "";
       }
 
       const result = await this.aadhaarService.generateKycLink({
-        uid: referenceId,                               // ✅ NOT Aadhaar number
-        firstName: kycStatus.firstName,                // ✅ from kyc_verification_status
-        lastName: kycStatus.lastName || '',
-        mobile: mobileNumber,                           // ✅ Specific person's mobile
-        emailId: emailAddress,                          // ✅ Specific person's email
-        redirectionUrl: `https://fintreelms.com/onboarding/aadhaar/callback`
+        uid: referenceId, // ✅ NOT Aadhaar number
+        firstName: kycStatus.firstName, // ✅ from kyc_verification_status
+        lastName: kycStatus.lastName || "",
+        mobile: mobileNumber, // ✅ Specific person's mobile
+        emailId: emailAddress, // ✅ Specific person's email
+        redirectionUrl: `https://fintreelms.com/onboarding/aadhaar/callback`,
       });
 
       // Store transaction details
@@ -1042,7 +1047,6 @@ let session: OtpSession | null = null;
 
       await this.kycStatusRepository.save(kycStatus);
       return result;
-
     } catch (error: any) {
       kycStatus.aadhaarStatus = KycStatus.FAILED;
       kycStatus.aadhaarApiResponse = { error: error.message };
@@ -1051,7 +1055,6 @@ let session: OtpSession | null = null;
     }
   }
 
-
   // ---------------------------------------------------
   // 🏦 Bureau Check
   // ---------------------------------------------------
@@ -1059,15 +1062,14 @@ let session: OtpSession | null = null;
     customerId: number,
     ownerType: KycOwnerType,
     applicantId?: number,
-    coApplicantId?: number
+    coApplicantId?: number,
   ): Promise<any> {
-
-    console.log('🔥 checkBureau started', {
-  customerId,
-  ownerType,
-  applicantId,
-  coApplicantId,
-});
+    console.log("🔥 checkBureau started", {
+      customerId,
+      ownerType,
+      applicantId,
+      coApplicantId,
+    });
 
     const applicantRepo = AppDataSource.getRepository(Applicant);
 
@@ -1081,7 +1083,7 @@ let session: OtpSession | null = null;
       customerId,
       ownerType,
       applicantId,
-      coApplicantId
+      coApplicantId,
     );
 
     /* ------------------------------------
@@ -1092,27 +1094,25 @@ let session: OtpSession | null = null;
       kycStatus.panStatus !== KycStatus.VERIFIED ||
       kycStatus.aadhaarStatus !== KycStatus.VERIFIED
     ) {
-      throw new Error('PAN and Aadhaar must be verified before Bureau');
+      throw new Error("PAN and Aadhaar must be verified before Bureau");
     }
 
     if (kycStatus.bureauStatus === KycStatus.VERIFIED) {
       return {
         success: false,
-        message: 'Bureau already verified',
+        message: "Bureau already verified",
       };
     }
 
     if (kycStatus.bureauStatus === KycStatus.INITIATED) {
-  throw new Error('Bureau check already in progress');
-}
-
+      throw new Error("Bureau check already in progress");
+    }
 
     /* ------------------------------------
        Extract Aadhaar Data
     ------------------------------------ */
 
-    const aadhaarPayload =
-      kycStatus.aadhaarWebhookResponse?.data || {};
+    const aadhaarPayload = kycStatus.aadhaarWebhookResponse?.data || {};
 
     const aadhaarAddress = aadhaarPayload.address || {};
 
@@ -1128,50 +1128,47 @@ let session: OtpSession | null = null;
       aadhaarAddress.pc,
     ]
       .filter(Boolean)
-      .join(', ');
+      .join(", ");
 
     const aadhaarCity =
-      aadhaarAddress.vtc ||
-      aadhaarAddress.loc ||
-      aadhaarAddress.dist ||
-      '';
+      aadhaarAddress.vtc || aadhaarAddress.loc || aadhaarAddress.dist || "";
 
     /* ------------------------------------
        Name Normalization
     ------------------------------------ */
 
-    const aadhaarName = aadhaarPayload?.name || '';
-    let aadhaarFirstName = '';
-let aadhaarLastName = '';
+    const aadhaarName = aadhaarPayload?.name || "";
+    let aadhaarFirstName = "";
+    let aadhaarLastName = "";
 
-if (aadhaarName) {
-  const parts = aadhaarName.trim().split(/\s+/);
-  aadhaarFirstName = parts.shift() || '';
-  aadhaarLastName = parts.join(' ');
-}
+    if (aadhaarName) {
+      const parts = aadhaarName.trim().split(/\s+/);
+      aadhaarFirstName = parts.shift() || "";
+      aadhaarLastName = parts.join(" ");
+    }
 
+    let mobileNumber = "";
 
-    let mobileNumber = '';
+    if (ownerType === KycOwnerType.APPLICANT && applicantId) {
+      const applicant = await applicantRepo.findOneBy({ id: applicantId });
+      mobileNumber = applicant?.mobile || "";
+    }
 
-if (ownerType === KycOwnerType.APPLICANT && applicantId) {
-  const applicant = await applicantRepo.findOneBy({ id: applicantId });
-  mobileNumber = applicant?.mobile || '';
-}
+    if (ownerType === KycOwnerType.CO_APPLICANT && coApplicantId) {
+      const coApplicantRepo = AppDataSource.getRepository(CoApplicant);
+      const coApplicant = await coApplicantRepo.findOneBy({
+        id: coApplicantId,
+      });
+      mobileNumber = coApplicant?.mobile || "";
+    }
 
-if (ownerType === KycOwnerType.CO_APPLICANT && coApplicantId) {
-  const coApplicantRepo = AppDataSource.getRepository(CoApplicant);
-  const coApplicant = await coApplicantRepo.findOneBy({ id: coApplicantId });
-  mobileNumber = coApplicant?.mobile || '';
-}
-
-const rawGender = aadhaarPayload.gender || '';
-const gender =
-  rawGender === 'M' || rawGender === 'MALE'
-    ? 'M'
-    : rawGender === 'F' || rawGender === 'FEMALE'
-    ? 'F'
-    : '';
-
+    const rawGender = aadhaarPayload.gender || "";
+    const gender =
+      rawGender === "M" || rawGender === "MALE"
+        ? "M"
+        : rawGender === "F" || rawGender === "FEMALE"
+          ? "F"
+          : "";
 
     /* ------------------------------------
        Build Bureau Request
@@ -1185,12 +1182,12 @@ const gender =
       pan_number:
         kycStatus.panApiResponse?.pan ||
         kycStatus.panApiResponse?.panNumber ||
-        '',
-      mobile_number:mobileNumber,
+        "",
+      mobile_number: mobileNumber,
       current_address: kycStatus.aadhaarAddress || fullAadhaarAddress,
       current_village_city: aadhaarCity,
-      current_state: aadhaarAddress.state || '',
-      current_pincode: aadhaarAddress.pc || '',
+      current_state: aadhaarAddress.state || "",
+      current_pincode: aadhaarAddress.pc || "",
       loan_amount: 1,
       loan_tenure: 5,
     };
@@ -1215,7 +1212,6 @@ const gender =
       await this.kycStatusRepository.save(kycStatus);
 
       return result;
-
     } catch (error: any) {
       kycStatus.bureauStatus = KycStatus.FAILED;
       kycStatus.bureauApiResponse = { error: error.message };
@@ -1224,20 +1220,21 @@ const gender =
     }
   }
 
-
-
   // ---------------------------------------------------
   // 🔍 OCR Processing
   // ---------------------------------------------------
-  async processOcr(file: any, type: 'PAN' | 'AADHAAR'): Promise<any> {
-    if (!file) throw new Error('File is required for OCR');
+  async processOcr(file: any, type: "PAN" | "AADHAAR"): Promise<any> {
+    if (!file) throw new Error("File is required for OCR");
 
-    if (type === 'PAN') {
+    if (type === "PAN") {
       const result = await this.ocrService.extractPanFromImage(file);
       return result;
     } else {
       // Aadhaar OCR logic if available in OcrService
-      return { message: 'Aadhaar OCR processing logic to be refined with specific provider' };
+      return {
+        message:
+          "Aadhaar OCR processing logic to be refined with specific provider",
+      };
     }
   }
 
@@ -1248,14 +1245,13 @@ const gender =
     customerId: number,
     ownerType: KycOwnerType,
     applicantId?: number,
-    coApplicantId?: number
+    coApplicantId?: number,
   ): Promise<KycVerificationStatus> {
-
     const resolvedApplicantId =
-      ownerType === KycOwnerType.APPLICANT ? applicantId ?? null : null;
+      ownerType === KycOwnerType.APPLICANT ? (applicantId ?? null) : null;
 
     const resolvedCoApplicantId =
-      ownerType === KycOwnerType.CO_APPLICANT ? coApplicantId ?? null : null;
+      ownerType === KycOwnerType.CO_APPLICANT ? (coApplicantId ?? null) : null;
 
     const where = {
       customerId,
@@ -1286,11 +1282,11 @@ const gender =
     return await this.kycStatusRepository.save(status);
   }
 
-
-
-  async getVerificationStatuses(customerId: number): Promise<KycVerificationStatus[]> {
+  async getVerificationStatuses(
+    customerId: number,
+  ): Promise<KycVerificationStatus[]> {
     return await this.kycStatusRepository.find({
-      where: { customerId }
+      where: { customerId },
     });
   }
 
@@ -1303,29 +1299,25 @@ const gender =
     number: string,
     verified: boolean,
     details: any,
-    coApplicantId?: number
+    coApplicantId?: number,
   ) {
-
-    const applicantType = coApplicantId ? 'co_applicant' : 'applicant';
+    const applicantType = coApplicantId ? "co_applicant" : "applicant";
 
     let kyc = await this.kycRepository.findOne({
       where: {
         customerId,
         kycType: type as any,
         applicantType,
-        coApplicantId: coApplicantId ?? IsNull()
-      }
+        coApplicantId: coApplicantId ?? IsNull(),
+      },
     });
 
     if (kyc) {
-
       kyc.kycNumber = number;
       kyc.verified = verified;
       kyc.verifiedAt = verified ? new Date() : null;
       kyc.remarks = JSON.stringify(details);
-
     } else {
-
       kyc = this.kycRepository.create({
         customerId,
         kycType: type as any,
@@ -1334,11 +1326,10 @@ const gender =
         verifiedAt: verified ? new Date() : null,
         remarks: JSON.stringify(details),
         applicantType,
-        coApplicantId: coApplicantId ?? null
+        coApplicantId: coApplicantId ?? null,
       });
     }
 
     await this.kycRepository.save(kyc);
   }
-
 }

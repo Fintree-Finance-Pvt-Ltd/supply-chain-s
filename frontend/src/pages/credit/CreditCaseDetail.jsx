@@ -802,6 +802,7 @@ const CreditCaseDetail = () => {
                         <input
                           type="number"
                           value={partnerSanctions[partner.code]?.sanctionAmount || ''}
+                           onWheel={(e) => e.target.blur()}
                           onChange={(e) => setPartnerSanctions({
                             ...partnerSanctions,
                             [partner.code]: { ...partnerSanctions[partner.code], sanctionAmount: e.target.value }
