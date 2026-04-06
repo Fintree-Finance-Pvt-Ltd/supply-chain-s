@@ -512,7 +512,7 @@ const CoApplicantForm = ({
                 ? '✓ Verified'
                 : loadingStates[`coApplicantMobile_${data.id || data.localKey}`]
                   ? <LoadingSpinner size="sm" />
-                  : 'Send otp'}
+                  : 'Verify'}
             </button>
           </div>
           {errors.mobile && <p className="text-red-500 text-xs mt-1">{errors.mobile}</p>}

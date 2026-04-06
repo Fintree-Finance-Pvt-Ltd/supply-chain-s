@@ -274,7 +274,8 @@ export class OnboardingIntegrationService {
     ownerType: KycOwnerType,
     applicantId?: number,
     coApplicantId?: number,
-    companyInfo?: { companyType: string; companyName: string; rmId: number }
+    companyInfo?: { companyType: string; companyName: string; rmId: number },
+    skipOtpValidation?: boolean
   ): Promise<{ success: boolean; customerId: number; coApplicantId?: number }> {
 
     const otpRepo = AppDataSource.getRepository(OtpSession);
@@ -283,52 +284,63 @@ export class OnboardingIntegrationService {
     const coApplicantRepo = AppDataSource.getRepository(CoApplicant);
     const kycStatusRepo = AppDataSource.getRepository(KycVerificationStatus);
 
-    // ✅ Find latest valid OTP (NO LOCK)
-    const session = await otpRepo.findOne({
-      where: {
-        identifier: mobileNumber,
-        identifierType: OtpIdentifierType.MOBILE,
-        status: OtpSessionStatus.SENT,
-        expiresAt: MoreThan(new Date()),
-        ownerType,
-        applicantId: ownerType === KycOwnerType.APPLICANT ? applicantId ?? IsNull() : IsNull(),
-        coApplicantId: ownerType === KycOwnerType.CO_APPLICANT ? coApplicantId ?? IsNull() : IsNull(),
-      } as any,
-      order: { createdAt: 'DESC' as any }
-    });
+let session: OtpSession | null = null;
 
-    if (!session) throw new Error('No valid OTP session found');
+    if (!skipOtpValidation) {
+      session = await otpRepo.findOne({
+        where: {
+          identifier: mobileNumber,
+          identifierType: OtpIdentifierType.MOBILE,
+          status: OtpSessionStatus.SENT,
+          expiresAt: MoreThan(new Date()),
+          ownerType,
+          applicantId: ownerType === KycOwnerType.APPLICANT ? applicantId ?? IsNull() : IsNull(),
+          coApplicantId: ownerType === KycOwnerType.CO_APPLICANT ? coApplicantId ?? IsNull() : IsNull(),
+        } as any,
+        order: { createdAt: 'DESC' as any }
+      });
 
-    // ✅ Verify OTP
-    try {
-      this.otpService.verifyOtp(
-        {
-          otp: session.otp,
-          expiresAt: session.expiresAt,
-          attempts: session.attempts,
-          lastSentAt: session.createdAt
-        },
-        otp
-      );
+      if (!session) throw new Error('No valid OTP session found');
+    }
 
-      await otpRepo.update(
-        { id: session.id },
-        { status: OtpSessionStatus.VERIFIED }
-      );
+    if (!skipOtpValidation) {
+      try {
+        this.otpService.verifyOtp(
+          {
+            otp: session.otp,
+            expiresAt: session.expiresAt,
+            attempts: session.attempts,
+            lastSentAt: session.createdAt
+          },
+          otp
+        );
 
-    } catch (error: any) {
+        await otpRepo.update(
+          { id: session.id },
+          { status: OtpSessionStatus.VERIFIED }
+        );
 
-      await otpRepo.update(
-        { id: session.id },
-        {
-          attempts: session.attempts + 1,
-          status: session.attempts + 1 >= 3
-            ? OtpSessionStatus.FAILED
-            : OtpSessionStatus.SENT
-        }
-      );
+      } catch (error: any) {
 
-      throw error;
+        await otpRepo.update(
+          { id: session.id },
+          {
+            attempts: session.attempts + 1,
+            status: session.attempts + 1 >= 3
+              ? OtpSessionStatus.FAILED
+              : OtpSessionStatus.SENT
+          }
+        );
+
+        throw error;
+      }
+    } else {
+      if (session) {
+        await otpRepo.update(
+          { id: session.id },
+          { status: OtpSessionStatus.VERIFIED }
+        );
+      }
     }
 
     // ---------------------------------------------------
@@ -613,7 +625,8 @@ export class OnboardingIntegrationService {
     customerId: number,
     otp: string,
     ownerType: KycOwnerType,
-    coApplicantId?: number
+    coApplicantId?: number,
+    skipOtpValidation?: boolean
   ): Promise<boolean> {
 
     return await AppDataSource.transaction(async (manager) => {
@@ -623,46 +636,61 @@ export class OnboardingIntegrationService {
       const coApplicantRepo = manager.getRepository(CoApplicant);
       const kycRepo = manager.getRepository(KycVerificationStatus);
 
-      // 🔒 Lock latest valid OTP
-      const session = await otpRepo
-        .createQueryBuilder("s")
-        .setLock("pessimistic_write")
-        .where("s.customerId = :customerId", { customerId })
-        .andWhere("s.identifierType = :type", { type: OtpIdentifierType.EMAIL })
-        .andWhere("s.status = :status", { status: OtpSessionStatus.SENT })
-        .andWhere("s.expiresAt > NOW()")
-        .orderBy("s.createdAt", "DESC")
-        .getOne();
+      let session: OtpSession | null = null;
 
-      if (!session)
-        throw new Error("No valid OTP session found");
+      if (!skipOtpValidation) {
+        session = await otpRepo
+          .createQueryBuilder("s")
+          .setLock("pessimistic_write")
+          .where("s.customerId = :customerId", { customerId })
+          .andWhere("s.identifierType = :type", { type: OtpIdentifierType.EMAIL })
+          .andWhere("s.status = :status", { status: OtpSessionStatus.SENT })
+          .andWhere("s.expiresAt > NOW()")
+          .orderBy("s.createdAt", "DESC")
+          .getOne();
 
-      // 🔐 Verify OTP
-      try {
-        this.otpService.verifyOtp(
-          {
-            otp: session.otp,
-            expiresAt: session.expiresAt,
-            attempts: session.attempts,
-            lastSentAt: session.createdAt
-          },
-          otp
-        );
+        if (!session)
+          throw new Error("No valid OTP session found");
 
-        session.status = OtpSessionStatus.VERIFIED;
+        try {
+          this.otpService.verifyOtp(
+            {
+              otp: session.otp,
+              expiresAt: session.expiresAt,
+              attempts: session.attempts,
+              lastSentAt: session.createdAt
+            },
+            otp
+          );
 
-      } catch (error: any) {
+          session.status = OtpSessionStatus.VERIFIED;
 
-        session.attempts += 1;
+        } catch (error: any) {
 
-        if (session.attempts >= 3)
-          session.status = OtpSessionStatus.FAILED;
+          session.attempts += 1;
+
+          if (session.attempts >= 3)
+            session.status = OtpSessionStatus.FAILED;
+
+          await otpRepo.save(session);
+          throw error;
+        }
 
         await otpRepo.save(session);
-        throw error;
-      }
+      } else {
+        session = await otpRepo
+          .createQueryBuilder("s")
+          .where("s.customerId = :customerId", { customerId })
+          .andWhere("s.identifierType = :type", { type: OtpIdentifierType.EMAIL })
+          .andWhere("s.status = :status", { status: OtpSessionStatus.SENT })
+          .orderBy("s.createdAt", "DESC")
+          .getOne();
 
-      await otpRepo.save(session);
+        if (session) {
+          session.status = OtpSessionStatus.VERIFIED;
+          await otpRepo.save(session);
+        }
+      }
 
       // ---------------------------------------------------
       // 📄 Resolve owner IDs properly (NULL based)

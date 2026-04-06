@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "react-toastify";
@@ -494,7 +494,7 @@ const OnboardingContainer = () => {
       if (loadingStates[loadingKey]) return;
 
       // ----------------------------------
-      // 🔹 MOBILE OTP
+      // 🔹 MOBILE OTP (Skip OTP validation - registration proceeds without OTP)
       // ----------------------------------
       if (
         field === "companyMobile" ||
@@ -508,32 +508,48 @@ const OnboardingContainer = () => {
 
         setLoading(loadingKey, true);
 
-        const res = await kycService.sendMobileOtp({
+        const companyInfo =
+          !customerId && ownerType === "COMPANY"
+            ? {
+                companyType: formData.companyType,
+                companyName: formData.companyName,
+                rmId: 1
+              }
+            : undefined;
+
+        const res = await kycService.verifyMobileOtp({
           customerId,
           mobileNumber: value,
           ownerType,
           applicantId,
           coApplicantId,
+          companyInfo,
+          skipOtpValidation: true
         });
 
         setLoading(loadingKey, false);
 
         if (res?.success) {
-          openOtpFor({
-            type: "mobile",
-            target: field,
-            value,
-            ownerType,
-            applicantId,
-            coApplicantId,
-          });
+          if (res?.customerId && !customerId) {
+            navigate(`/rm/customer/new?id=${res.customerId}`, { replace: true });
+            return;
+          }
+
+          if (res?.coApplicantId && coApplicantId !== res.coApplicantId) {
+            if (onCoApplicantCreated) {
+              onCoApplicantCreated(res.coApplicantId);
+            }
+          }
+
+          await loadVerificationStatuses(customerId || res?.customerId);
+          toast.success("Mobile verified successfully");
         }
 
         return;
       }
 
       // ----------------------------------
-      // 🔹 EMAIL OTP
+      // 🔹 EMAIL OTP (Skip OTP validation - registration proceeds without OTP)
       // ----------------------------------
       if (
         field === "companyEmail" ||
@@ -547,12 +563,13 @@ const OnboardingContainer = () => {
 
         setLoading(loadingKey, true);
 
-        const res = await kycService.sendEmailOtp({
+        const res = await kycService.verifyEmailOtp({
           customerId,
           email: value,
           ownerType,
           applicantId,
           coApplicantId,
+          skipOtpValidation: true
         });
 
         // 🔥 bind new coApplicantId to UI
@@ -570,14 +587,8 @@ const OnboardingContainer = () => {
         setLoading(loadingKey, false);
 
         if (res?.success) {
-          openOtpFor({
-            type: "email",
-            target: field,
-            value,
-            ownerType,
-            applicantId,
-            coApplicantId,
-          });
+          await loadVerificationStatuses(customerId);
+          toast.success("Email verified successfully");
         }
 
         return;
@@ -910,18 +921,18 @@ const OnboardingContainer = () => {
 
     // Strict rules only on submit
     if (strict) {
-      if (!customerId) newErrors.customer = "Customer not created yet. Verify company mobile first.";
+      if (!customerId && !formData.companyMobile) newErrors.customer = "Company mobile is required to create customer";
 
       if (!formData.applicantName?.trim()) newErrors.applicantName = "Applicant name required";
       if (!validateMobile(formData.applicantMobile)) newErrors.applicantMobile = "Valid applicant mobile required";
       if (!validateEmail(formData.applicantEmail)) newErrors.applicantEmail = "Valid applicant email required";
 
-      // Mandatory verifications (you said Aadhaar/bureau later, so NOT enforcing them now)
-      if (!getCompanyVerified("mobile"))
-        newErrors.companyMobile = "Company mobile verification mandatory";
+      // Mobile/email verification is now optional (OTP bypassed), keep only format validation
+      // if (!getCompanyVerified("mobile"))
+      //   newErrors.companyMobile = "Company mobile verification mandatory";
 
-      if (!getCompanyVerified("email"))
-        newErrors.companyEmail = "Company email verification mandatory";
+      // if (!getCompanyVerified("email"))
+      //   newErrors.companyEmail = "Company email verification mandatory";
 
       if (!getApplicantVerified("pan"))
         newErrors.applicantPan = "Applicant PAN verification mandatory";
@@ -1068,7 +1079,11 @@ const OnboardingContainer = () => {
 
     try {
       if (!customerId) {
-        toast.info("First verify company mobile OTP (it creates the customer).");
+        if (!formData.companyMobile) {
+          toast.info("Company mobile is required to create customer");
+          return;
+        }
+        toast.info("Please click Verify button next to company mobile to create customer");
         return;
       }
       await persistFullCustomer(customerId);
@@ -1096,7 +1111,11 @@ const OnboardingContainer = () => {
 
     try {
       if (!customerId) {
-        toast.info("Customer not created. Verify company mobile first.");
+        if (!formData.companyMobile) {
+          toast.info("Company mobile is required to create customer");
+          return;
+        }
+        toast.info("Please click Verify button next to company mobile to create customer");
         return;
       }
 
@@ -1134,11 +1153,11 @@ const OnboardingContainer = () => {
       <div>
         <h1 className="text-3xl font-bold text-gray-900">New Customer Onboarding</h1>
         <p className="text-gray-600 mt-2">
-          Step 1: Verify company mobile (creates customer). Then complete KYC & docs.
+          Step 1: Enter company mobile and click Verify to create customer. Then complete KYC & docs.
         </p>
-        {!customerId && (
+        {!customerId && formData.companyMobile && (
           <p className="mt-2 text-sm text-orange-600">
-            ⚠️ Customer not created yet. Verify company mobile OTP to generate ID.
+            ⚠️ Customer not created yet. Click Verify button next to company mobile to generate ID.
           </p>
         )}
       </div>

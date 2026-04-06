@@ -39,10 +39,15 @@ export class OnboardingController {
 
   verifyMobileOtp = async (req: Request, res: Response): Promise<void> => {
     try {
-      const { customerId, otp, mobileNumber, ownerType, applicantId, coApplicantId, companyType, companyName } = req.body;
+      const { customerId, otp, mobileNumber, ownerType, applicantId, coApplicantId, companyType, companyName, skipOtpValidation } = req.body;
 
-      if (!otp || !mobileNumber || !ownerType) {
+      if (!skipOtpValidation && (!otp || !mobileNumber || !ownerType)) {
         res.status(400).json({ success: false, message: "otp, mobileNumber and ownerType are required" });
+        return;
+      }
+
+      if (!mobileNumber || !ownerType) {
+        res.status(400).json({ success: false, message: "mobileNumber and ownerType are required" });
         return;
       }
 
@@ -50,12 +55,13 @@ export class OnboardingController {
 
       const result = await this.onboardingService.verifyMobileOtp(
         customerId ? Number(customerId) : undefined,
-        otp,
+        skipOtpValidation ? 'SKIP' : otp,
         mobileNumber,
         ownerType,
         applicantId ? Number(applicantId) : undefined,
         coApplicantId ? Number(coApplicantId) : undefined,
-        customerId ? undefined : { companyType, companyName, rmId: currentUserId } // only for creation
+        customerId ? undefined : { companyType, companyName, rmId: currentUserId },
+        skipOtpValidation
       );
 
       res.json({
@@ -107,9 +113,9 @@ export class OnboardingController {
 
   verifyEmailOtp = async (req: Request, res: Response): Promise<void> => {
     try {
-      const { customerId, otp, ownerType, coApplicantId } = req.body;
+      const { customerId, otp, ownerType, coApplicantId, skipOtpValidation } = req.body;
 
-      if (!customerId || !otp || !ownerType) {
+      if (!skipOtpValidation && (!customerId || !otp || !ownerType)) {
         res.status(400).json({
           success: false,
           message: 'customerId, otp and ownerType are required'
@@ -117,11 +123,20 @@ export class OnboardingController {
         return;
       }
 
+      if (!customerId || !ownerType) {
+        res.status(400).json({
+          success: false,
+          message: 'customerId and ownerType are required'
+        });
+        return;
+      }
+
       await this.onboardingService.verifyEmailOtp(
         Number(customerId),
-        otp,
+        skipOtpValidation ? 'SKIP' : otp,
         ownerType,
-        coApplicantId ? Number(coApplicantId) : undefined
+        coApplicantId ? Number(coApplicantId) : undefined,
+        skipOtpValidation
       );
 
       res.json({ success: true, message: 'Email verified successfully' });

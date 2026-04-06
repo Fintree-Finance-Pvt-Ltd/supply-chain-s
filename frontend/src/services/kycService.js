@@ -116,7 +116,8 @@ verifyMobileOtp: async ({
   ownerType,
   applicantId,
   coApplicantId,
-  companyInfo
+  companyInfo,
+  skipOtpValidation
 }) => {
 
   const payload = {
@@ -126,6 +127,7 @@ verifyMobileOtp: async ({
     ownerType,
     applicantId,
     coApplicantId,
+    skipOtpValidation,
     ...(companyInfo || {})
   };
 
@@ -167,7 +169,8 @@ verifyEmailOtp: async ({
   otp,
   ownerType,
   applicantId,
-  coApplicantId
+  coApplicantId,
+  skipOtpValidation
 }) => {
   const response = await api.post(
     API_ENDPOINTS.ONBOARDING_EMAIL_VERIFY_OTP,
@@ -176,7 +179,8 @@ verifyEmailOtp: async ({
       otp,
       ownerType,
       applicantId,
-      coApplicantId
+      coApplicantId,
+      skipOtpValidation
     }
   )
   return response.data
