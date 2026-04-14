@@ -497,56 +497,65 @@ const OnboardingContainer = () => {
       // 🔹 MOBILE OTP (Skip OTP validation - registration proceeds without OTP)
       // ----------------------------------
       if (
-        field === "companyMobile" ||
-        field === "applicantMobile" ||
-        field === "coApplicantMobile"
-      ) {
-        if (!validateMobile(value)) {
-          toast.info("Enter valid mobile");
-          return;
+  field === "companyMobile" ||
+  field === "applicantMobile" ||
+  field === "coApplicantMobile"
+) {
+  if (!validateMobile(value)) {
+    toast.info("Enter valid mobile");
+    return;
+  }
+
+  setLoading(loadingKey, true);
+
+  const companyInfo =
+    !customerId && ownerType === "COMPANY"
+      ? {
+          companyType: formData.companyType,
+          companyName: formData.companyName,
+          rmId: 1,
         }
+      : undefined;
 
-        setLoading(loadingKey, true);
+  try {
+    const res = await kycService.verifyMobileOtp({
+      customerId,
+      mobileNumber: value,
+      ownerType,
+      applicantId,
+      coApplicantId,
+      companyInfo,
+      skipOtpValidation: true,
+    });
 
-        const companyInfo =
-          !customerId && ownerType === "COMPANY"
-            ? {
-                companyType: formData.companyType,
-                companyName: formData.companyName,
-                rmId: 1
-              }
-            : undefined;
+    // ✅ HANDLE CUSTOMER CREATION
+    if (res?.customerId && !customerId) {
+      navigate(`/rm/customer/new?id=${res.customerId}`, { replace: true });
+      return res;
+    }
 
-        const res = await kycService.verifyMobileOtp({
-          customerId,
-          mobileNumber: value,
-          ownerType,
-          applicantId,
-          coApplicantId,
-          companyInfo,
-          skipOtpValidation: true
-        });
+    // ✅ HANDLE CO-APPLICANT CREATION (FIXED)
+    if (res?.coApplicantId && coApplicantId !== res.coApplicantId) {
+      // 🔥 DO NOT call undefined function
+      // Instead just return response → child will handle it
+    }
 
-        setLoading(loadingKey, false);
+    // ✅ REFRESH STATUS
+    await loadVerificationStatuses(customerId || res?.customerId);
 
-        if (res?.success) {
-          if (res?.customerId && !customerId) {
-            navigate(`/rm/customer/new?id=${res.customerId}`, { replace: true });
-            return;
-          }
+    toast.success("Mobile verified successfully");
 
-          if (res?.coApplicantId && coApplicantId !== res.coApplicantId) {
-            if (onCoApplicantCreated) {
-              onCoApplicantCreated(res.coApplicantId);
-            }
-          }
+    // 🔥 IMPORTANT: RETURN RESPONSE
+    return res;
 
-          await loadVerificationStatuses(customerId || res?.customerId);
-          toast.success("Mobile verified successfully");
-        }
-
-        return;
-      }
+  } catch (error) {
+    console.error("Mobile verification error:", error);
+    toast.error(error?.message || "Mobile verification failed");
+    throw error;
+  } finally {
+    setLoading(loadingKey, false);
+  }
+}
 
       // ----------------------------------
       // 🔹 EMAIL OTP (Skip OTP validation - registration proceeds without OTP)

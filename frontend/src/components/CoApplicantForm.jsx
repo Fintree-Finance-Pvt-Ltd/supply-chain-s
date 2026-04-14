@@ -328,14 +328,19 @@ const CoApplicantForm = ({
     return true
   }
 
+  // const mustHaveCoApplicantId = () => {
+  //   // IMPORTANT: Backend needs a DB coApplicantId to store verification statuses
+  //   if (!data?.id) {
+  //     notify('error', 'Please "Save as Draft" first to create Co-Applicant ID, then verify.')
+  //     return false
+  //   }
+  //   return true
+  // }
+
+
   const mustHaveCoApplicantId = () => {
-    // IMPORTANT: Backend needs a DB coApplicantId to store verification statuses
-    if (!data?.id) {
-      notify('error', 'Please "Save as Draft" first to create Co-Applicant ID, then verify.')
-      return false
-    }
-    return true
-  }
+  return true; //  NO ERROR
+}
 
   const validatePanFile = (file) => {
     if (!file) return 'No file selected'
@@ -398,24 +403,49 @@ const CoApplicantForm = ({
     }
   }
 
-  const safeVerify = (field, value, localKey = null) => {
-    console.log(field, value, data.id, customerId);
-    console.log(data.id);
-    console.log("VERIFY CLICK", { field, value, coApplicantId: data.id, localKey, customerId });
+  // const safeVerify = (field, value, localKey = null) => {
+  //   console.log(field, value, data.id, customerId);
+  //   console.log(data.id);
+  //   console.log("VERIFY CLICK", { field, value, coApplicantId: data.id, localKey, customerId });
 
-    if (!mustHaveCaseId()) return
-    // if (!mustHaveCoApplicantId()) return
+  //   if (!mustHaveCaseId()) return
+  //   // if (!mustHaveCoApplicantId()) return
 
-    console.log(`Requesting verification for ${field} with value "${value}" (co-applicant ID: ${data.id})`)
+  //   console.log(`Requesting verification for ${field} with value "${value}" (co-applicant ID: ${data.id})`)
 
-    // prevent reclick while loading
-    const key = `${field}_${data.id || localKey || "main"}`;
-    if (loadingStates[key]) return
+  //   // prevent reclick while loading
+  //   const key = `${field}_${data.id || localKey || "main"}`;
+  //   if (loadingStates[key]) return
 
-    onVerify?.(field, value, data.id, localKey)
+  //   onVerify?.(field, value, data.id, localKey)
 
-    console.log(`button verified ended`)
+  //   console.log(`button verified ended`)
+  // }
+
+  const safeVerify = async (field, value, localKey = null) => {
+  if (!mustHaveCaseId()) return;
+
+  const isFirstTime = !data?.id;
+
+  const key = `${field}_${data.id || localKey || "main"}`;
+  if (loadingStates[key]) return;
+
+  try {
+    const res = await onVerify?.(field, value, data.id, localKey);
+
+    if (isFirstTime && res?.coApplicantId) {
+      onChange?.(stableKey, {
+        ...data,
+        id: res.coApplicantId,
+      });
+
+      notify("success", "Co-applicant created & verified");
+    }
+
+  } catch (error) {
+    notify("error", error?.message || "Verification failed");
   }
+};
 
   const handleMobileVerify = () =>
     safeVerify('coApplicantMobile', data.mobile, data.localKey);
