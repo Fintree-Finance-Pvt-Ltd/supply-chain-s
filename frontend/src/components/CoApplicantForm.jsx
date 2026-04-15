@@ -782,8 +782,8 @@ return (
                   disabled={
                     !canVerify ||
                     loadingStates[`coApplicantAadhaar_${data.id || data.localKey}`] ||
-                    verificationStatus.aadhaarStatus === 'VERIFIED' ||
-                    verificationStatus.aadhaarStatus === 'INITIATED'
+                    verificationStatus.aadhaarStatus === 'VERIFIED'
+                   
                   }
                   className={`btn-${verificationStatus.aadhaarStatus === 'VERIFIED' ? 'success' : 'primary'} w-full`}
                 >

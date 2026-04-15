@@ -394,19 +394,18 @@ const BasicKycTab = ({
                 <button
                   type="button"
                   onClick={() => onVerify("applicantAadhaar", null)}
-                  disabled={
-                    loadingStates["applicantAadhaar_main"] ||
-                    !applicantVerified.pan ||
-                    applicantStatus?.aadhaarStatus === 'VERIFIED' ||
-                    applicantStatus?.aadhaarStatus === 'INITIATED'
-                  }
+                disabled={
+  loadingStates["applicantAadhaar_main"] ||
+  !applicantVerified.pan ||
+  applicantStatus?.aadhaarStatus === 'VERIFIED'
+}
                   className={`btn-${applicantStatus?.aadhaarStatus === 'VERIFIED' ? "success" : "secondary"} w-full flex items-center justify-center`}
                 >
-                  {applicantStatus?.aadhaarStatus === 'VERIFIED'
-                    ? '✓ Aadhaar Verified'
-                    : loadingStates["applicantAadhaar_main"]
-                      ? <LoadingSpinner size="sm" />
-                      : 'Verify Aadhaar'}
+                 {applicantStatus?.aadhaarStatus === 'VERIFIED'
+  ? '✓ Aadhaar Verified'
+  : applicantStatus?.aadhaarStatus === 'INITIATED'
+    ? 'Resend Aadhaar KYC 🔁'
+    : 'Verify Aadhaar'}
                 </button>
 
                 {/* Show Refresh Status button if Aadhaar is initiated but not verified */}
