@@ -601,21 +601,39 @@ if (
 
   try {
     // ✅ INTERNAL USER → DIRECT VERIFY (SKIP OTP)
-    if (isInternalUser) {
-      const res = await kycService.verifyMobileOtp({
-        customerId,
-        mobileNumber: value,
-        ownerType,
-        applicantId,
-        coApplicantId,
-        skipOtpValidation: true,
-      });
+   if (isInternalUser) {
 
-      await loadVerificationStatuses(customerId || res?.customerId);
-      toast.success("Mobile verified (internal user)");
+  const companyInfo =
+    !customerId && ownerType === "COMPANY"
+      ? {
+          companyType: formData.companyType,
+          companyName: formData.companyName,
+          rmId: 1,
+        }
+      : undefined;
 
-      return res;
-    }
+  const res = await kycService.verifyMobileOtp({
+    customerId,
+    mobileNumber: value,
+    ownerType,
+    applicantId,
+    coApplicantId,
+    companyInfo, // ✅ ADD THIS BACK
+    skipOtpValidation: true,
+  });
+
+  // ✅ VERY IMPORTANT (HANDLE NEW CUSTOMER)
+  if (res?.customerId && !customerId) {
+    navigate(`/rm/customer/new?id=${res.customerId}`, { replace: true });
+    return res;
+  }
+
+  await loadVerificationStatuses(customerId || res?.customerId);
+
+  toast.success("Mobile verified (internal user)");
+
+  return res;
+}
 
     // ❌ NORMAL USER → OLD FLOW
     const res = await kycService.sendMobileOtp({
