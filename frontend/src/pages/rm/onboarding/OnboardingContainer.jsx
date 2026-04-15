@@ -1,3 +1,5 @@
+
+import Loader from "../../../components/Loader"; // adjust path if needed
 import { useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useNavigate, useSearchParams } from "react-router-dom";
@@ -239,6 +241,8 @@ const OnboardingContainer = () => {
     },
   });
 
+  const isAnyLoading = Object.values(loadingStates || {}).some(v => v === true);
+
   // ----- Verify handlers (PAN/GST/OTP send)
   // const handleVerify = async (field, value, coApplicantId = null, localKey = null) => {
   //   if (!value) {
@@ -445,6 +449,8 @@ const OnboardingContainer = () => {
   //   }
   // };
 
+
+  
   const handleVerify = async (
     field,
     value,
@@ -454,6 +460,24 @@ const OnboardingContainer = () => {
     // Aadhaar doesn't require a value (just sends link via SMS)
     const isAadhaar = field === "applicantAadhaar" || field === "coApplicantAadhaar";
     
+
+
+    // ✅ NEW: DIRECT EMAIL FLOW (Flutter-like)
+if (field === "sendEmailOtp") {
+  try {
+    return await kycService.sendEmailOtp(value);
+  } catch (e) {
+    throw e;
+  }
+}
+
+if (field === "verifyEmailOtp") {
+  try {
+    return await kycService.verifyEmailOtp(value);
+  } catch (e) {
+    throw e;
+  }
+}
     if (!value && !isAadhaar) {
       toast.info(`Please enter value for ${field}`);
       return;
@@ -496,7 +520,74 @@ const OnboardingContainer = () => {
       // ----------------------------------
       // 🔹 MOBILE OTP (Skip OTP validation - registration proceeds without OTP)
       // ----------------------------------
-      if (
+//       if (
+//   field === "companyMobile" ||
+//   field === "applicantMobile" ||
+//   field === "coApplicantMobile"
+// ) {
+//   if (!validateMobile(value)) {
+//     toast.info("Enter valid mobile");
+//     return;
+//   }
+
+//   setLoading(loadingKey, true);
+
+//   const companyInfo =
+//     !customerId && ownerType === "COMPANY"
+//       ? {
+//           companyType: formData.companyType,
+//           companyName: formData.companyName,
+//           rmId: 1,
+//         }
+//       : undefined;
+
+//   try {
+//     const res = await kycService.verifyMobileOtp({
+//       customerId,
+//       mobileNumber: value,
+//       ownerType,
+//       applicantId,
+//       coApplicantId,
+//       companyInfo,
+//       skipOtpValidation: true,
+//     });
+
+//     // ✅ HANDLE CUSTOMER CREATION
+//     if (res?.customerId && !customerId) {
+//       navigate(`/rm/customer/new?id=${res.customerId}`, { replace: true });
+//       return res;
+//     }
+
+//     // ✅ HANDLE CO-APPLICANT CREATION (FIXED)
+//     if (res?.coApplicantId && coApplicantId !== res.coApplicantId) {
+//       // 🔥 DO NOT call undefined function
+//       // Instead just return response → child will handle it
+//     }
+
+//     // ✅ REFRESH STATUS
+//     await loadVerificationStatuses(customerId || res?.customerId);
+
+//     toast.success("Mobile verified successfully");
+
+//     // 🔥 IMPORTANT: RETURN RESPONSE
+//     return res;
+
+//   } catch (error) {
+//     console.error("Mobile verification error:", error);
+//     toast.error(error?.message || "Mobile verification failed");
+//     throw error;
+//   } finally {
+//     setLoading(loadingKey, false);
+//   }
+// }
+
+
+
+const user = JSON.parse(localStorage.getItem("scf_user") || "{}");
+
+const isInternalUser = user?.email?.toLowerCase()?.endsWith("@fintreefinance.com");
+
+if (
   field === "companyMobile" ||
   field === "applicantMobile" ||
   field === "coApplicantMobile"
@@ -508,48 +599,47 @@ const OnboardingContainer = () => {
 
   setLoading(loadingKey, true);
 
-  const companyInfo =
-    !customerId && ownerType === "COMPANY"
-      ? {
-          companyType: formData.companyType,
-          companyName: formData.companyName,
-          rmId: 1,
-        }
-      : undefined;
-
   try {
-    const res = await kycService.verifyMobileOtp({
+    // ✅ INTERNAL USER → DIRECT VERIFY (SKIP OTP)
+    if (isInternalUser) {
+      const res = await kycService.verifyMobileOtp({
+        customerId,
+        mobileNumber: value,
+        ownerType,
+        applicantId,
+        coApplicantId,
+        skipOtpValidation: true,
+      });
+
+      await loadVerificationStatuses(customerId || res?.customerId);
+      toast.success("Mobile verified (internal user)");
+
+      return res;
+    }
+
+    // ❌ NORMAL USER → OLD FLOW
+    const res = await kycService.sendMobileOtp({
       customerId,
       mobileNumber: value,
       ownerType,
       applicantId,
       coApplicantId,
-      companyInfo,
-      skipOtpValidation: true,
     });
 
-    // ✅ HANDLE CUSTOMER CREATION
-    if (res?.customerId && !customerId) {
-      navigate(`/rm/customer/new?id=${res.customerId}`, { replace: true });
-      return res;
+    if (res?.success) {
+      openOtpFor({
+        type: "mobile",
+        target: field,
+        value,
+        ownerType,
+        applicantId,
+        coApplicantId,
+      });
     }
 
-    // ✅ HANDLE CO-APPLICANT CREATION (FIXED)
-    if (res?.coApplicantId && coApplicantId !== res.coApplicantId) {
-      // 🔥 DO NOT call undefined function
-      // Instead just return response → child will handle it
-    }
-
-    // ✅ REFRESH STATUS
-    await loadVerificationStatuses(customerId || res?.customerId);
-
-    toast.success("Mobile verified successfully");
-
-    // 🔥 IMPORTANT: RETURN RESPONSE
     return res;
 
   } catch (error) {
-    console.error("Mobile verification error:", error);
     toast.error(error?.message || "Mobile verification failed");
     throw error;
   } finally {
@@ -560,48 +650,122 @@ const OnboardingContainer = () => {
       // ----------------------------------
       // 🔹 EMAIL OTP (Skip OTP validation - registration proceeds without OTP)
       // ----------------------------------
+      // if (
+      //   field === "companyEmail" ||
+      //   field === "applicantEmail" ||
+      //   field === "coApplicantEmail"
+      // ) {
+      //   if (!validateEmail(value)) {
+      //     toast.info("Enter valid email");
+      //     return;
+      //   }
+
+      //   setLoading(loadingKey, true);
+
+      //   const res = await kycService.verifyEmailOtp({
+      //     customerId,
+      //     email: value,
+      //     ownerType,
+      //     applicantId,
+      //     coApplicantId,
+      //     skipOtpValidation: true
+      //   });
+
+      //   // 🔥 bind new coApplicantId to UI
+      //   if (!coApplicantId && res?.coApplicantId && localKey) {
+      //     setCoApplicants((prev) =>
+      //       prev.map((c) =>
+      //         c.localKey === localKey
+      //           ? { ...c, id: res.coApplicantId }
+      //           : c
+      //       )
+      //     );
+      //     coApplicantId = res.coApplicantId;
+      //   }
+
+      //   setLoading(loadingKey, false);
+
+      //   if (res?.success) {
+      //     await loadVerificationStatuses(customerId);
+      //     toast.success("Email verified successfully");
+      //   }
+
+      //   return;
+      // }
+
+
+
       if (
-        field === "companyEmail" ||
-        field === "applicantEmail" ||
-        field === "coApplicantEmail"
-      ) {
-        if (!validateEmail(value)) {
-          toast.info("Enter valid email");
-          return;
-        }
+  field === "companyEmail" ||
+  field === "applicantEmail" ||
+  field === "coApplicantEmail"
+) {
+  if (!validateEmail(value)) {
+    toast.info("Enter valid email");
+    return;
+  }
 
-        setLoading(loadingKey, true);
+  setLoading(loadingKey, true);
 
-        const res = await kycService.verifyEmailOtp({
-          customerId,
-          email: value,
-          ownerType,
-          applicantId,
-          coApplicantId,
-          skipOtpValidation: true
-        });
+  try {
+    // ✅ INTERNAL USER → DIRECT FLOW
+    if (isInternalUser) {
 
-        // 🔥 bind new coApplicantId to UI
-        if (!coApplicantId && res?.coApplicantId && localKey) {
-          setCoApplicants((prev) =>
-            prev.map((c) =>
-              c.localKey === localKey
-                ? { ...c, id: res.coApplicantId }
-                : c
-            )
-          );
-          coApplicantId = res.coApplicantId;
-        }
+      // STEP 1: Save email
+      const sendRes = await kycService.sendEmailOtp({
+        customerId,
+        email: value,
+        ownerType,
+        applicantId,
+        coApplicantId,
+      });
 
-        setLoading(loadingKey, false);
+      // STEP 2: Direct verify
+      const verifyRes = await kycService.verifyEmailOtp({
+        customerId,
+        otp: "0000",
+        ownerType,
+        applicantId,
+        coApplicantId: sendRes?.coApplicantId || coApplicantId,
+        skipOtpValidation: true,
+      });
 
-        if (res?.success) {
-          await loadVerificationStatuses(customerId);
-          toast.success("Email verified successfully");
-        }
+      await loadVerificationStatuses(customerId);
 
-        return;
-      }
+      toast.success("Email verified (internal user)");
+
+      return verifyRes;
+    }
+
+    // ❌ NORMAL USER → OLD FLOW
+    const res = await kycService.sendEmailOtp({
+      customerId,
+      email: value,
+      ownerType,
+      applicantId,
+      coApplicantId,
+    });
+
+    if (res?.success) {
+      openOtpFor({
+        type: "email",
+        target: field,
+        value,
+        ownerType,
+        applicantId,
+        coApplicantId,
+      });
+    }
+
+    return res;
+
+  } catch (error) {
+    toast.error(error?.message || "Email verification failed");
+    throw error;
+  } finally {
+    setLoading(loadingKey, false);
+  }
+}
 
       // ----------------------------------
       // 🔹 PAN VERIFY
@@ -1157,7 +1321,16 @@ const OnboardingContainer = () => {
 
   if (isLoading) return <div className="p-6"><LoadingSpinner /></div>;
 
-  return (
+return (
+  <div className="relative">
+
+    {/* ✅ GLOBAL LOADER OVERLAY */}
+    {isAnyLoading && (
+      <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-[9999]">
+        <Loader />
+      </div>
+    )}
+
     <div className="space-y-6 p-6">
       <div>
         <h1 className="text-3xl font-bold text-gray-900">New Customer Onboarding</h1>
@@ -1319,8 +1492,9 @@ const OnboardingContainer = () => {
           label={cameraTarget === "applicant-pan" ? "Capture PAN Card" : "Take Live Photo"}
         />
       )}
-    </div>
-  );
+       </div>
+  </div>
+);
 };
 
 export default OnboardingContainer;

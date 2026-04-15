@@ -223,7 +223,7 @@
 // export default CoApplicantForm
 
 
-
+import Loader from './Loader'; // adjust path if needed
 import { useMemo, useState } from 'react'
 import { FiX } from 'react-icons/fi'
 import kycService from '../services/kycService'
@@ -291,10 +291,20 @@ const CoApplicantForm = ({
   // NEW: manual Aadhaar upload handler
   onManualAadhaarUpload,
 }) => {
+
+
+
+
+
   const [isOcrProcessing, setIsOcrProcessing] = useState(false)
   const [isRefreshingAadhaar, setIsRefreshingAadhaar] = useState(false)
   const [aadhaarRefreshStatus, setAadhaarRefreshStatus] = useState({})
 
+const isAnyLoading =
+  isOcrProcessing ||
+  isRefreshingAadhaar ||
+  Object.values(loadingStates || {}).some(Boolean);
+  
   // stable identity key for UI + local state mapping
   const stableKey = useMemo(() => data?.id || data?.localKey, [data?.id, data?.localKey])
 
@@ -450,8 +460,78 @@ const CoApplicantForm = ({
   const handleMobileVerify = () =>
     safeVerify('coApplicantMobile', data.mobile, data.localKey);
 
-  const handleEmailVerify = () =>
-    safeVerify('coApplicantEmail', data.email, data.localKey);
+  // const handleEmailVerify = () =>
+  //   safeVerify('coApplicantEmail', data.email, data.localKey);
+const handleEmailVerify = async () => {
+  if (!data.email) {
+    notify("error", "Please enter email");
+    return;
+  }
+
+  if (!customerId) {
+    notify("error", "Customer ID missing");
+    return;
+  }
+
+  const key = `coApplicantEmail_${data.id || data.localKey}`;
+  if (loadingStates[key]) return;
+
+  try {
+    onFieldMutate?.(stableKey, "isEmailLoading", true);
+
+    // ✅ STEP 1 — send email OTP (SAVE EMAIL IN DB)
+    const sendRes = await onVerify?.(
+      "sendEmailOtp",
+      {
+        customerId,
+        email: data.email.trim(),
+        ownerType: "CO_APPLICANT",
+        coApplicantId: data.id,
+      }
+    );
+
+    if (!sendRes?.success) {
+      notify("error", sendRes?.message || "Failed to register email");
+      return;
+    }
+
+    // ✅ handle first-time co-applicant creation
+    if (sendRes?.coApplicantId && !data?.id) {
+      onChange?.(stableKey, {
+        ...data,
+        id: sendRes.coApplicantId,
+      });
+    }
+
+    // ✅ STEP 2 — verify directly (skip OTP)
+    const verifyRes = await onVerify?.(
+      "verifyEmailOtp",
+      {
+        customerId,
+        otp: "0000",
+        ownerType: "CO_APPLICANT",
+        coApplicantId: sendRes?.coApplicantId || data.id,
+        skipOtpValidation: true,
+      }
+    );
+
+    if (verifyRes?.success) {
+      notify("success", "Email Verified Successfully");
+
+      onFieldMutate?.(stableKey, "emailVerified", true);
+
+      onLoadVerificationStatuses?.(customerId);
+    } else {
+      notify("error", verifyRes?.message || "Email verification failed");
+    }
+
+  } catch (error) {
+    notify("error", error?.message || "Email verification failed");
+  } finally {
+    onFieldMutate?.(stableKey, "isEmailLoading", false);
+  }
+};
+  
 
   const handlePanVerify = () =>
     safeVerify('coApplicantPan', kycData.panNumber, data.localKey);
@@ -473,8 +553,17 @@ const CoApplicantForm = ({
   const isSaved = !!data?.id
   // const canVerify = !!customerId && isSaved
   const canVerify = !!customerId
+return (
+  <div className="relative">
+    
+    {/* 🔥 GLOBAL LOADER OVERLAY */}
+    {isAnyLoading && (
+      <div className="absolute inset-0 z-50 flex items-center justify-center bg-white/70 backdrop-blur-sm rounded-lg">
+        <Loader />
+      </div>
+    )}
 
-  return (
+    {/* EXISTING UI */}
     <div className="border border-gray-300 rounded-lg p-6 mb-4 bg-gray-50 relative">
       <button
         type="button"
@@ -713,7 +802,7 @@ const CoApplicantForm = ({
                     disabled={isRefreshingAadhaar}
                     className="mt-2 btn-secondary w-full flex items-center justify-center"
                   >
-                    {isRefreshingAadhaar ? <LoadingSpinner size="sm" /> : 'Refresh Status'}
+                    {/* {isRefreshingAadhaar ? <LoadingSpinner size="sm" /> : 'Refresh Status'} */}
                   </button>
                 )}
               </div>
@@ -741,6 +830,7 @@ const CoApplicantForm = ({
           </div>
         )}
       </div>
+    </div>
     </div>
   )
 }
