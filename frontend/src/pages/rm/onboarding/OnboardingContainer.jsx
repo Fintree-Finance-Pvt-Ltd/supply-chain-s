@@ -586,7 +586,6 @@ if (field === "verifyEmailOtp") {
 const user = JSON.parse(localStorage.getItem("scf_user") || "{}");
 
 const isInternalUser = user?.email?.toLowerCase()?.endsWith("@fintreefinance.com");
-
 if (
   field === "companyMobile" ||
   field === "applicantMobile" ||
@@ -600,70 +599,179 @@ if (
   setLoading(loadingKey, true);
 
   try {
-    // ✅ INTERNAL USER → DIRECT VERIFY (SKIP OTP)
-   if (isInternalUser) {
 
-  const companyInfo =
-    !customerId && ownerType === "COMPANY"
-      ? {
-          companyType: formData.companyType,
-          companyName: formData.companyName,
-          rmId: 1,
-        }
-      : undefined;
+    const companyInfo =
+      !customerId && ownerType === "COMPANY"
+        ? {
+            companyType: formData.companyType,
+            companyName: formData.companyName,
+            rmId: 1,
+          }
+        : undefined;
 
-  const res = await kycService.verifyMobileOtp({
-    customerId,
-    mobileNumber: value,
-    ownerType,
-    applicantId,
-    coApplicantId,
-    companyInfo, // ✅ ADD THIS BACK
-    skipOtpValidation: true,
-  });
 
-  // ✅ VERY IMPORTANT (HANDLE NEW CUSTOMER)
-  if (res?.customerId && !customerId) {
-    navigate(`/rm/customer/new?id=${res.customerId}`, { replace: true });
-    return res;
-  }
+    // ✅ COMPANY MOBILE → OTP ONLY FOR EXTERNAL USERS
+    if (field === "companyMobile" && !isInternalUser) {
 
-  await loadVerificationStatuses(customerId || res?.customerId);
+      const res = await kycService.sendMobileOtp({
+        customerId,
+        mobileNumber: value,
+        ownerType,
+        applicantId,
+        coApplicantId,
+      });
 
-  toast.success("Mobile verified (internal user)");
+      if (res?.success) {
+        openOtpFor({
+          type: "mobile",
+          target: field,
+          value,
+          ownerType,
+          applicantId,
+          coApplicantId,
+        });
+      }
 
-  return res;
-}
+      return res;
+    }
 
-    // ❌ NORMAL USER → OLD FLOW
-    const res = await kycService.sendMobileOtp({
+      if (field === "coApplicantMobile" && !isInternalUser) {
+
+      const res = await kycService.sendMobileOtp({
+        customerId,
+        mobileNumber: value,
+        ownerType,
+        applicantId,
+        coApplicantId,
+      });
+
+      if (res?.success) {
+        openOtpFor({
+          type: "mobile",
+          target: field,
+          value,
+          ownerType,
+          applicantId,
+          coApplicantId,
+        });
+      }
+
+      return res;
+    }
+
+    // ✅ APPLICANT + CO-APPLICANT → ALWAYS SKIP OTP
+    const res = await kycService.verifyMobileOtp({
       customerId,
       mobileNumber: value,
       ownerType,
       applicantId,
       coApplicantId,
+      companyInfo,
+      skipOtpValidation: true,
     });
 
-    if (res?.success) {
-      openOtpFor({
-        type: "mobile",
-        target: field,
-        value,
-        ownerType,
-        applicantId,
-        coApplicantId,
-      });
+
+    // handle new customer creation
+    if (res?.customerId && !customerId) {
+      navigate(`/rm/customer/new?id=${res.customerId}`, { replace: true });
+      return res;
     }
+
+
+    await loadVerificationStatuses(customerId || res?.customerId);
+
+    toast.success("Mobile verified successfully");
 
     return res;
 
   } catch (error) {
+
     toast.error(error?.message || "Mobile verification failed");
     throw error;
+
   } finally {
+
     setLoading(loadingKey, false);
+
   }
 }
+// if (
+//   field === "companyMobile" ||
+//   field === "applicantMobile" ||
+//   field === "coApplicantMobile"
+// ) {
+//   if (!validateMobile(value)) {
+//     toast.info("Enter valid mobile");
+//     return;
+//   }
+
+//   setLoading(loadingKey, true);
+
+//   try {
+//     // ✅ INTERNAL USER → DIRECT VERIFY (SKIP OTP)
+//    if (isInternalUser) {
+
+//   const companyInfo =
+//     !customerId && ownerType === "COMPANY"
+//       ? {
+//           companyType: formData.companyType,
+//           companyName: formData.companyName,
+//           rmId: 1,
+//         }
+//       : undefined;
+
+//   const res = await kycService.verifyMobileOtp({
+//     customerId,
+//     mobileNumber: value,
+//     ownerType,
+//     applicantId,
+//     coApplicantId,
+//     companyInfo, // ✅ ADD THIS BACK
+//     skipOtpValidation: true,
+//   });
+
+//   // ✅ VERY IMPORTANT (HANDLE NEW CUSTOMER)
+//   if (res?.customerId && !customerId) {
+//     navigate(`/rm/customer/new?id=${res.customerId}`, { replace: true });
+//     return res;
+//   }
+
+//   await loadVerificationStatuses(customerId || res?.customerId);
+
+//   toast.success("Mobile verified (internal user)");
+
+//   return res;
+// }
+
+//     // ❌ NORMAL USER → OLD FLOW
+//     const res = await kycService.sendMobileOtp({
+//       customerId,
+//       mobileNumber: value,
+//       ownerType,
+//       applicantId,
+//       coApplicantId,
+//     });
+
+//     if (res?.success) {
+//       openOtpFor({
+//         type: "mobile",
+//         target: field,
+//         value,
+//         ownerType,
+//         applicantId,
+//         coApplicantId,
+//       });
+//     }
+
+//     return res;
+
+//   } catch (error) {
+//     toast.error(error?.message || "Mobile verification failed");
+//     throw error;
+//   } finally {
+//     setLoading(loadingKey, false);
+//   }
+// }
 
       // ----------------------------------
       // 🔹 EMAIL OTP (Skip OTP validation - registration proceeds without OTP)
@@ -726,8 +834,85 @@ if (
   setLoading(loadingKey, true);
 
   try {
+
+     if (field === "applicantEmail") {
+
+      const sendRes = await kycService.sendEmailOtp({
+        customerId,
+        email: value,
+        ownerType,
+        applicantId,
+        coApplicantId,
+      });
+
+      const verifyRes = await kycService.verifyEmailOtp({
+        customerId,
+        otp: "0000",
+        ownerType,
+        applicantId,
+        coApplicantId,
+        skipOtpValidation: true,
+      });
+
+      await loadVerificationStatuses(customerId);
+
+      toast.success("Applicant email verified successfully");
+
+      return verifyRes;
+    }
+
+
+        if (field === "companyEmail" && !isInternalUser) {
+
+      const res = await kycService.sendEmailOtp({
+        customerId,
+        email: value,
+        ownerType,
+        applicantId,
+        coApplicantId,
+      });
+
+      if (res?.success) {
+        openOtpFor({
+          type: "email",
+          target: field,
+          value,
+          ownerType,
+          applicantId,
+          coApplicantId,
+        });
+      }
+
+      return res;
+    }
+
+
+     // ✅ CO-APPLICANT EMAIL → OTP required for external users
+    if (field === "coApplicantEmail" && !isInternalUser) {
+
+      const res = await kycService.sendEmailOtp({
+        customerId,
+        email: value,
+        ownerType,
+        applicantId,
+        coApplicantId,
+      });
+
+      if (res?.success) {
+        openOtpFor({
+          type: "email",
+          target: field,
+          value,
+          ownerType,
+          applicantId,
+          coApplicantId,
+        });
+      }
+
+      return res;
+    }
     // ✅ INTERNAL USER → DIRECT FLOW
-    if (isInternalUser) {
+    // if (isInternalUser) {
 
       // STEP 1: Save email
       const sendRes = await kycService.sendEmailOtp({
@@ -753,7 +938,7 @@ if (
       toast.success("Email verified (internal user)");
 
       return verifyRes;
-    }
+    // }
 
     // ❌ NORMAL USER → OLD FLOW
     const res = await kycService.sendEmailOtp({
