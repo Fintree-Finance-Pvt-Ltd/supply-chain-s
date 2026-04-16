@@ -295,7 +295,19 @@ import { FiUpload, FiX, FiFile, FiCheckCircle, FiEye } from 'react-icons/fi'
 import { documentService } from '../services/documentService'
 
 const MAX_FILE_MB = 50
-const ALLOWED_TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg']
+// const ALLOWED_TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg']
+
+const ALLOWED_TYPES = [
+  'application/pdf',
+  'image/jpeg',
+  'image/png',
+  'image/jpg',
+
+  // ✅ Excel support
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/octet-stream' // fallback
+]
 
 const DocumentChecklistUploader = ({
   checklist = [],
@@ -316,13 +328,31 @@ const DocumentChecklistUploader = ({
     else console.log(message)
   }
 
+  // const validateFile = (file) => {
+  //   if (!file) return 'No file selected'
+  //   if (!ALLOWED_TYPES.includes(file.type)) return 'Only PDF, Image, Excel files allowed'
+  //   if (file.size / (1024 * 1024) > MAX_FILE_MB)
+  //     return `Max file size ${MAX_FILE_MB}MB`
+  //   return null
+  // }
+
+
   const validateFile = (file) => {
-    if (!file) return 'No file selected'
-    if (!ALLOWED_TYPES.includes(file.type)) return 'Only PDF/JPG/PNG allowed'
-    if (file.size / (1024 * 1024) > MAX_FILE_MB)
-      return `Max file size ${MAX_FILE_MB}MB`
-    return null
+  if (!file) return 'No file selected'
+
+  const allowedExtensions = ['pdf', 'jpg', 'jpeg', 'png', 'xls', 'xlsx']
+  const ext = file.name.split('.').pop().toLowerCase()
+
+  if (!allowedExtensions.includes(ext)) {
+    return 'Only PDF, Image, Excel files allowed'
   }
+
+  if (file.size / (1024 * 1024) > MAX_FILE_MB) {
+    return `Max file size ${MAX_FILE_MB}MB`
+  }
+
+  return null
+}
 
   const handleFileSelect = async (item, e) => {
     if (readOnly) return
@@ -575,7 +605,9 @@ const DocumentChecklistUploader = ({
                 >
                   <input
                     type="file"
-                    accept=".pdf,.jpg,.jpeg,.png"
+                    // accept=".pdf,.jpg,.jpeg,.png"
+
+                    accept=".pdf,.jpg,.jpeg,.png,.xls,.xlsx"
                     className="hidden"
                     disabled={uploadingNow}
                     onChange={(e) => handleFileSelect(item, e)}

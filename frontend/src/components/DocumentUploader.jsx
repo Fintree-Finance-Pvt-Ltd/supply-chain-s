@@ -162,8 +162,21 @@ import { useState, useRef } from 'react'
 import { FiUpload, FiX, FiFile, FiEye } from 'react-icons/fi'
 
 const MAX_FILE_MB = 50
-const ALLOWED_TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg']
+// const ALLOWED_TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg']
 
+
+
+const ALLOWED_TYPES = [
+  'application/pdf',
+  'image/jpeg',
+  'image/png',
+  'image/jpg',
+
+  // ✅ ADD THESE
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/octet-stream'
+];
 const DocumentUploader = ({
   documents = [],
   onUpload,
@@ -186,15 +199,31 @@ const DocumentUploader = ({
     else console.log(message)
   }
 
+  // const validateFile = (file) => {
+  //   if (!ALLOWED_TYPES.includes(file.type))
+  //     return 'Only PDF/JPG/PNG allowed'
+
+  //   if (file.size / (1024 * 1024) > MAX_FILE_MB)
+  //     return `Max file size ${MAX_FILE_MB}MB`
+
+  //   return null
+  // }
+
+
   const validateFile = (file) => {
-    if (!ALLOWED_TYPES.includes(file.type))
-      return 'Only PDF/JPG/PNG allowed'
+  const allowedExtensions = ['pdf', 'jpg', 'jpeg', 'png', 'xls', 'xlsx'];
+  const ext = file.name.split('.').pop().toLowerCase();
 
-    if (file.size / (1024 * 1024) > MAX_FILE_MB)
-      return `Max file size ${MAX_FILE_MB}MB`
-
-    return null
+  if (!allowedExtensions.includes(ext)) {
+    return 'Only PDF, Image, Excel files allowed';
   }
+
+  if (file.size / (1024 * 1024) > MAX_FILE_MB) {
+    return `Max file size ${MAX_FILE_MB}MB`;
+  }
+
+  return null;
+};
 
   const handleFileSelect = (e) => {
     const files = Array.from(e.target.files)
@@ -301,7 +330,8 @@ const DocumentUploader = ({
                   ref={fileInputRef}
                   type="file"
                   multiple
-                  accept=".pdf,.jpg,.jpeg,.png"
+                  // accept=".pdf,.jpg,.jpeg,.png"
+                  accept=".pdf,.jpg,.jpeg,.png,.xls,.xlsx"
                   onChange={handleFileSelect}
                   className="hidden"
                   disabled={isUploading}
