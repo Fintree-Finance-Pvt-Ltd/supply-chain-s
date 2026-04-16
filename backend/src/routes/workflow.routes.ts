@@ -163,7 +163,7 @@ router.patch('/customers/:customerId/bank-details', checkRole(['relationship_man
  * CEO can edit tenure and interestRate.
  * Only MD can edit all fields.
  */
-router.post('/customers/:customerId/credit-l1', checkRole(['credit_team_l1', 'credit_team_l2']), async (req: Request, res: Response) => {
+router.post('/customers/:customerId/credit-l1', checkRole(['credit_team_l1', 'credit_team_l2', 'credit_head']), async (req: Request, res: Response) => {
   try {
     const { customerId } = req.params;
     const { approved, remarks, partnerSanctions } = req.body;
@@ -173,9 +173,10 @@ router.post('/customers/:customerId/credit-l1', checkRole(['credit_team_l1', 'cr
     
     // Check if user has L1 role - if they have both L1 and L2, they should have L1 access
     // If they only have L2, deny access to L1 approval
-    const hasL1Role = userRoles.includes('credit_team_l1');
+    // Credit head can also access L1
+    const hasL1Role = userRoles.includes('credit_team_l1') || userRoles.includes('credit_head');
     
-    // Allow access if user has L1 role (either alone or with L2)
+    // Allow access if user has L1 role (either alone or with L2 or credit_head)
     if (!hasL1Role) {
       res.status(403).json({
         success: false,
@@ -296,7 +297,7 @@ router.get('/customers/:customerId/sanction-limits', async (req: Request, res: R
  * CEO can edit tenure and interestRate.
  * Only MD can edit all fields.
  */
-router.post('/customers/:customerId/credit-l2', checkRole(['credit_team_l1', 'credit_team_l2']), async (req: Request, res: Response) => {
+router.post('/customers/:customerId/credit-l2', checkRole(['credit_team_l1', 'credit_team_l2', 'credit_head']), async (req: Request, res: Response) => {
   try {
     const { customerId } = req.params;
     const { approved, remarks, partnerSanctions, sanctionAmount, tenure, interestRate, conditions, penalCharges, processingFees } = req.body;
@@ -305,9 +306,10 @@ router.post('/customers/:customerId/credit-l2', checkRole(['credit_team_l1', 'cr
     const userRole = userRoles[0]?.toLowerCase() || '';
     
     // Check if user has L2 role - if they have both L1 and L2, they should have L2 access
-    const hasL2Role = userRoles.includes('credit_team_l2');
+    // Credit head also has L2 access
+    const hasL2Role = userRoles.includes('credit_team_l2') || userRoles.includes('credit_head');
     
-    // Allow access if user has L2 role (either alone or with L1)
+    // Allow access if user has L2 role (either alone or with L1 or credit_head)
     if (!hasL2Role) {
       res.status(403).json({
         success: false,
@@ -599,7 +601,7 @@ router.post('/customers/:customerId/ops-submit', checkRole(['relationship_manage
  * POST /api/workflows/documents/:documentId/verify
  * Verify an individual document (remarks + status)
  */
-router.post('/documents/:documentId/verify', checkRole(['relationship_manager', 'credit_team_l1', 'credit_team_l2', 'operations_team_l1', 'operations_head']), async (req: Request, res: Response) => {
+router.post('/documents/:documentId/verify', checkRole(['relationship_manager', 'credit_team_l1', 'credit_team_l2', 'credit_head', 'operations_team_l1', 'operations_head']), async (req: Request, res: Response) => {
   try {
     const { documentId } = req.params;
     const { remarks, status } = req.body;
@@ -628,7 +630,7 @@ router.post('/documents/:documentId/verify', checkRole(['relationship_manager', 
  * PATCH /api/workflows/documents/:documentId
  * Update document metadata (type, remarks, etc.)
  */
-router.patch('/documents/:documentId', checkRole(['relationship_manager', 'credit_team_l1', 'credit_team_l2', 'operations_team_l1', 'operations_head']), async (req: Request, res: Response) => {
+router.patch('/documents/:documentId', checkRole(['relationship_manager', 'credit_team_l1', 'credit_team_l2', 'credit_head', 'operations_team_l1', 'operations_head']), async (req: Request, res: Response) => {
   try {
     const { documentId } = req.params;
     const data = req.body;
@@ -761,12 +763,23 @@ router.get('/customers/dashboard/rm', checkRole(['relationship_manager']), async
 /**
  * GET /api/workflows/customers/dashboard/credit/:level
  * Credit Team Dashboard
- * Modified: Now supports users with both L1 and L2 roles
+ * Modified: Now supports users with both L1 and L2 roles, plus credit_head
  */
-router.get('/customers/dashboard/credit/:level', checkRole(['credit_team_l1', 'credit_team_l2']), async (req: Request, res: Response) => {
+router.get('/customers/dashboard/credit/:level', checkRole(['credit_team_l1', 'credit_team_l2', 'credit_head']), async (req: Request, res: Response) => {
   try {
     const { level } = req.params;
     const user = (req as any).user;
+    
+    // Handle credit_head - can see all cases (no round-robin restriction)
+    const userRoles = user?.roles?.map((r: any) => r.name.toLowerCase()) || [];
+    if (userRoles.includes('credit_head')) {
+      const dashboard = await customerOnboardingService.getCreditHeadPending(user?.id);
+      
+      return res.json({
+        success: true,
+        data: dashboard,
+      });
+    }
     
     // Handle 'both' level request - user has both L1 and L2 roles
     if (level === 'both') {

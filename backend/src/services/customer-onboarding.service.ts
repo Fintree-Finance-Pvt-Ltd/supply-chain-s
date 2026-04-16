@@ -1838,6 +1838,29 @@ export class CustomerOnboardingService {
     return { pending: pendingWorkflows, handled: handledWorkflows };
   }
 
+  async getCreditHeadPending(userId?: number) {
+    const allWorkflows = await this.workflowRepository.find({
+      where: { workflowType: "CUSTOMER_ONBOARDING" },
+      relations: ["customer"],
+      order: { createdAt: "DESC" },
+    });
+
+    const pending = allWorkflows.filter(
+      (w) =>
+        w.currentStatus !== "completed" &&
+        w.currentStatus !== "rejected" &&
+        w.currentStatus !== "disbursed"
+    );
+    const handled = allWorkflows.filter(
+      (w) =>
+        w.currentStatus === "completed" ||
+        w.currentStatus === "rejected" ||
+        w.currentStatus === "disbursed"
+    );
+
+    return { pending, handled };
+  }
+
   async getOperationsPending(role: string, userId?: number) {
     const r = role.toUpperCase();
     const statusFilter =
