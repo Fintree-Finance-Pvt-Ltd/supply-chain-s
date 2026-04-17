@@ -26,8 +26,14 @@ import useOnboardingState from "../../../hooks/useOnboardingState";
 import useOtpFlow from "../../../hooks/useOtpFlow";
 
 import { validateMobile, validateEmail } from "../../../utils/validation";
+import { useLocation } from "react-router-dom";
+
+
 
 const OnboardingContainer = () => {
+  const location = useLocation();
+const isFreshCustomer = location.state?.isFreshCustomer;
+
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -146,8 +152,8 @@ const OnboardingContainer = () => {
 
   // ----- hydrate UI from currentCase
   useEffect(() => {
-    if (!currentCase || !customerId) return;
-
+    if (!currentCase || !customerId ) return;
+if (isFreshCustomer  && !currentCase?.applicant) return; // skip draft restore only for newly created customer
     setFormData((prev) => ({
       ...prev,
       companyType: currentCase.companyType || "",
@@ -673,7 +679,11 @@ if (
 
     // handle new customer creation
     if (res?.customerId && !customerId) {
-      navigate(`/rm/customer/new?id=${res.customerId}`, { replace: true });
+
+      navigate(`/rm/customer/new?id=${res.customerId}`,
+         { replace: true ,
+          state: { isFreshCustomer: true },
+         });
       return res;
     }
 
