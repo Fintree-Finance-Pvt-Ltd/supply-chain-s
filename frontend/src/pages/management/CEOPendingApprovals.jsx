@@ -33,13 +33,21 @@ const CEOPendingApprovals = () => {
     {
       key: 'customerName',
       label: 'Customer Name',
-      render: (_, row) => row.customer?.customerName || 'N/A'
+      render: (_, row) => row?.customer?.name?.trim() || row?.customer?.companyName?.trim() ||
+        'N/A'
+
+      // render: (_, row) => row.customer?.customerName || 'N/A'
     },
-    {
-      key: 'customerCode',
-      label: 'Customer Code',
-      render: (_, row) => row.customer?.customerCode || 'N/A'
+     {
+      key: 'companyName',
+      label: 'Company Name',
+      render: (_, row) =>  row?.customer?.companyName?.trim() || 'N/A'
     },
+    // {
+    //   key: 'customerCode',
+    //   label: 'Customer Code',
+    //   render: (_, row) => row.customer?.customerCode || 'N/A'
+    // },
     {
       key: 'currentStatus',
       label: 'Stage',
