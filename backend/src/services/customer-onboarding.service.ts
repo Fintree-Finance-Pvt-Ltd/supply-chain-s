@@ -462,6 +462,14 @@ export class CustomerOnboardingService {
     workflow.currentApproverRoleName = approved ? "CREDIT_TEAM_L2" : "RM";
     if (!approved) workflow.isRejected = true;
     workflow.remarks = remarks;
+    if (approved) {
+      workflow.assignedUserId = null;
+      workflow.assignedStage = "credit_l2";
+      await this.customerRepository.update(customerId, {
+        assignedUserId: null,
+        assignedStage: "credit_l2",
+      });
+    }
     await this.workflowRepository.save(workflow);
 
     if (approved && sanctionData) {
