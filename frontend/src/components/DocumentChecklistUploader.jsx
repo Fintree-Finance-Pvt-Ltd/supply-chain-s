@@ -295,7 +295,19 @@ import { FiUpload, FiX, FiFile, FiCheckCircle, FiEye } from 'react-icons/fi'
 import { documentService } from '../services/documentService'
 
 const MAX_FILE_MB = 50
-const ALLOWED_TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg']
+// const ALLOWED_TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg']
+
+const ALLOWED_TYPES = [
+  'application/pdf',
+  'image/jpeg',
+  'image/png',
+  'image/jpg',
+
+  // ✅ Excel support
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/octet-stream' // fallback
+]
 
 const DocumentChecklistUploader = ({
   checklist = [],
@@ -316,39 +328,101 @@ const DocumentChecklistUploader = ({
     else console.log(message)
   }
 
+  // const validateFile = (file) => {
+  //   if (!file) return 'No file selected'
+  //   if (!ALLOWED_TYPES.includes(file.type)) return 'Only PDF, Image, Excel files allowed'
+  //   if (file.size / (1024 * 1024) > MAX_FILE_MB)
+  //     return `Max file size ${MAX_FILE_MB}MB`
+  //   return null
+  // }
+
+
   const validateFile = (file) => {
-    if (!file) return 'No file selected'
-    if (!ALLOWED_TYPES.includes(file.type)) return 'Only PDF/JPG/PNG allowed'
-    if (file.size / (1024 * 1024) > MAX_FILE_MB)
-      return `Max file size ${MAX_FILE_MB}MB`
-    return null
+  if (!file) return 'No file selected'
+
+  const allowedExtensions = ['pdf', 'jpg', 'jpeg', 'png', 'xls', 'xlsx']
+  const ext = file.name.split('.').pop().toLowerCase()
+
+  if (!allowedExtensions.includes(ext)) {
+    return 'Only PDF, Image, Excel files allowed'
   }
 
+  if (file.size / (1024 * 1024) > MAX_FILE_MB) {
+    return `Max file size ${MAX_FILE_MB}MB`
+  }
+
+  return null
+}
+
+  // const handleFileSelect = async (item, e) => {
+  //   if (readOnly) return
+  //   const file = e.target.files?.[0]
+  //   if (!file) return
+
+  //   const validationError = validateFile(file)
+  //   if (validationError) {
+  //     notify('error', validationError)
+  //     e.target.value = ''
+  //     return
+  //   }
+
+  //   if (!customerId) {
+  //     notify('error', 'Save Basic & KYC details first to generate Case ID.')
+  //     e.target.value = ''
+  //     return
+  //   }
+
+  //   setUploading(prev => ({ ...prev, [item.key]: true }))
+
+  //   try {
+  //     const response = await documentService.uploadDocument(
+  //       customerId,
+  //       file,
+  //       item.documentType,
+  //       'applicant',
+  //       0,
+  //       null,
+  //       {}
+  //     )
+
+  //     onDocumentUploaded?.(response.data)
+  //     notify('success', 'Document uploaded successfully')
+
+  //   } catch (error) {
+  //     notify('error', error?.response?.data?.message || error.message)
+  //   } finally {
+  //     setUploading(prev => ({ ...prev, [item.key]: false }))
+  //     e.target.value = ''
+  //   }
+  // }
+
+
   const handleFileSelect = async (item, e) => {
-    if (readOnly) return
-    const file = e.target.files?.[0]
-    if (!file) return
+  if (readOnly) return
 
-    const validationError = validateFile(file)
-    if (validationError) {
-      notify('error', validationError)
-      e.target.value = ''
-      return
-    }
+  const files = Array.from(e.target.files || [])
+  if (!files.length) return
 
-    if (!customerId) {
-      notify('error', 'Save Basic & KYC details first to generate Case ID.')
-      e.target.value = ''
-      return
-    }
+  if (!customerId) {
+    notify('error', 'Save Basic & KYC first')
+    return
+  }
 
-    setUploading(prev => ({ ...prev, [item.key]: true }))
+  setUploading(prev => ({ ...prev, [item.key]: true }))
 
-    try {
+  try {
+    // 🚀 Upload ALL selected files
+    for (const file of files) {
+      const error = validateFile(file)
+      if (error) {
+        notify('error', `${file.name}: ${error}`)
+        continue
+      }
+
       const response = await documentService.uploadDocument(
         customerId,
         file,
-        item.documentType,
+        item.documentType, // SAME TYPE (GSTR3B)
         'applicant',
         0,
         null,
@@ -356,15 +430,17 @@ const DocumentChecklistUploader = ({
       )
 
       onDocumentUploaded?.(response.data)
-      notify('success', 'Document uploaded successfully')
-
-    } catch (error) {
-      notify('error', error?.response?.data?.message || error.message)
-    } finally {
-      setUploading(prev => ({ ...prev, [item.key]: false }))
-      e.target.value = ''
     }
+
+    notify('success', `${files.length} files uploaded successfully`)
+
+  } catch (error) {
+    notify('error', error.message)
+  } finally {
+    setUploading(prev => ({ ...prev, [item.key]: false }))
+    e.target.value = ''
   }
+}
 
   const handleRemoveDocument = async (doc) => {
     if (readOnly) return
@@ -573,13 +649,23 @@ const DocumentChecklistUploader = ({
                     uploadingNow ? 'opacity-50 cursor-wait' : ''
                   }`}
                 >
-                  <input
+                  {/* <input
                     type="file"
-                    accept=".pdf,.jpg,.jpeg,.png"
+                    // accept=".pdf,.jpg,.jpeg,.png"
+
+                    accept=".pdf,.jpg,.jpeg,.png,.xls,.xlsx"
                     className="hidden"
                     disabled={uploadingNow}
                     onChange={(e) => handleFileSelect(item, e)}
-                  />
+                  /> */}
+
+                  <input
+  type="file"
+  multiple   // ✅ REQUIRED
+   className="hidden"
+  accept=".pdf,.jpg,.jpeg,.png,.xls,.xlsx"
+  onChange={(e) => handleFileSelect(item, e)}
+/>
 
                   {uploadingNow ? 'Uploading...' : 'Upload'}
                 </label>
