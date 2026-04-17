@@ -463,10 +463,10 @@ export class CustomerOnboardingService {
     if (!approved) workflow.isRejected = true;
     workflow.remarks = remarks;
     if (approved) {
-      workflow.assignedUserId = null;
+      workflow.assignedUserId = undefined as any;
       workflow.assignedStage = "credit_l2";
       await this.customerRepository.update(customerId, {
-        assignedUserId: null,
+        assignedUserId: undefined as any,
         assignedStage: "credit_l2",
       });
     }
