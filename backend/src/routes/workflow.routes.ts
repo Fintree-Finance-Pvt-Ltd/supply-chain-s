@@ -333,17 +333,17 @@ router.post('/customers/:customerId/credit-l2', checkRole(['credit_team_l1', 'cr
         .map((ps: any) => ps.partner.toUpperCase());
       
       // Check if all active partners have sanction amounts
-      const missingPartners = activePartners.filter(
-        (p) => !partnersWithSanction.includes(p.code.toUpperCase())
-      );
+      // const missingPartners = activePartners.filter(
+      //   (p) => !partnersWithSanction.includes(p.code.toUpperCase())
+      // );
       
-      if (missingPartners.length > 0) {
-        res.status(400).json({
-          success: false,
-          message: `Please fill sanction amount for all partners. Missing: ${missingPartners.map(p => p.code).join(', ')}`,
-        });
-        return;
-      }
+      // if (missingPartners.length > 0) {
+      //   res.status(400).json({
+      //     success: false,
+      //     message: `Please fill sanction amount for all partners. Missing: ${missingPartners.map(p => p.code).join(', ')}`,
+      //   });
+      //   return;
+      // }
     }
     
     // Credit L2 can only modify sanctionAmount (not tenure, ROI, etc.)
