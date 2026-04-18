@@ -499,6 +499,7 @@ const DocumentChecklistUploader = ({
     const documentTypeMappings = {
       'gst_certificate': 'applicant_gst',
       'pan': 'applicant_pan',
+       'coapplicant_pan': 'coapplicant_pan',
       'msme_certificate': 'msme_certificate',
       'office_electricity_bill': 'office_electricity_bill',
       'applicant_pan': 'applicant_pan',

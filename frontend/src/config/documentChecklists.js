@@ -23,7 +23,7 @@ export const PROPRIETORSHIP_CHECKLIST = [
     { key: 'msme_certificate', label: 'MSME Certificate', mandatory: false, documentType: 'msme_certificate' },
     { key: 'office_electricity_bill', label: 'Office Electricity Bill', mandatory: false, documentType: 'office_electricity_bill' },
     { key: 'pan_aadhaar_applicant', label: 'PAN & Aadhaar of Applicant', mandatory: true, documentType: 'applicant_pan' },
-    { key: 'pan_aadhaar_female_co_applicant', label: 'PAN & Aadhaar of Female Co-Applicant', mandatory: false, documentType: 'pan' },
+    { key: 'pan_aadhaar_female_co_applicant', label: 'PAN & Aadhaar of Female Co-Applicant', mandatory: false, documentType: 'coapplicant_pan' },
     { key: 'residence_electricity_bill', label: 'Residence Electricity Bill', mandatory: false, documentType: 'residence_electricity_bill' },
     ...COMMON_FINANCIALS,
     { key: 'sales_purchase', label: 'Sales & Purchase (Monthwise, Tally)', mandatory: false, documentType: 'sales_purchase' },

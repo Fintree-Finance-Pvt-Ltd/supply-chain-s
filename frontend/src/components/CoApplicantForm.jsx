@@ -228,7 +228,7 @@ import { useMemo, useState } from 'react'
 import { FiX } from 'react-icons/fi'
 import kycService from '../services/kycService'
 import LoadingSpinner from './LoadingSpinner'
-
+import { documentService } from "../services/documentService";
 const MAX_PAN_FILE_MB = 5
 const ALLOWED_PAN_TYPES = [
   'image/jpeg',
@@ -303,6 +303,7 @@ const CoApplicantForm = ({
 const isAnyLoading =
   isOcrProcessing ||
   isRefreshingAadhaar ||
+  data?.isEmailLoading ||   
   Object.values(loadingStates || {}).some(Boolean);
   
   // stable identity key for UI + local state mapping
@@ -360,58 +361,75 @@ const isAnyLoading =
     return null
   }
 
-  const handlePanImageUpload = async (e) => {
-    const file = e.target.files?.[0]
-    if (!file) return
+ const handlePanImageUpload = async (e) => {
+  const file = e.target.files?.[0]
+  if (!file) return
 
-    const fileErr = validatePanFile(file)
-    if (fileErr) {
-      notify('error', fileErr)
-      if (e.target) e.target.value = ''
+  const fileErr = validatePanFile(file)
+  if (fileErr) {
+    notify('error', fileErr)
+    e.target.value = ''
+    return
+  }
+
+  setIsOcrProcessing(true)
+
+  try {
+    // ✅ OCR
+    const result = await kycService.runOcr(file, 'PAN')
+
+    if (!result?.success) {
+      notify('error', result?.message || 'OCR failed')
       return
     }
 
-    setIsOcrProcessing(true)
-    try {
-      const result = await kycService.runOcr(file, 'PAN')
+    const pan = normalizePanFromOcr(result.data)
+    const name = normalizeNameFromOcr(result.data)
 
-      if (!result?.success) {
-        notify('error', result?.message || 'OCR failed')
-        return
-      }
+    // ✅ STEP 1: ensure coApplicantId exists
+    let coApplicantId = data?.id
 
-      const pan = normalizePanFromOcr(result.data)
-      const name = normalizeNameFromOcr(result.data)
-
-      if (!pan) {
-        notify('error', 'OCR completed but PAN could not be detected. Please enter PAN manually.')
-      }
-
-      // Update co-applicant name if OCR returned it
-      onChange?.(stableKey, {
-        ...data,
-        name: name || data.name,
-      })
-
-      // Store PAN number in parent mapping (kycData should be set in parent keyed by stableKey)
-      // We pass stableKey + file + pan
-      // Parent should update: coApplicantKyc[stableKey] = { panNumber: pan, panFile: file }
-      // If parent still expects (index, file, pan), update parent in next step.
-      // Update parent KYC state immediately for the input to reflect
-      if (typeof onKycUpdate === 'function') {
-        onKycUpdate({ panNumber: pan, panFile: file })
-      } else if (typeof onFieldMutate === 'function') {
-        onFieldMutate(stableKey, 'panNumber', pan)
-      }
-
-      notify('success', `OCR done${pan ? `: ${pan}` : ''}${name ? `, ${name}` : ''}`)
-    } catch (error) {
-      notify('error', 'OCR failed: ' + (error?.message || 'Unknown error'))
-    } finally {
-      setIsOcrProcessing(false)
-      if (e.target) e.target.value = ''
+    if (!coApplicantId) {
+      notify("info", "Please verify mobile first to create co-applicant")
+      return
     }
+
+    // ✅ STEP 2: UPLOAD DOCUMENT (🔥 MAIN FIX)
+    console.log("Uploading PAN...", { customerId, coApplicantId })
+
+    const uploadRes = await documentService.uploadDocument(
+      customerId,
+      file,
+      "pan",
+      "coApplicant",
+      0,
+      coApplicantId,
+      {}
+    )
+
+    console.log("Upload Response:", uploadRes)
+
+    // ✅ STEP 3: update UI
+    onChange?.(stableKey, {
+      ...data,
+      name: name || data.name,
+    })
+
+    onKycUpdate?.({
+      panNumber: pan,
+      panFile: file
+    })
+
+    notify('success', `OCR + Upload done: ${pan}`)
+
+  } catch (error) {
+    console.error("PAN Upload Error:", error)
+    notify('error', error?.message || 'Upload failed')
+  } finally {
+    setIsOcrProcessing(false)
+    e.target.value = ''
   }
+}
 
   // const safeVerify = (field, value, localKey = null) => {
   //   console.log(field, value, data.id, customerId);
@@ -463,6 +481,7 @@ const isAnyLoading =
   // const handleEmailVerify = () =>
   //   safeVerify('coApplicantEmail', data.email, data.localKey);
 const handleEmailVerify = async () => {
+
   if (!data.email) {
     notify("error", "Please enter email");
     return;
@@ -474,46 +493,49 @@ const handleEmailVerify = async () => {
   }
 
   const key = `coApplicantEmail_${data.id || data.localKey}`;
-  if (loadingStates[key]) return;
+  if (loadingStates[key] || data?.isEmailLoading) return;
 
   try {
+    // 🔥 START LOADER (ONLY WHEN API STARTS)
     onFieldMutate?.(stableKey, "isEmailLoading", true);
 
-    // ✅ STEP 1 — send email OTP (SAVE EMAIL IN DB)
-    const sendRes = await onVerify?.(
-      "sendEmailOtp",
-      {
-        customerId,
-        email: data.email.trim(),
-        ownerType: "CO_APPLICANT",
-        coApplicantId: data.id,
-      }
-    );
+    // ==============================
+    // ✅ STEP 1 — SEND EMAIL OTP
+    // ==============================
+    const sendRes = await onVerify?.("sendEmailOtp", {
+      customerId,
+      email: data.email.trim(),
+      ownerType: "CO_APPLICANT",
+      coApplicantId: data.id,
+    });
 
     if (!sendRes?.success) {
-      notify("error", sendRes?.message || "Failed to register email");
+      notify("error", sendRes?.message || "Failed to send OTP");
       return;
     }
 
     // ✅ handle first-time co-applicant creation
+    let coApplicantId = data?.id;
+
     if (sendRes?.coApplicantId && !data?.id) {
+      coApplicantId = sendRes.coApplicantId;
+
       onChange?.(stableKey, {
         ...data,
-        id: sendRes.coApplicantId,
+        id: coApplicantId,
       });
     }
 
-    // ✅ STEP 2 — verify directly (skip OTP)
-    const verifyRes = await onVerify?.(
-      "verifyEmailOtp",
-      {
-        customerId,
-        otp: "0000",
-        ownerType: "CO_APPLICANT",
-        coApplicantId: sendRes?.coApplicantId || data.id,
-        skipOtpValidation: true,
-      }
-    );
+    // ==============================
+    // ✅ STEP 2 — VERIFY DIRECTLY
+    // ==============================
+    const verifyRes = await onVerify?.("verifyEmailOtp", {
+      customerId,
+      otp: "0000",
+      ownerType: "CO_APPLICANT",
+      coApplicantId: coApplicantId,
+      skipOtpValidation: true,
+    });
 
     if (verifyRes?.success) {
       notify("success", "Email Verified Successfully");
@@ -528,10 +550,10 @@ const handleEmailVerify = async () => {
   } catch (error) {
     notify("error", error?.message || "Email verification failed");
   } finally {
+    // 🔥 STOP LOADER
     onFieldMutate?.(stableKey, "isEmailLoading", false);
   }
 };
-  
 
   const handlePanVerify = () =>
     safeVerify('coApplicantPan', kycData.panNumber, data.localKey);
