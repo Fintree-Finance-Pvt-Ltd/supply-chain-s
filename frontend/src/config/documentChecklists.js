@@ -15,6 +15,7 @@ const COMMON_FINANCIALS = [
     { key: 'gstr_3b_latest', label: 'GSTR-3B (Latest 2 – Required)', mandatory: true, documentType: 'gstr_3b', supportMultiple: true },
     { key: 'bank_statement', label: 'Bank Statement (Last 12 months)', mandatory: true, documentType: 'bank_statement', supportMultiple: true },
     { key: 'obligation_sheet', label: 'Obligation Sheet', mandatory: false, documentType: 'obligation_sheet' },
+    { key: 'debtor_ageing', label: 'Debtor Ageing', mandatory: true, documentType: 'debtor_ageing' },
 ]
 
 // Proprietorship Document Checklist
@@ -42,7 +43,7 @@ export const PVT_LTD_CHECKLIST = [
     { key: 'pan_aadhaar_directors', label: 'PAN & Aadhaar of ALL Directors', mandatory: true, documentType: 'applicant_pan' },
     ...COMMON_FINANCIALS,
     { key: 'sales_purchase', label: 'Sales & Purchase (Monthwise, Tally)', mandatory: false, documentType: 'sales_purchase' },
-    { key: 'debtor_ageing', label: 'Debtor Ageing', mandatory: false, documentType: 'debtor_ageing' },
+    //{ key: 'debtor_ageing', label: 'Debtor Ageing', mandatory: false, documentType: 'debtor_ageing' },
 ]
 
 // Partnership / LLP Document Checklist
@@ -55,7 +56,7 @@ export const PARTNERSHIP_LLP_CHECKLIST = [
     { key: 'pan_aadhaar_partners', label: 'PAN & Aadhaar of ALL Partners', mandatory: true, documentType: 'applicant_pan' },
     ...COMMON_FINANCIALS,
     { key: 'sales_purchase', label: 'Sales & Purchase (Monthwise, Tally)', mandatory: false, documentType: 'sales_purchase' },
-    { key: 'debtor_ageing', label: 'Debtor Ageing', mandatory: false, documentType: 'debtor_ageing' },
+    //{ key: 'debtor_ageing', label: 'Debtor Ageing', mandatory: false, documentType: 'debtor_ageing' },
 ]
 
 // Get checklist based on company type
