@@ -1336,6 +1336,30 @@ if (
       }
     }
 
+
+
+if (strict) {
+
+  // ✅ ADDRESS VALIDATION
+  if (!addresses || addresses.length === 0) {
+    newErrors.addresses = "At least one address is required";
+  } else {
+    addresses.forEach((addr, index) => {
+      if (
+        !addr.type ||
+        !addr.fullAddress?.trim() ||
+        !addr.pincode?.trim() ||
+        !addr.state?.trim() ||
+        !addr.city?.trim()
+      ) {
+        newErrors[`address_${index}`] = "All address fields are required";
+      }
+    });
+  }
+
+}
+
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -1646,11 +1670,11 @@ return (
               errors={errors}
             />
 
-            <AddressSection
-              addresses={addresses}
-              setAddresses={setAddresses}
-              errors={errors}
-            />
+         <AddressSection
+  addresses={addresses}
+  setAddresses={setAddresses}
+  errors={errors}
+/>
 
             {/* RM Remarks */}
             <div className="card mt-6 p-4">
