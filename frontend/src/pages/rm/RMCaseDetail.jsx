@@ -11,7 +11,7 @@ import LoadingSpinner from '../../components/LoadingSpinner'
 import ApprovalTimeline from '../../components/ApprovalTimeline'
 import { formatDate } from '../../utils/format'
 import CustomerFullDetails from '../../components/CustomerFullDetails'
-import { FiFileText, FiCheck, FiSend, FiFile, FiLock, FiEye, FiCamera, FiRefreshCw } from 'react-icons/fi'
+import { FiFileText, FiCheck, FiSend, FiFile, FiLock, FiEye, FiCamera, FiRefreshCw, FiUpload } from 'react-icons/fi'
 import { toast } from 'react-toastify'
 
 const RMCaseDetail = () => {
@@ -46,6 +46,18 @@ const RMCaseDetail = () => {
     const [cameraStream, setCameraStream] = useState(null)
     const [capturedImage, setCapturedImage] = useState(null)
     const [cameraType, setCameraType] = useState('environment') // 'user' or 'environment'
+    const handleUploadClick = () => {
+        document.getElementById("fileInput").click();
+    };
+
+    const handleFileChange = async (e) => {
+        const file = e.target.files[0];
+
+        if (!file) return;
+
+        // Call your cheque OCR upload function
+        await handleUpload(file, "cheque");
+    };
 
     useEffect(() => {
         if (id) {
@@ -61,16 +73,16 @@ const RMCaseDetail = () => {
     useEffect(() => {
         const fetchSanctionsAndPartners = async () => {
             if (!id) return
-            
+
             try {
                 console.log('RMCaseDetail: Fetching from /sanctions/customer/' + id)
                 const response = await api.get(`/sanctions/customer/${id}`)
                 const data = response.data
                 const sanctions = Array.isArray(data) ? data : data.sanctions || []
-                
+
                 if (sanctions.length > 0) {
                     console.log('RMCaseDetail: Found sanctions:', sanctions)
-                    
+
                     // Extract unique partners from sanctions
                     const uniquePartners = []
                     const partnerMap = {}
@@ -81,7 +93,7 @@ const RMCaseDetail = () => {
                         }
                     })
                     setPartners(uniquePartners)
-                    
+
                     // Initialize partnerSanctions with data from API
                     const initialSanctions = {}
                     sanctions.forEach(s => {
@@ -104,7 +116,7 @@ const RMCaseDetail = () => {
                 setPartnersLoading(false)
             }
         }
-        
+
         fetchSanctionsAndPartners()
     }, [id])
 
@@ -135,7 +147,7 @@ const RMCaseDetail = () => {
                     processingFees: parseFloat(partnerSanctions[partner.code].processingFees) || 0,
                     conditions: partnerSanctions[partner.code].conditions || '',
                 }))
-            
+
             await workflowService.updateBankDetails(id, { ...bankDetails, partnerSanctions: sanctionsArray })
             toast.success('Details saved successfully')
             dispatch(fetchCaseById(id))
@@ -152,13 +164,13 @@ const RMCaseDetail = () => {
             if (type === 'cheque') {
                 try {
                     const ocrResult = await kycService.processChequeOcr(file);
-                    
+
                     if (ocrResult.success) {
                         const { bank_account_number, ifsc_code, bank_name, account_holder_name, micr_code, cheque_number } = ocrResult.data;
-                        
+
                         // Log provider name
                         console.log('Cheque OCR Provider:', ocrResult.provider);
-                        
+
                         // Auto-fill bank details from OCR
                         setBankDetails({
                             bankAccountNo: bank_account_number,
@@ -167,7 +179,7 @@ const RMCaseDetail = () => {
                             bankBranch: '',
                             bankType: 'savings'
                         });
-                        
+
                         toast.success('Cheque OCR completed! Bank details auto-filled.');
                         return; // Don't call documentService for cheque
                     }
@@ -176,7 +188,7 @@ const RMCaseDetail = () => {
                     toast.error('Unable to read cheque. Please enter details manually.');
                 }
             }
-            
+
             // For other document types, use the existing service
             await documentService.uploadDocument(id, file, type)
             toast.success('Document uploaded successfully')
@@ -215,7 +227,7 @@ const RMCaseDetail = () => {
                     processingFees: parseFloat(partnerSanctions[partner.code].processingFees) || 0,
                     conditions: partnerSanctions[partner.code].conditions || '',
                 }))
-            
+
             await workflowService.submitRMToMD(id, "Final terms confirmed by RM", { partnerSanctions: sanctionsArray })
             toast.success('Case submitted to MD successfully')
             dispatch(fetchCaseById(id))
@@ -304,15 +316,15 @@ const RMCaseDetail = () => {
         try {
             const blob = await (await fetch(dataUrl)).blob();
             const file = new File([blob], "cheque_capture.jpg", { type: "image/jpeg" });
-            
+
             const ocrResult = await kycService.processChequeOcr(file);
-            
+
             if (ocrResult.success) {
                 const { bank_account_number, ifsc_code, bank_name, account_holder_name, micr_code, cheque_number } = ocrResult.data;
-                
+
                 // Log provider name
                 console.log('Cheque OCR Provider:', ocrResult.provider);
-                
+
                 // Auto-fill bank details from OCR
                 setBankDetails({
                     bankAccountNo: bank_account_number,
@@ -321,7 +333,7 @@ const RMCaseDetail = () => {
                     bankBranch: '',
                     bankType: 'savings'
                 });
-                
+
                 toast.success('Cheque OCR completed! Bank details auto-filled.');
             }
         } catch (ocrErr) {
@@ -398,7 +410,7 @@ const RMCaseDetail = () => {
                             <h2 className="text-xl font-semibold text-gray-900">Final Sanction Terms</h2>
                             <FiSend className="text-primary-500" title="RM can now edit sanction details if required" />
                         </div>
-                        
+
                         {/* Show all partners when loading */}
                         {partnersLoading ? (
                             <div className="text-center py-4 text-gray-500">Loading partners...</div>
@@ -417,6 +429,8 @@ const RMCaseDetail = () => {
                                             <input
                                                 type="number"
                                                 value={partnerSanctions[partner.code]?.sanctionAmount || ''}
+                                                onWheel={(e) => e.target.blur()}
+
                                                 onChange={(e) => setPartnerSanctions({
                                                     ...partnerSanctions,
                                                     [partner.code]: { ...partnerSanctions[partner.code], sanctionAmount: e.target.value }
@@ -430,6 +444,7 @@ const RMCaseDetail = () => {
                                             <input
                                                 type="number"
                                                 value={partnerSanctions[partner.code]?.tenure || ''}
+                                                onWheel={(e) => e.target.blur()}
                                                 onChange={(e) => setPartnerSanctions({
                                                     ...partnerSanctions,
                                                     [partner.code]: { ...partnerSanctions[partner.code], tenure: e.target.value }
@@ -444,6 +459,7 @@ const RMCaseDetail = () => {
                                                 type="number"
                                                 step="0.01"
                                                 value={partnerSanctions[partner.code]?.interestRate || ''}
+                                                onWheel={(e) => e.target.blur()}
                                                 onChange={(e) => setPartnerSanctions({
                                                     ...partnerSanctions,
                                                     [partner.code]: { ...partnerSanctions[partner.code], interestRate: e.target.value }
@@ -458,6 +474,7 @@ const RMCaseDetail = () => {
                                                 type="number"
                                                 step="0.01"
                                                 value={partnerSanctions[partner.code]?.penalCharges || ''}
+                                                onWheel={(e) => e.target.blur()}
                                                 onChange={(e) => setPartnerSanctions({
                                                     ...partnerSanctions,
                                                     [partner.code]: { ...partnerSanctions[partner.code], penalCharges: e.target.value }
@@ -472,6 +489,7 @@ const RMCaseDetail = () => {
                                                 type="number"
                                                 step="0.01"
                                                 value={partnerSanctions[partner.code]?.processingFees || ''}
+                                                onWheel={(e) => e.target.blur()}
                                                 onChange={(e) => setPartnerSanctions({
                                                     ...partnerSanctions,
                                                     [partner.code]: { ...partnerSanctions[partner.code], processingFees: e.target.value }
@@ -533,7 +551,24 @@ const RMCaseDetail = () => {
                                                 <FiCamera />
                                                 <span>{isCameraOpen ? 'Stop' : 'Start Camera'}</span>
                                             </button>
+
+                                            {/* Upload Button */}
+                                            <button
+                                                onClick={handleUploadClick}
+                                                className="px-3 py-1 bg-green-600 text-white text-xs rounded-full flex items-center space-x-1"
+                                            >
+                                                <FiUpload />
+                                                <span>Upload</span>
+                                            </button>
+                                            <input
+                                                type="file"
+                                                id="fileInput"
+                                                className="hidden"
+                                                accept="image/*,.pdf"
+                                                onChange={handleFileChange}
+                                            />
                                         </div>
+
                                     )}
                                 </div>
 

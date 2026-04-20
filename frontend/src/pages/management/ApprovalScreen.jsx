@@ -273,7 +273,7 @@ const ApprovalScreen = () => {
     } catch (error) {
       toast.error(
         "Failed to approve: " +
-          (error.response?.data?.message || error.message || error),
+        (error.response?.data?.message || error.message || error),
       );
     } finally {
       setIsSubmitting(false);
@@ -302,7 +302,7 @@ const ApprovalScreen = () => {
     } catch (error) {
       toast.error(
         "Failed to reject: " +
-          (error.response?.data?.message || error.message || error),
+        (error.response?.data?.message || error.message || error),
       );
     } finally {
       setIsSubmitting(false);
@@ -365,7 +365,7 @@ const ApprovalScreen = () => {
       const mimeType = getMimeType(doc.fileName);
       const blob = new Blob([response.data], { type: mimeType });
       const blobUrl = URL.createObjectURL(blob);
-      
+
       if (mode === 'attachment') {
         const link = document.createElement('a');
         link.href = blobUrl;
@@ -522,6 +522,8 @@ const ApprovalScreen = () => {
                           <input
                             type="number"
                             value={ps.tenure}
+                            onWheel={(e) => e.target.blur()}
+
                             onChange={(e) => {
                               const updated = [...partnerSanctions];
                               updated[index].tenure =
@@ -542,6 +544,8 @@ const ApprovalScreen = () => {
                             type="number"
                             step="0.01"
                             value={ps.interestRate}
+                            onWheel={(e) => e.target.blur()}
+
                             onChange={(e) => {
                               const updated = [...partnerSanctions];
                               updated[index].interestRate =
@@ -565,6 +569,8 @@ const ApprovalScreen = () => {
                             type="number"
                             step="0.01"
                             value={ps.penalCharges ?? ""}
+                            onWheel={(e) => e.target.blur()}
+
                             onChange={(e) => {
                               const updated = [...partnerSanctions];
                               updated[index].penalCharges =
@@ -585,6 +591,8 @@ const ApprovalScreen = () => {
                             type="number"
                             step="0.01"
                             value={ps.processingFees ?? ""}
+                            onWheel={(e) => e.target.blur()}
+
                             onChange={(e) => {
                               const updated = [...partnerSanctions];
                               updated[index].processingFees =

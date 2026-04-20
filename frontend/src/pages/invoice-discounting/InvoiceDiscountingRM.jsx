@@ -416,6 +416,7 @@ export default function InvoiceDiscountingRM() {
               type="number"
               name="invoiceAmount"
               value={formData.invoiceAmount}
+              onWheel={(e) => e.target.blur()}
               onChange={handleInputChange}
               placeholder="Enter Invoice Amount"
               style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px' }}
@@ -430,6 +431,7 @@ export default function InvoiceDiscountingRM() {
               type="number"
               name="disbursementAmount"
               value={formData.disbursementAmount}
+              onWheel={(e) => e.target.blur()}
               onChange={handleInputChange}
               placeholder="Enter Disbursement Amount"
               style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px' }}
