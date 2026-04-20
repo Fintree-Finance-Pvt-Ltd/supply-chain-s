@@ -239,7 +239,7 @@ function App() {
           <Route
             path="management/ceo-approvals"
             element={
-              <ProtectedRoute allowedRoles={[ROLES.CEO]}>
+              <ProtectedRoute allowedRoles={[ROLES.CEO, ROLES.MD]}>
                 <CEOPendingApprovals />
               </ProtectedRoute>
             }
