@@ -355,8 +355,11 @@ export class CustomerOnboardingService {
     if (!customer) throw new Error("Customer not found");
 
     const workflow = await this.getOrCreateWorkflow(customerId);
-    if (workflow.currentStatus !== "draft")
-      throw new Error("Can only submit from draft status");
+    if (workflow.currentStatus !== "draft" &&
+  workflow.currentStatus !== "returned_to_rm" )
+    throw new Error("Submission allowed only from draft or returned cases");
+   
+  // throw new Error("Can only submit from draft status");
 
     /* ----------------------------------------
      🔁 SILENT BUREAU (NON-BLOCKING)
@@ -369,36 +372,74 @@ export class CustomerOnboardingService {
     });
 
     const previousStatus = workflow.currentStatus;
-    workflow.currentStatus = "submitted";
-    workflow.currentApproverRoleName = "CREDIT_TEAM_L1";
+    // workflow.currentStatus = "submitted";
+    // workflow.currentApproverRoleName = "CREDIT_TEAM_L1";
+    let newStatus = "submitted";
+let approverRole = "CREDIT_TEAM_L1";
+
+if (pushedTo === "rm") {
+  newStatus = "returned_to_rm";
+  approverRole = "RELATIONSHIP_MANAGER";
+}
+
+workflow.currentStatus = newStatus;
+workflow.currentApproverRoleName = approverRole;
+workflow.remarks = remarks;
     workflow.remarks = remarks;
 
     // 🔧 FIX: Trigger task distribution and assign user
     try {
       const taskDistributionService = new TaskDistributionService();
-      const workflowStage =
-        taskDistributionService.getWorkflowStageFromStatus("submitted");
+      // const workflowStage =
+      //   taskDistributionService.getWorkflowStageFromStatus("submitted");
+const workflowStage =
+  taskDistributionService.getWorkflowStageFromStatus(newStatus);
 
-      const assignmentResult = await taskDistributionService.assignCase(
+let assignedUserId: number | undefined =
+  workflow.assignedUserId ?? undefined;
+
+  // If case already had a Credit user earlier → reuse same user
+  if (!assignedUserId && newStatus === "submitted") {
+    const assignmentResult =
+      await taskDistributionService.assignCase(
         customerId.toString(),
         "CUSTOMER_ONBOARDING",
-        "submitted",
+        newStatus,
+        // "submitted",
         workflowStage,
       );
 
-      if (assignmentResult.assignedUserId) {
-        // Update workflow with assigned user
-        workflow.assignedUserId = assignmentResult.assignedUserId;
-        workflow.assignedStage = workflowStage;
+    assignedUserId = assignmentResult.assignedUserId ?? undefined;
+  }
 
-        // Also update customer record
-        await this.customerRepository.update(customerId, {
-          assignedUserId: assignmentResult.assignedUserId,
-          assignedStage: workflowStage,
-        });
+  if (assignedUserId) {
+    workflow.assignedUserId = assignedUserId;
+    workflow.assignedStage = workflowStage;
+
+    await this.customerRepository.update(customerId, {
+      assignedUserId,
+      assignedStage: workflowStage,
+    });
+      // const assignmentResult = await taskDistributionService.assignCase(
+      //   customerId.toString(),
+      //   "CUSTOMER_ONBOARDING",
+      //   "submitted",
+      //   workflowStage,
+      // );
+
+      // if (assignmentResult.assignedUserId) {
+      //   // Update workflow with assigned user
+      //   workflow.assignedUserId = assignmentResult.assignedUserId;
+      //   workflow.assignedStage = workflowStage;
+
+      //   // Also update customer record
+      //   await this.customerRepository.update(customerId, {
+      //     assignedUserId: assignmentResult.assignedUserId,
+      //     assignedStage: workflowStage,
+      //   });
 
         console.log(
-          `[TaskDistribution] Case ${customerId} assigned to user ${assignmentResult.assignedUserId} (${assignmentResult.assignedUserName})`,
+          `[TaskDistribution] Case ${customerId} assigned to user ${assignedUserId})`,
         );
       } else {
         console.warn(
@@ -415,7 +456,8 @@ export class CustomerOnboardingService {
     await this.workflowRepository.save(workflow);
 
     // Sync customer status and pushedTo
-    const updateData: any = { status: "submitted" };
+    const updateData: any = { status: newStatus };
+   // const updateData: any = { status: "submitted" };
     if (pushedTo) updateData.pushedTo = pushedTo;
 
     await this.customerRepository.update(customerId, updateData);
@@ -423,7 +465,8 @@ export class CustomerOnboardingService {
     await this.logHistory({
       customerId,
       caseWorkflowId: workflow.id,
-      status: "submitted",
+      status: newStatus,
+     // status: "submitted",
       previousStatus,
       changedBy: userId,
       remarks: remarks + (pushedTo ? ` (Submitted to: ${pushedTo})` : ""),
@@ -434,7 +477,9 @@ export class CustomerOnboardingService {
       customerId,
       userId,
       previousStatus,
-      "submitted",
+      //"submitted",
+        newStatus,
+
     );
 
     return workflow;
@@ -586,6 +631,57 @@ export class CustomerOnboardingService {
 
     return workflow;
   }
+
+
+
+  async returnToRM(
+  customerId: number,
+  userId: number,
+  remarks: string
+) {
+  const workflow = await this.getOrCreateWorkflow(customerId);
+
+  if (workflow.currentStatus !== "submitted") {
+    throw new Error("Only submitted cases can be returned to RM");
+  }
+
+  const previousStatus = workflow.currentStatus;
+
+  workflow.currentStatus = "returned_to_rm";
+  workflow.currentApproverRoleName = "RELATIONSHIP_MANAGER";
+  
+  workflow.remarks = remarks;
+
+  await this.workflowRepository.save(workflow);
+
+  // await this.customerRepository.update(customerId, {
+  //   status: "returned_to_rm",
+  //   assignedStage: "rm",
+  // });
+  const customer = await this.customerRepository.findOne({
+  where: { id: customerId },
+});
+
+if (!customer) {
+  throw new Error("Customer not found while updating status");
+}
+  customer.status = "draft";
+// customer.status = "returned_to_rm";
+customer.assignedStage = "rm";
+
+await this.customerRepository.save(customer);
+
+  await this.logHistory({
+    customerId,
+    caseWorkflowId: workflow.id,
+    status: "returned_to_rm",
+    previousStatus,
+    changedBy: userId,
+    remarks,
+  });
+
+  return workflow;
+}
 
   /**
    * Get all sanction limits for a customer based on customerId

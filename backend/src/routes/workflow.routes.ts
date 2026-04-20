@@ -102,7 +102,7 @@ router.post('/customers/create', checkRole(['relationship_manager']), async (req
  * POST /api/workflows/customers/:customerId/submit
  * RM submits customer for credit team review
  */
-router.post('/customers/:customerId/submit', checkRole(['relationship_manager']), async (req: Request, res: Response) => {
+router.post('/customers/:customerId/submit', checkRole(['relationship_manager','credit_team_l1']), async (req: Request, res: Response) => {
   try {
     const { customerId } = req.params;
     const { remarks, pushedTo } = req.body;
@@ -127,6 +127,37 @@ router.post('/customers/:customerId/submit', checkRole(['relationship_manager'])
     });
   }
 });
+
+router.post(
+  "/customers/:customerId/return",
+  checkRole(["credit_team_l1"]),
+  async (req, res) => {
+    try {
+      const { customerId } = req.params;
+      const { remarks } = req.body;
+      const user = (req as any).user;
+
+      const workflow =
+        await customerOnboardingService.returnToRM(
+          Number(customerId),
+          user.id,
+          remarks
+        );
+
+      res.json({
+        success: true,
+        message: "Case returned to RM successfully",
+        data: workflow,
+      });
+
+    } catch (error: any) {
+      res.status(400).json({
+        success: false,
+        message: error.message,
+      });
+    }
+  }
+);
 
 /**
  * PATCH /api/workflows/customers/:customerId/bank-details

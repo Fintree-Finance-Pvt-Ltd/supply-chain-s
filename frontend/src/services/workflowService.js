@@ -5,6 +5,9 @@ export const workflowService = {
     // Customer Onboarding
     createCustomer: (data) => api.post(API_ENDPOINTS.WORKFLOW_CUSTOMER_CREATE, data),
     submitCustomer: (id, remarks, pushedTo) => api.post(API_ENDPOINTS.WORKFLOW_CUSTOMER_SUBMIT(id), { remarks, pushedTo }),
+    
+    returnToRM: (id, remarks) =>
+  api.post(API_ENDPOINTS.WORKFLOW_CUSTOMER_RETURN(id), { remarks }),
     approveCreditL1: (id, approved, remarks, sanctionData) => api.post(API_ENDPOINTS.WORKFLOW_CUSTOMER_CREDIT_L1(id), { approved, remarks, partnerSanctions: sanctionData?.partnerSanctions }),
     approveCreditL2: (id, approved, remarks, sanctionData) => api.post(API_ENDPOINTS.WORKFLOW_CUSTOMER_CREDIT_L2(id), { approved, remarks, partnerSanctions: sanctionData?.partnerSanctions, sanctionAmount: sanctionData?.sanctionAmount }),
     approveCEO: (id, approved, remarks, sanctionData) => api.post(API_ENDPOINTS.WORKFLOW_CUSTOMER_CEO(id), { 

@@ -58,7 +58,7 @@ export const CASE_STATUS = {
   COMPLETED: 'completed',
   DISBURSED: 'disbursed',
   REJECTED: 'rejected',
-
+RETURNED_TO_RM : 'returned_to_rm', 
   // Backward compatibility
   CREDIT_APPROVED: 'credit_l2_approved',
   POST_SANCTION_PENDING: 'md_approved',

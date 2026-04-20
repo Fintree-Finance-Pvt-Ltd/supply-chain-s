@@ -171,7 +171,12 @@ const RMDashboard = () => {
   ]
 
   const pendingTermsCases = cases.filter(c => c.status === 'md_pending_terms')
-  const filteredCases = activeTab === 'all' ? cases : cases.filter(c => c.status === activeTab)
+  const filteredCases = activeTab === 'all' ? cases : cases.filter(c => 
+    // c.status === activeTab
+    activeTab === 'draft'
+          ? ['draft', 'returned_to_rm'].includes(c.status)
+          : c.status === activeTab
+  )
 
   const statCards = [
     { label: 'Total Cases', value: cases.length, icon: FiFileText, color: 'slate' },
@@ -222,6 +227,7 @@ const RMDashboard = () => {
     }
   }
 
+  
   return (
     <div className="min-h-screen bg-gray-50">
       <style>{`

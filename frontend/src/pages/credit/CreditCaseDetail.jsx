@@ -15,6 +15,7 @@ import { documentService } from '../../services/documentService'
 import StatusBadge from '../../components/StatusBadge'
 import ApprovalTimeline from '../../components/ApprovalTimeline'
 import CustomerFullDetails from '../../components/CustomerFullDetails'
+import { submitCase } from '../../store/slices/caseSlice'
 
 const CreditCaseDetail = () => {
   const { id } = useParams()
@@ -44,6 +45,24 @@ const CreditCaseDetail = () => {
       }
     }), {})
   )
+
+  const handleSendBackToRM = async () => {
+  const reason = prompt("Enter reason");
+
+  if (!reason) return;
+
+  try {
+    await workflowService.returnToRM(id, reason);
+
+    toast.success("Case returned to RM successfully ✅");
+
+    navigate("/credit/dashboard");
+
+  } catch (err) {
+    toast.error(err?.message || "Failed to return case");
+  }
+};
+
 
   // Store raw sanctions data from API for UI condition checking
   const [sanctionsData, setSanctionsData] = useState([])
@@ -860,6 +879,16 @@ const CreditCaseDetail = () => {
               <ApprovalTimeline approvals={formattedApprovals} />
             </div>
           )}
+
+{hasL1Role && currentCase.status === 'submitted' && (
+  <button
+    onClick={handleSendBackToRM}
+    disabled={isSubmitting}
+    className="w-full mb-3 bg-yellow-500 hover:bg-yellow-600 text-white py-2 px-4 rounded flex items-center justify-center"
+  >
+    Send Back to RM
+  </button>
+)}
 
           <button
             onClick={handleSaveSanction}

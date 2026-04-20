@@ -55,6 +55,9 @@ export const API_ENDPOINTS = {
   // Workflow Endpoints
   WORKFLOW_CUSTOMER_CREATE: '/workflows/customers/create',
   WORKFLOW_CUSTOMER_SUBMIT: (id) => `/workflows/customers/${id}/submit`,
+  
+  WORKFLOW_CUSTOMER_RETURN: (id) => `/workflows/customers/${id}/return`,  
+  
   WORKFLOW_CUSTOMER_CREDIT_L1: (id) => `/workflows/customers/${id}/credit-l1`,
   WORKFLOW_CUSTOMER_CREDIT_L2: (id) => `/workflows/customers/${id}/credit-l2`,
   WORKFLOW_CUSTOMER_CEO: (id) => `/workflows/customers/${id}/ceo-approve`,

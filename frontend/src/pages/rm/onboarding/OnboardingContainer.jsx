@@ -58,6 +58,10 @@ const isFreshCustomer = location.state?.isFreshCustomer;
 
   const checklist = useMemo(() => getDocumentChecklist(formData.companyType), [formData.companyType]);
 
+  const returnedRemark = currentCase?.statusHistory
+  ?.filter(h => h.status === "returned_to_rm")
+  ?.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0]
+  ?.remarks;
   // ----- Verification Status from backend (single source of truth)
   const [verificationStatuses, setVerificationStatuses] = useOtpFlow.useVerificationStatusesState();
 
@@ -153,7 +157,8 @@ const isFreshCustomer = location.state?.isFreshCustomer;
   // ----- hydrate UI from currentCase
   useEffect(() => {
     if (!currentCase || !customerId ) return;
-if (isFreshCustomer  && !currentCase?.applicant) return; // skip draft restore only for newly created customer
+
+if (isFreshCustomer && currentCase?.status === "draft"  && !currentCase?.applicant) return; // skip draft restore only for newly created customer
     setFormData((prev) => ({
       ...prev,
       companyType: currentCase.companyType || "",
@@ -1550,6 +1555,11 @@ return (
         <p className="text-gray-600 mt-2">
           Step 1: Enter company mobile and click Register to create customer. Then complete KYC & docs.
         </p>
+        {returnedRemark && (
+  <div className="mt-3 p-3 rounded-lg border border-red-300 bg-red-50 text-red-700 text-sm">
+    <strong>Returned by Credit Team:</strong> {returnedRemark}
+  </div>
+)}
         {!customerId && formData.companyMobile && (
           <p className="mt-2 text-sm text-orange-600">
             ⚠️ Customer not created yet. Click Register button next to company mobile to generate ID.

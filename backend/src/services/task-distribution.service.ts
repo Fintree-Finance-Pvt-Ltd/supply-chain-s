@@ -342,6 +342,8 @@ export class TaskDistributionService {
       [CASE_STATUS.SUBMITTED]: 'credit_l1',  // Directly to Credit L1 when submitted
       [CASE_STATUS.CREDIT_L1_APPROVED]: 'credit_l2',  // To Credit L2 after L1 approval
       [CASE_STATUS.CREDIT_L2_APPROVED]: 'credit_l2',  // Stay at Credit L2 (no ops stages)
+          returned_to_rm: "rm", // ✅ NEW
+
     };
 
     return statusToStage[status] || 'unknown';
