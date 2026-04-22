@@ -8,6 +8,7 @@ import { AppDataSource } from '../config/database';
 import { Partner, PARTNER_STATUS } from '../entities/Partner';
 import multer from 'multer';
 import path from 'path';
+import { CLIENT_RENEG_LIMIT } from 'tls';
 const router = Router();
 
 // Apply auth middleware to all workflow routes
@@ -800,7 +801,7 @@ router.get('/customers/dashboard/credit/:level', checkRole(['credit_team_l1', 'c
   try {
     const { level } = req.params;
     const user = (req as any).user;
-    
+    console.log("level",level)
     // Handle credit_head - can see all cases (no round-robin restriction)
     const userRoles = user?.roles?.map((r: any) => r.name.toLowerCase()) || [];
     if (userRoles.includes('credit_head')) {
@@ -846,6 +847,7 @@ router.get('/customers/dashboard/credit/:level', checkRole(['credit_team_l1', 'c
     } else {
       // Standard single level request
       const roleParam = level === '2' ? 'CREDIT_TEAM_L2' : 'CREDIT_TEAM_L1';
+      console.log("single-->",roleParam,user?.id)
       const dashboard = await customerOnboardingService.getCreditTeamPending(roleParam, user?.id);
 
       res.json({

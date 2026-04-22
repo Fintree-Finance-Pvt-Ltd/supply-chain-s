@@ -5,6 +5,7 @@ import { adminMiddleware } from '../middlewares/role.middleware';
 
 const router = Router();
 const userController = new UserController();
+router.post('/signup', userController.createUser);
 
 // All routes require authentication
 router.use(authMiddleware);
