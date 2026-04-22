@@ -1846,7 +1846,7 @@ await this.customerRepository.save(customer);
     const statusFilter =
       r === "CREDIT_TEAM_L2" ? "credit_l1_approved" : "submitted";
     console.log(r);
-    console.log(statusFilter);
+    console.log("status-->",statusFilter);
 
     // 🔧 FIX: Filter by assignedUserId for user-specific visibility
     // If userId provided, only show cases assigned to this user
@@ -1865,7 +1865,7 @@ await this.customerRepository.save(customer);
     // 🔧 FIX: Filter by assignedUserId - only show cases assigned to this specific user
     // Check both case_workflow.assignedUserId and customer.assignedUserId
     let filteredPending = pendingWorkflows;
-    if (userId) {
+    if (userId && statusFilter=='submitted' ) {
       filteredPending = pendingWorkflows.filter(
         (w) =>
           w.assignedUserId === userId ||
