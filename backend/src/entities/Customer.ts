@@ -161,6 +161,10 @@ export class Customer {
   @JoinColumn({ name: 'rmId' })
   rm: User;
 
+  @ManyToOne(() => User, (user) => user.assignedCustomers, { nullable: true })
+  @JoinColumn({ name: 'assignedUserId' })
+  assignedUser: User;
+
   @OneToMany(() => Document, (document) => document.customer)
   documents: Document[];
 

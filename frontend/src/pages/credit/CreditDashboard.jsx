@@ -40,6 +40,9 @@ const CreditDashboard = () => {
     }
   }, [dispatch, user])
 
+  const userRoles = (user?.roles || []).map(r => (r.name || '').toLowerCase());
+  const isCreditHead = userRoles.includes('credit_head');
+
   const columns = [
     {
       key: 'name',
@@ -50,6 +53,16 @@ const CreditDashboard = () => {
       key: 'code',
       label: 'Customer Code',
       render: (_, row) => row.customer?.customerCode || row.customer?.id|| 'N/A'
+    },
+    {
+      key: 'assigned',
+      label: 'Assigned To',
+      render: (_, row) => {
+        const assignedUserName = row.customer?.assignedUserName || row.assignedUserName;
+        const assignedUserId = row.customer?.assignedUserId || row.assignedUserId;
+        return assignedUserName || (assignedUserId ? `User ID: ${assignedUserId}` : 'Unassigned');
+      },
+      hidden: !isCreditHead, // Only show for credit head
     },
     {
       key: 'status',

@@ -16,6 +16,7 @@ import { Invoice } from './Invoice';
 import { CreditSanction } from './CreditSanction';
 import { ApprovalAction } from './ApprovalAction';
 import { CaseStatusHistory } from './CaseStatusHistory';
+import { CaseWorkflow } from './CaseWorkflow';
 
 @Entity('users')
 export class User {
@@ -56,6 +57,9 @@ export class User {
   @OneToMany(() => Customer, (customer) => customer.rm)
   customers: Customer[];
 
+  @OneToMany(() => Customer, (customer) => customer.assignedUser)
+  assignedCustomers: Customer[];
+
   @OneToMany(() => Supplier, (supplier) => supplier.createdBy)
   createdSuppliers: Supplier[];
 
@@ -70,6 +74,9 @@ export class User {
 
   @OneToMany(() => CaseStatusHistory, (history) => history.changedBy)
   statusHistory: CaseStatusHistory[];
+
+  @OneToMany(() => CaseWorkflow, (workflow) => workflow.assignedUser)
+  assignedWorkflows: CaseWorkflow[];
 }
 
 

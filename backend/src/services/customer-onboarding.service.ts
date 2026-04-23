@@ -1945,17 +1945,43 @@ await this.customerRepository.save(customer);
   async getCreditHeadPending(userId?: number) {
     const allWorkflows = await this.workflowRepository.find({
       where: { workflowType: "CUSTOMER_ONBOARDING" },
-      relations: ["customer"],
+      relations: ["customer", "assignedUser", "customer.assignedUser"],
       order: { createdAt: "DESC" },
     });
 
-    const pending = allWorkflows.filter(
+    const workflowsWithAssignedUserName = allWorkflows.map((workflow: any) => {
+      const assignedUserName =
+        workflow.assignedUser?.name || workflow.customer?.assignedUser?.name || null;
+
+      const { assignedUser, ...workflowWithoutAssignedUser } = workflow;
+      const customer = workflow.customer
+        ? (() => {
+            const {
+              assignedUser: customerAssignedUser,
+              ...customerWithoutAssignedUser
+            } = workflow.customer;
+
+            return {
+              ...customerWithoutAssignedUser,
+              assignedUserName:
+                customerAssignedUser?.name || assignedUserName,
+            };
+          })()
+        : workflow.customer;
+
+      return {
+        ...workflowWithoutAssignedUser,
+        customer,
+      };
+    });
+
+    const pending = workflowsWithAssignedUserName.filter(
       (w) =>
         w.currentStatus !== "completed" &&
         w.currentStatus !== "rejected" &&
         w.currentStatus !== "disbursed"
     );
-    const handled = allWorkflows.filter(
+    const handled = workflowsWithAssignedUserName.filter(
       (w) =>
         w.currentStatus === "completed" ||
         w.currentStatus === "rejected" ||

@@ -91,6 +91,10 @@ export class CaseWorkflow {
   @JoinColumn({ name: 'currentApproverRoleId' })
   currentApproverRole: Role;
 
+  @ManyToOne(() => User, (user) => user.assignedWorkflows, { nullable: true })
+  @JoinColumn({ name: 'assignedUserId' })
+  assignedUser: User;
+
   @ManyToOne(() => User, { nullable: true })
   @JoinColumn({ name: 'rejectedByUserId' })
   rejectedBy: User;
