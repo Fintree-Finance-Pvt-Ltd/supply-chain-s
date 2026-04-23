@@ -1943,8 +1943,13 @@ await this.customerRepository.save(customer);
   }
 
   async getCreditHeadPending(userId?: number) {
+    const creditHeadVisibleStatuses = ["submitted", "credit_l1_approved"];
+
     const allWorkflows = await this.workflowRepository.find({
-      where: { workflowType: "CUSTOMER_ONBOARDING" },
+      where: {
+        workflowType: "CUSTOMER_ONBOARDING",
+        currentStatus: In(creditHeadVisibleStatuses as any),
+      },
       relations: ["customer", "assignedUser", "customer.assignedUser"],
       order: { createdAt: "DESC" },
     });
@@ -1975,18 +1980,8 @@ await this.customerRepository.save(customer);
       };
     });
 
-    const pending = workflowsWithAssignedUserName.filter(
-      (w) =>
-        w.currentStatus !== "completed" &&
-        w.currentStatus !== "rejected" &&
-        w.currentStatus !== "disbursed"
-    );
-    const handled = workflowsWithAssignedUserName.filter(
-      (w) =>
-        w.currentStatus === "completed" ||
-        w.currentStatus === "rejected" ||
-        w.currentStatus === "disbursed"
-    );
+    const pending = workflowsWithAssignedUserName;
+    const handled: any[] = [];
 
     return { pending, handled };
   }

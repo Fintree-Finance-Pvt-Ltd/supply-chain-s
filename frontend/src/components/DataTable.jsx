@@ -8,6 +8,8 @@ const DataTable = ({
   onRowClick,
   actions = null 
 }) => {
+  const visibleColumns = columns.filter((col) => !col.hidden)
+
   if (data.length === 0) {
     return (
       <div className="text-center py-12 text-gray-500">
@@ -21,7 +23,7 @@ const DataTable = ({
       <table className="min-w-full divide-y divide-gray-200">
         <thead className="bg-gray-50">
           <tr>
-            {columns.map((col) => (
+            {visibleColumns.map((col) => (
               <th
                 key={col.key}
                 className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
@@ -43,7 +45,7 @@ const DataTable = ({
               onClick={() => onRowClick && onRowClick(row)}
               className={onRowClick ? 'cursor-pointer hover:bg-gray-50' : ''}
             >
-              {columns.map((col) => (
+              {visibleColumns.map((col) => (
                 <td key={col.key} className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                   {col.render ? col.render(row[col.key], row) : row[col.key]}
                 </td>
