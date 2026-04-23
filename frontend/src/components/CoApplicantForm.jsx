@@ -299,13 +299,16 @@ const CoApplicantForm = ({
   const [isOcrProcessing, setIsOcrProcessing] = useState(false)
   const [isRefreshingAadhaar, setIsRefreshingAadhaar] = useState(false)
   const [aadhaarRefreshStatus, setAadhaarRefreshStatus] = useState({})
+const [isEmailLoadingLocal, setIsEmailLoadingLocal] = useState(false);
 
 const isAnyLoading =
   isOcrProcessing ||
   isRefreshingAadhaar ||
-  data?.isEmailLoading ||   
-  Object.values(loadingStates || {}).some(Boolean);
-  
+  isEmailLoadingLocal ||   // ✅ use local
+  Object.entries(loadingStates || {}).some(
+    ([key, value]) =>
+      key.includes(data.id || data.localKey) && value
+  );
   // stable identity key for UI + local state mapping
   const stableKey = useMemo(() => data?.id || data?.localKey, [data?.id, data?.localKey])
 
@@ -482,6 +485,8 @@ const isAnyLoading =
   //   safeVerify('coApplicantEmail', data.email, data.localKey);
 const handleEmailVerify = async () => {
 
+
+
   if (!data.email) {
     notify("error", "Please enter email");
     return;
@@ -497,7 +502,8 @@ const handleEmailVerify = async () => {
 
   try {
     // 🔥 START LOADER (ONLY WHEN API STARTS)
-    onFieldMutate?.(stableKey, "isEmailLoading", true);
+ setIsEmailLoadingLocal(true);
+onFieldMutate?.(stableKey, "isEmailLoading", true);
 
     // ==============================
     // ✅ STEP 1 — SEND EMAIL OTP
@@ -550,8 +556,8 @@ const handleEmailVerify = async () => {
   } catch (error) {
     notify("error", error?.message || "Email verification failed");
   } finally {
-    // 🔥 STOP LOADER
-    onFieldMutate?.(stableKey, "isEmailLoading", false);
+ setIsEmailLoadingLocal(false);
+onFieldMutate?.(stableKey, "isEmailLoading", false);
   }
 };
 
@@ -618,7 +624,7 @@ return (
             onChange={(e) => handleChange({ name: e.target.value })}
             className="input-field"
             placeholder="Enter co-applicant name"
-            disabled={verificationStatus.mobileStatus === 'VERIFIED' || verificationStatus.emailStatus === 'VERIFIED' || verificationStatus.panStatus === 'VERIFIED'}
+            //disabled={verificationStatus.mobileStatus === 'VERIFIED' || verificationStatus.emailStatus === 'VERIFIED' || verificationStatus.panStatus === 'VERIFIED'}
           />
           {errors.name && <p className="text-red-500 text-xs mt-1">{errors.name}</p>}
         </div>
