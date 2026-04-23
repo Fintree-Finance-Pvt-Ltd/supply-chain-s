@@ -1203,64 +1203,139 @@ if (
     }
   };
 
-  const handleCompanyPanUpload = async (file) => {
-    if (!file) return;
+  // const handleCompanyPanUpload = async (file) => {
+  //   if (!file) return;
+  //   try {
+  //     if (customerId) {
+  //       // Upload to documents
+  //       try {
+  //         await documentService.uploadDocument(customerId, file, "company_pan", "company", 0, null, {});
+  //         // refresh docs
+  //         const docs = await documentService.getDocumentsByCustomer(customerId);
+  //         setDocuments(docs.data);
+  //       } catch (uploadErr) {
+  //         console.error("Company PAN upload failed", uploadErr);
+  //       }
+  //     } else {
+  //       toast.info("Please verify mobile first (Customer ID required) to save the document.");
+  //     }
+
+  //     // ----- Direct PAN OCR from frontend (no backend routing) -----
+  //     try {
+  //       const ocrResult = await kycService.processPanOcr(file);
+        
+  //       if (ocrResult.success) {
+  //         const { pan_number, name, dob, father_name } = ocrResult.data;
+          
+  //         // Log provider name
+  //         console.log('Company PAN OCR Provider:', ocrResult.provider);
+          
+  //         // Validate PAN format
+  //         if (pan_number && !kycService.isValidPanFormat(pan_number)) {
+  //           toast.error("Unable to read PAN card. Please upload a clearer image.");
+  //           return;
+  //         }
+          
+  //         // Auto-fill form fields
+  //         setFormData((p) => ({
+  //           ...p,
+  //           companyPan: pan_number || p.companyPan,
+  //           companyName: name || p.companyName,
+  //         }));
+          
+  //         setApplicantKyc((p) => ({ 
+  //           ...p, 
+  //           companyPanFile: file, 
+  //           companyPan: pan_number || p.companyPan 
+  //         }));
+          
+  //         toast.success("Company PAN OCR completed successfully");
+  //       }
+  //     } catch (ocrErr) {
+  //       // OCR failed - show user-friendly message
+  //       console.error('Company PAN OCR Error:', ocrErr.message);
+  //       toast.error("Unable to read PAN card. Please upload a clearer image.");
+  //     }
+      
+  //   } catch (e) {
+  //     toast.error("OCR failed: " + (e?.response?.data?.message || e.message));
+  //   }
+  // };
+
+const handleCompanyPanUpload = async (file) => {
+  if (!file) return;
+
+  const loadingKey = "companyPanOcr_main";
+
+  try {
+    setLoading(loadingKey, true); // 🔥 START LOADER
+
+    if (customerId) {
+      try {
+        await documentService.uploadDocument(
+          customerId,
+          file,
+          "company_pan",
+          "company",
+          0,
+          null,
+          {}
+        );
+
+        const docs = await documentService.getDocumentsByCustomer(customerId);
+        setDocuments(docs.data);
+
+      } catch (uploadErr) {
+        console.error("Company PAN upload failed", uploadErr);
+      }
+    } else {
+      toast.info("Please verify mobile first (Customer ID required) to save the document.");
+    }
+
+    // ✅ OCR
     try {
-      if (customerId) {
-        // Upload to documents
-        try {
-          await documentService.uploadDocument(customerId, file, "company_pan", "company", 0, null, {});
-          // refresh docs
-          const docs = await documentService.getDocumentsByCustomer(customerId);
-          setDocuments(docs.data);
-        } catch (uploadErr) {
-          console.error("Company PAN upload failed", uploadErr);
+      const ocrResult = await kycService.processPanOcr(file);
+
+      if (ocrResult.success) {
+        const { pan_number, name } = ocrResult.data;
+
+        console.log('Company PAN OCR Provider:', ocrResult.provider);
+
+        if (pan_number && !kycService.isValidPanFormat(pan_number)) {
+          toast.error("Unable to read PAN card. Please upload a clearer image.");
+          return;
         }
-      } else {
-        toast.info("Please verify mobile first (Customer ID required) to save the document.");
+
+        setFormData((p) => ({
+          ...p,
+          companyPan: pan_number || p.companyPan,
+          companyName: name || p.companyName,
+        }));
+
+        setApplicantKyc((p) => ({
+          ...p,
+          companyPanFile: file,
+          companyPan: pan_number || p.companyPan,
+        }));
+
+        toast.success("Company PAN OCR completed successfully");
       }
 
-      // ----- Direct PAN OCR from frontend (no backend routing) -----
-      try {
-        const ocrResult = await kycService.processPanOcr(file);
-        
-        if (ocrResult.success) {
-          const { pan_number, name, dob, father_name } = ocrResult.data;
-          
-          // Log provider name
-          console.log('Company PAN OCR Provider:', ocrResult.provider);
-          
-          // Validate PAN format
-          if (pan_number && !kycService.isValidPanFormat(pan_number)) {
-            toast.error("Unable to read PAN card. Please upload a clearer image.");
-            return;
-          }
-          
-          // Auto-fill form fields
-          setFormData((p) => ({
-            ...p,
-            companyPan: pan_number || p.companyPan,
-            companyName: name || p.companyName,
-          }));
-          
-          setApplicantKyc((p) => ({ 
-            ...p, 
-            companyPanFile: file, 
-            companyPan: pan_number || p.companyPan 
-          }));
-          
-          toast.success("Company PAN OCR completed successfully");
-        }
-      } catch (ocrErr) {
-        // OCR failed - show user-friendly message
-        console.error('Company PAN OCR Error:', ocrErr.message);
-        toast.error("Unable to read PAN card. Please upload a clearer image.");
-      }
-      
-    } catch (e) {
-      toast.error("OCR failed: " + (e?.response?.data?.message || e.message));
+    } catch (ocrErr) {
+      console.error('Company PAN OCR Error:', ocrErr.message);
+      toast.error("Unable to read PAN card. Please upload a clearer image.");
     }
-  };
+
+  } catch (e) {
+    toast.error("OCR failed: " + (e?.response?.data?.message || e.message));
+
+  } finally {
+    setLoading(loadingKey, false); // 🔥 STOP LOADER
+  }
+};
+
+
+
 
   const handleCameraCapture = async (file) => {
     if (!file) return;
@@ -1335,6 +1410,30 @@ if (
         if (!hasFemale) newErrors.coApplicants = "At least one female co-applicant is mandatory for this company type";
       }
     }
+
+
+
+if (strict) {
+
+  // ✅ ADDRESS VALIDATION
+  if (!addresses || addresses.length === 0) {
+    newErrors.addresses = "At least one address is required";
+  } else {
+    addresses.forEach((addr, index) => {
+      if (
+        !addr.type ||
+        !addr.fullAddress?.trim() ||
+        !addr.pincode?.trim() ||
+        !addr.state?.trim() ||
+        !addr.city?.trim()
+      ) {
+        newErrors[`address_${index}`] = "All address fields are required";
+      }
+    });
+  }
+
+}
+
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -1646,11 +1745,11 @@ return (
               errors={errors}
             />
 
-            <AddressSection
-              addresses={addresses}
-              setAddresses={setAddresses}
-              errors={errors}
-            />
+         <AddressSection
+  addresses={addresses}
+  setAddresses={setAddresses}
+  errors={errors}
+/>
 
             {/* RM Remarks */}
             <div className="card mt-6 p-4">

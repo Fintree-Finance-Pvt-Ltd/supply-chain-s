@@ -32,7 +32,11 @@ const ManagementDashboard = () => {
     {
       key: 'customerName',
       label: 'Customer Name',
-      render: (_, row) => row.customer?.customerName || 'N/A'
+      // render: (_, row) => row.customer?.customerName || 'N/A'
+      render: (_, row) => row?.customer?.name?.trim() || row?.customer?.companyName?.trim() ||
+        'N/A'
+
+      
     },
     {
       key: 'customerCode',

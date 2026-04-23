@@ -118,9 +118,15 @@ const SupplierCreate = () => {
         placeholder="Mobile Number *"
         className="w-full border p-2 rounded mb-3"
         value={form.mobileNumber}
-        onChange={(e) =>
-          setForm({ ...form, mobileNumber: e.target.value })
-        }
+          maxLength={10}
+
+        onChange={(e) =>{
+          // setForm({ ...form, mobileNumber: e.target.value })
+           const value = e.target.value.replace(/\D/g, ""); // allow only digits
+    if (value.length <= 10) {
+      setForm({ ...form, mobileNumber: value });
+    }
+        }}
       />
 
       <input
