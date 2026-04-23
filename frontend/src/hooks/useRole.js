@@ -14,14 +14,18 @@ export const ROLE_MENU_CONFIG = {
     { path: '/rm/customer/new', label: 'New Customer', icon: 'FiUserPlus' },
     { path: '/invoice-discounting/rm', label: 'Invoice Discounting', icon: 'FiFileText' },
   ],
-  [ROLES.CREDIT_TEAM_L1]: [
-    { path: '/credit/dashboard', label: 'Credit Dashboard', icon: 'FiHome' },
-    { path: '/credit/pending', label: 'Pending Sanctions', icon: 'FiCheckCircle' },
-  ],
-  [ROLES.CREDIT_TEAM_L2]: [
-    { path: '/credit/dashboard', label: 'Credit Dashboard', icon: 'FiHome' },
-    { path: '/credit/pending', label: 'Pending Sanctions', icon: 'FiCheckCircle' },
-  ],
+   [ROLES.CREDIT_TEAM_L1]: [
+     { path: '/credit/dashboard', label: 'Credit Dashboard', icon: 'FiHome' },
+     { path: '/credit/pending', label: 'Pending Sanctions', icon: 'FiCheckCircle' },
+   ],
+   [ROLES.CREDIT_TEAM_L2]: [
+     { path: '/credit/dashboard', label: 'Credit Dashboard', icon: 'FiHome' },
+     { path: '/credit/pending', label: 'Pending Sanctions', icon: 'FiCheckCircle' },
+   ],
+   [ROLES.CREDIT_HEAD]: [
+     { path: '/credit/dashboard', label: 'Credit Dashboard', icon: 'FiHome' },
+     { path: '/credit/pending', label: 'Pending Sanctions', icon: 'FiCheckCircle' },
+   ],
   [ROLES.OPERATIONS_TEAM_L1]: [
     { path: '/operations/dashboard', label: 'Ops Dashboard', icon: 'FiHome' },
     { path: '/operations/pending', label: 'Pending Checks', icon: 'FiCheckCircle' },

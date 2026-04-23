@@ -16,21 +16,22 @@ const MainLayout = () => {
     if (location.pathname === '/dashboard' || location.pathname === '/') {
       const currentRole = userRole || user?.role || user?.defaultRole
 
-      const roleRoutes = {
-        superadmin: '/superadmin',
-        admin: '/admin',
-        relationship_manager: '/rm/dashboard',
-        credit_team: '/credit/dashboard',
-        credit_team_l1: '/credit/dashboard',
-        credit_team_l2: '/credit/dashboard',
-        operations_team: '/operations/dashboard',
-        operations_team_l1: '/operations/dashboard',
-        operations_team_l2: '/operations/dashboard',
-        operations_head: '/operations/dashboard',
-        ceo: '/management/dashboard',
-        cfo: '/management/dashboard',
-        md: '/management/dashboard',
-      }
+       const roleRoutes = {
+         superadmin: '/superadmin',
+         admin: '/admin',
+         relationship_manager: '/rm/dashboard',
+         credit_team: '/credit/dashboard',
+         credit_team_l1: '/credit/dashboard',
+         credit_team_l2: '/credit/dashboard',
+         credit_head: '/credit/dashboard',
+         operations_team: '/operations/dashboard',
+         operations_team_l1: '/operations/dashboard',
+         operations_team_l2: '/operations/dashboard',
+         operations_head: '/operations/dashboard',
+         ceo: '/management/dashboard',
+         cfo: '/management/dashboard',
+         md: '/management/dashboard',
+       }
 
       if (currentRole) {
         const redirectPath = roleRoutes[currentRole.toLowerCase()] || '/rm/dashboard'

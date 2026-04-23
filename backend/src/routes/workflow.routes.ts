@@ -811,7 +811,6 @@ router.get('/customers/dashboard/credit/:level', checkRole(['credit_team_l1', 'c
         data: dashboard,
       });
     }
-    
     // Handle 'both' level request - user has both L1 and L2 roles
     if (level === 'both') {
       // Get all user roles
@@ -865,7 +864,7 @@ router.get('/customers/dashboard/credit/:level', checkRole(['credit_team_l1', 'c
  * GET /api/workflows/customers/dashboard/executive
  * Executive Dashboard
  */
-router.get('/customers/dashboard/executive', checkRole(['ceo', 'md']), async (req: Request, res: Response) => {
+router.get('/customers/dashboard/executive', checkRole(['ceo', 'md', 'credit_head']), async (req: Request, res: Response) => {
   try {
     const userRole = req.userRole || 'ceo';
     const dashboard = await customerOnboardingService.getExecutivePending(userRole, (req as any).user?.id);
