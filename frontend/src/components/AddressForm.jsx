@@ -194,6 +194,45 @@ const AddressForm = ({
           )}
         </div>
 
+
+{/* Ownership Type */}
+<div className="md:col-span-2">
+  <label className="block text-sm font-medium text-gray-700 mb-2">
+    Ownership Type <span className="text-red-500">*</span>
+  </label>
+
+  <div className="flex gap-6">
+    <label className="flex items-center gap-2">
+      <input
+        type="radio"
+        name={`ownership-${stableKey}`}
+        value="Owned"
+        checked={data.ownership === 'Owned'}
+        onChange={(e) => handleChange({ ownership: e.target.value })}
+        disabled={readOnly}
+      />
+      Owned
+    </label>
+
+    <label className="flex items-center gap-2">
+      <input
+        type="radio"
+        name={`ownership-${stableKey}`}
+        value="Rented"
+        checked={data.ownership === 'Rented'}
+        onChange={(e) => handleChange({ ownership: e.target.value })}
+        disabled={readOnly}
+      />
+      Rented
+    </label>
+  </div>
+
+  {errors.ownership && (
+    <p className="text-red-500 text-xs mt-1">{errors.ownership}</p>
+  )}
+</div>
+
+
         {/* Conditional Fields */}
         {data.type && (
           <>

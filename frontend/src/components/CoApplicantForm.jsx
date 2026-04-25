@@ -593,14 +593,27 @@ return (
 
     {/* EXISTING UI */}
     <div className="border border-gray-300 rounded-lg p-6 mb-4 bg-gray-50 relative">
-      <button
+      {/* <button
         type="button"
         onClick={() => onRemove?.(stableKey)}
         className="absolute top-4 right-4 p-2 text-red-600 hover:text-red-700 hover:bg-red-50 rounded"
         title="Remove Co-Applicant"
       >
         <FiX className="h-5 w-5" />
-      </button>
+      </button> */}
+
+<div className="mt-4 flex justify-end">
+  <button
+    type="button"
+    onClick={() => onRemove?.(stableKey)}
+    className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition"
+  >
+    Remove Co-Applicant
+  </button>
+</div>
+
+
+
 
       <h4 className="text-lg font-semibold text-gray-900 mb-1">
         Co-Applicant {typeof index === 'number' ? index + 1 : ''}

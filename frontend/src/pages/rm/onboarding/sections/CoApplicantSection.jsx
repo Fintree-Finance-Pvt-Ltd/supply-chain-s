@@ -1,6 +1,7 @@
 import { FiPlus } from "react-icons/fi";
 import CoApplicantForm from "../../../../components/CoApplicantForm";
 import { documentService } from "../../../../services/documentService";
+import kycService from "../../../../services/kycService";
 
 const CoApplicantSection = ({
   customerId,
@@ -20,14 +21,43 @@ const CoApplicantSection = ({
     setCoApplicants((p) => [...p, { id: null, localKey, name: "", mobile: "", email: "", gender: "" }]);
   };
 
-  const removeCoApplicant = (key) => {
-    setCoApplicants((p) => p.filter((x) => x.id !== key && x.localKey !== key));
+  // const removeCoApplicant = (key) => {
+  //   setCoApplicants((p) => p.filter((x) => x.id !== key && x.localKey !== key));
+  //   setCoApplicantKyc((p) => {
+  //     const next = { ...p };
+  //     delete next[key];
+  //     return next;
+  //   });
+  // };
+
+
+  const removeCoApplicant = async (key) => {
+  try {
+    const coApp = coApplicants.find(
+      (x) => x.id === key || x.localKey === key
+    );
+
+    // ✅ 1. DELETE FROM BACKEND (only if saved)
+    if (coApp?.id && customerId) {
+      await kycService.deleteCoApplicant(coApp.id); // 🔥 API call
+    }
+
+    // ✅ 2. REMOVE FROM UI
+    setCoApplicants((p) =>
+      p.filter((x) => x.id !== key && x.localKey !== key)
+    );
+
+    // ✅ 3. REMOVE KYC DATA
     setCoApplicantKyc((p) => {
       const next = { ...p };
       delete next[key];
       return next;
     });
-  };
+
+  } catch (error) {
+    console.error("Failed to delete co-applicant:", error);
+  }
+};
 
   const updateCoApplicant = (key, patch) => {
     setCoApplicants((p) =>

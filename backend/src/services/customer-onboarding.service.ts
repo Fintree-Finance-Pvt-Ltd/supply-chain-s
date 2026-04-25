@@ -18,7 +18,11 @@ import { WorkflowValidatorService } from "./workflow-validator.service";
 import { AuditService } from "./audit.service";
 import { RewardService } from "./reward.service";
 import axios from "axios";
-
+import { sendMail } from "./emailService";
+import { User } from "../entities";
+const customerRepository = AppDataSource.getRepository(Customer);
+const userRepository = AppDataSource.getRepository(User);
+ 
 /**
  * LMS Supply Chain API Payload interfaces
  */
@@ -57,6 +61,7 @@ interface LMSSupplyChainPayload {
 
 export class CustomerOnboardingService {
   private customerRepository = AppDataSource.getRepository(Customer);
+  private userRepository = AppDataSource.getRepository(User);
   private workflowRepository = AppDataSource.getRepository(CaseWorkflow);
   private historyRepository = AppDataSource.getRepository(CaseStatusHistory);
   private sanctionRepository = AppDataSource.getRepository(CreditSanction);
@@ -461,26 +466,63 @@ let assignedUserId: number | undefined =
     if (pushedTo) updateData.pushedTo = pushedTo;
 
     await this.customerRepository.update(customerId, updateData);
+await this.logHistory({
+  customerId,
+  caseWorkflowId: workflow.id,
+  status: newStatus,
+  previousStatus,
+  changedBy: userId,
+  remarks: remarks + (pushedTo ? ` (Submitted to: ${pushedTo})` : ""),
+});
 
-    await this.logHistory({
-      customerId,
-      caseWorkflowId: workflow.id,
-      status: newStatus,
-     // status: "submitted",
-      previousStatus,
-      changedBy: userId,
-      remarks: remarks + (pushedTo ? ` (Submitted to: ${pushedTo})` : ""),
+
+
+if (newStatus === "submitted") {
+  // ✅ 1. Send to assigned CREDIT_TEAM_L1
+  if (workflow.assignedUserId) {
+    const assignedUser = await this.userRepository.findOne({
+      where: {
+        id: workflow.assignedUserId,
+        defaultRole: "CREDIT_TEAM_L1",
+      },
+      select: ["email"],
     });
 
-    // Award reward points for RM submitting case
-    await this.awardOpsApprovalRewards(
-      customerId,
-      userId,
-      previousStatus,
-      //"submitted",
-        newStatus,
+    if (assignedUser?.email) {
+      await sendMail({
+        to: assignedUser.email,
+        subject: "New Case Assigned - Credit L1",
+        text: `Customer ID: ${customerId} is assigned to you for review.`,
+      });
+    }
+  }
 
-    );
+  // ✅ 2. Send to ALL MD users
+  const mdUsers = await this.userRepository.find({
+    where: {
+      defaultRole: "MD",
+    },
+    select: ["email"],
+  });
+
+  for (const md of mdUsers) {
+    if (md.email) {
+      await sendMail({
+        to: md.email,
+        subject: "New Case Submitted",
+        text: `Customer ID: ${customerId} has been submitted and assigned to Credit L1.`,
+      });
+    }
+  }
+}
+
+// Existing logic
+await this.awardOpsApprovalRewards(
+  customerId,
+  userId,
+  previousStatus,
+  newStatus,
+);
 
     return workflow;
   }
@@ -516,6 +558,29 @@ let assignedUserId: number | undefined =
       });
     }
     await this.workflowRepository.save(workflow);
+
+
+if (approved) {
+  const creditUsers = await this.userRepository.find({
+    where: {
+ defaultRole: In(["CREDIT_TEAM_L2", "MD"]),
+    },
+    select: ["id", "email"],
+  });
+ 
+  for (const user of creditUsers) {
+    if (user.email) {
+      await sendMail({
+        to: user.email,
+        subject: "Case Pending for Credit L2 Approval",
+        text: `Customer case ${customerId} approved by Credit L1 and pending your review.`,
+      });
+    }
+  }
+}
+ 
+
+
 
     if (approved && sanctionData) {
       const { partnerSanctions } = sanctionData;
@@ -1070,6 +1135,8 @@ await this.customerRepository.save(customer);
 
     const previousStatus = workflow.currentStatus;
 
+
+
     // Handle partner-specific sanctions (new format for multi-partner support)
     if (
       sanctionData &&
@@ -1445,24 +1512,50 @@ await this.customerRepository.save(customer);
       }
     }
 
-    /* ---------------------------------------
-     WORKFLOW STATUS CHANGE
-  --------------------------------------- */
+  // ---------------------------------------
+// WORKFLOW STATUS CHANGE
+// ---------------------------------------
 
-    if (status === "ceo_approved") {
-      workflow.currentStatus = approved ? "md_pending_terms" : "rejected";
-    } else {
-      workflow.currentStatus = approved ? "md_approved" : "rejected";
+if (status === "ceo_approved") {
+  workflow.currentStatus = approved ? "md_pending_terms" : "rejected";
+} else {
+  workflow.currentStatus = approved ? "md_approved" : "rejected";
+}
+
+workflow.currentApproverRoleName = "RM";
+
+if (!approved) {
+  workflow.isRejected = true;
+}
+
+workflow.remarks = remarks;
+
+
+// ✅ ✅ ADD EMAIL LOGIC HERE (IMPORTANT)
+if (approved && workflow.currentStatus === "md_pending_terms") {
+  const customer = await this.customerRepository.findOne({
+    where: { id: customerId },
+    select: ["rmId"],
+  });
+
+  if (customer?.rmId) {
+    const rmUser = await this.userRepository.findOne({
+      where: {
+        id: customer.rmId,
+        defaultRole: "RELATIONSHIP_MANAGER",
+      },
+      select: ["email"],
+    });
+
+    if (rmUser?.email) {
+      await sendMail({
+        to: rmUser.email,
+        subject: "Case Returned by MD for Final Terms",
+        text: `Customer ID: ${customerId} has been reviewed by MD and is now pending final terms submission from you.`,
+      });
     }
-
-    workflow.currentApproverRoleName = "RM";
-
-    if (!approved) {
-      workflow.isRejected = true;
-    }
-
-    workflow.remarks = remarks;
-
+  }
+}
     /* ---------------------------------------
      CREATE LOAN ACCOUNTS ONLY AFTER FINAL MD APPROVAL
   --------------------------------------- */

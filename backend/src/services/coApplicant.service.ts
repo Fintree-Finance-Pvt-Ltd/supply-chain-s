@@ -38,15 +38,35 @@ export class CoApplicantService {
         });
     }
 
-    async deleteCoApplicant(id: number): Promise<void> {
-        const coApp = await this.coApplicantRepository.findOne({ where: { id } });
+    // async deleteCoApplicant(id: number): Promise<void> {
+    //     const coApp = await this.coApplicantRepository.findOne({ where: { id } });
 
-        if (!coApp) {
-            throw new Error('Co-applicant not found');
-        }
+    //     if (!coApp) {
+    //         throw new Error('Co-applicant not found');
+    //     }
 
-        await this.coApplicantRepository.remove(coApp);
+    //     await this.coApplicantRepository.remove(coApp);
+    // }
+
+async deleteCoApplicant(id: number): Promise<void> {
+    //  1. Validate ID
+    if (!id || isNaN(id)) {
+        throw new Error('Invalid co-applicant ID');
     }
+
+    //  2. Check if exists
+    const coApp = await this.coApplicantRepository.findOne({
+        where: { id },
+    });
+
+    if (!coApp) {
+        throw new Error('Co-applicant not found');
+    }
+
+    //  3. Direct delete (FAST & SAFE)
+    await this.coApplicantRepository.delete(id);
+}
+    
 
     async findOrCreate(customerId: number, name: string, mobile: string, email?: string, gender?: string): Promise<CoApplicant> {
         let coApp = await this.coApplicantRepository.findOne({

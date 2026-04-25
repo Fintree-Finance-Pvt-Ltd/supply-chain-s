@@ -55,21 +55,51 @@ export class CoApplicantController {
         }
     };
 
+    // deleteCoApplicant = async (req: Request, res: Response): Promise<void> => {
+    //     try {
+    //         const { id } = req.params;
+    //         await this.coApplicantService.deleteCoApplicant(Number(id));
+    //         res.json({
+    //             success: true,
+    //             message: 'Co-applicant deleted successfully',
+    //         });
+    //     } catch (error: any) {
+    //         res.status(400).json({
+    //             success: false,
+    //             message: error.message || 'Failed to delete co-applicant',
+    //         });
+    //     }
+    // };
+
     deleteCoApplicant = async (req: Request, res: Response): Promise<void> => {
-        try {
-            const { id } = req.params;
-            await this.coApplicantService.deleteCoApplicant(Number(id));
-            res.json({
-                success: true,
-                message: 'Co-applicant deleted successfully',
-            });
-        } catch (error: any) {
+    try {
+        const id = Number(req.params.id);
+
+        // ✅ validation
+        if (!id || isNaN(id)) {
             res.status(400).json({
                 success: false,
-                message: error.message || 'Failed to delete co-applicant',
+                message: 'Invalid co-applicant ID',
             });
+            return;
         }
-    };
+
+        await this.coApplicantService.deleteCoApplicant(id);
+
+        res.json({
+            success: true,
+            message: 'Co-applicant deleted successfully',
+        });
+
+    } catch (error: any) {
+        console.error('Delete Co-Applicant Error:', error);
+
+        res.status(400).json({
+            success: false,
+            message: error.message || 'Failed to delete co-applicant',
+        });
+    }
+};
 
     findOrCreate = async (req: Request, res: Response): Promise<void> => {
         try {

@@ -21,6 +21,12 @@ export class CustomerAddress {
     @Column({ type: 'enum', enum: Object.values(ADDRESS_TYPES) })
     type: string;
 
+  @Column({
+  type: 'enum',
+  enum: ['Owned', 'Rented'],
+})
+ownership: string;
+
     @Column({ type: 'text' })
     fullAddress: string;
 

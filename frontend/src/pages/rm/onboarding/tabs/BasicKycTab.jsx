@@ -224,8 +224,10 @@ const BasicKycTab = ({
 
       {/* Applicant */}
       <div className="space-y-6 border-t pt-6">
-        <h3 className="text-xl font-bold text-gray-900 border-b pb-2">Applicant Details</h3>
-
+        {/* <h3 className="text-xl font-bold text-gray-900 border-b pb-2">Applicant (Same as Company Details)</h3> */}
+<h3 className="text-xl font-bold text-gray-900 border-b pb-2">
+  Applicant <span className="text-blue-500">(Same as Company Details)</span>
+</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Applicant Name</label>

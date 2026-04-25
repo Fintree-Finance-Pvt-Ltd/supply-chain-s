@@ -112,6 +112,7 @@ export class KycService {
         id?: number;
         customerId: number;
         type: string;
+        ownership: string;
         fullAddress: string;
         pincode: string;
         state: string;
@@ -130,6 +131,10 @@ export class KycService {
 
         return await this.addressRepository.save(address);
     }
+
+
+
+    
 
     async deleteContactPerson(id: number): Promise<void> {
         await this.contactPersonRepository.delete(id);
