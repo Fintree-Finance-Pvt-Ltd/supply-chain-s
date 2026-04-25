@@ -53,6 +53,7 @@ interface InvoiceDisbursementPayload {
   invoice_due_date: string;
   disbursement_utr: string;
   roi_percentage: number;
+  penal_charges: number;
   total_roi_amount: number;
   emi_amount: number;
 }
@@ -424,6 +425,8 @@ export class InvoiceDiscountingService {
       invoiceDate: string;
       invoiceAmount: number;
       disbursementAmount: number;
+      roiPercentage?: number;
+      penalCharges?: number;
     },
     rmId: number,
   ) {
@@ -494,6 +497,8 @@ export class InvoiceDiscountingService {
       invoiceDate?: string;
       invoiceAmount?: number;
       disbursementAmount?: number;
+      roiPercentage?: number;
+      penalCharges?: number;
     },
     userId: number,
   ) {
@@ -906,10 +911,9 @@ export class InvoiceDiscountingService {
         relations: ["partner"],
       });
       if (!loanAccount) {
-        console.warn(
-          `Loan Account ${loanAccountId} not found, using default ROI`,
+        throw new Error(
+          `Loan Account ${loanAccountId} not found while fetching ROI`,
         );
-        return 12.0;
       }
 
       // Try to get partner code from partner relation first, then fall back to lender
@@ -922,13 +926,32 @@ export class InvoiceDiscountingService {
       }
 
       if (!partnerCode) {
-        console.warn(
-          `No partner code found for Loan Account ${loanAccountId}, using default ROI`,
+        throw new Error(
+          `No partner code found for Loan Account ${loanAccountId} while fetching ROI`,
         );
-        return 12.0;
       }
 
-      // Find the credit sanction for this customer and partner
+      // Step 1: Find ROI from existing invoices for this loan account
+      const latestInvoiceWithRoi = await this.invoiceRepository
+        .createQueryBuilder("invoice")
+        .where("invoice.loanAccountId = :loanAccountId", {
+          loanAccountId: loanAccount.id,
+        })
+        .andWhere("invoice.roiPercentage IS NOT NULL")
+        .orderBy("invoice.createdAt", "DESC")
+        .getOne();
+
+      if (
+        latestInvoiceWithRoi?.roiPercentage !== null &&
+        latestInvoiceWithRoi?.roiPercentage !== undefined
+      ) {
+        console.log(
+          `ROI ${latestInvoiceWithRoi.roiPercentage}% found from invoice ${latestInvoiceWithRoi.id} for loan account ${loanAccountId}`,
+        );
+        return Number(latestInvoiceWithRoi.roiPercentage);
+      }
+
+      // Step 2: Fallback to credit sanction for this customer and partner
       const creditSanction = await this.creditSanctionRepository.findOne({
         where: {
           customerId: loanAccount.customerId,
@@ -938,17 +961,97 @@ export class InvoiceDiscountingService {
         order: { createdAt: "DESC" },
       });
 
-      if (creditSanction && creditSanction.interestRate) {
+      if (
+        creditSanction?.interestRate !== null &&
+        creditSanction?.interestRate !== undefined
+      ) {
+        console.log(
+          `ROI ${creditSanction.interestRate}% found from credit sanction for customer ${loanAccount.customerId} and partner ${partnerCode}`,
+        );
         return Number(creditSanction.interestRate);
       }
 
-      console.warn(
-        `No approved credit sanction found for customer ${loanAccount.customerId} and partner ${partnerCode}, using default ROI`,
+      throw new Error(
+        `No ROI found for loan account ${loanAccountId} (customer ${loanAccount.customerId}, partner ${partnerCode})`,
       );
-      return 12.0;
     } catch (error) {
       console.error("Error fetching ROI percentage:", error);
-      return 12.0; // Default ROI in case of errors
+      throw error;
+    }
+  }
+
+  async getPenalCharges(loanAccountId: number): Promise<number> {
+    try {
+      const loanAccount = await this.loanAccountRepository.findOne({
+        where: { id: loanAccountId },
+        relations: ["partner"],
+      });
+      if (!loanAccount) {
+        throw new Error(
+          `Loan Account ${loanAccountId} not found while fetching penal charges`,
+        );
+      }
+
+      // Try to get partner code from partner relation first, then fall back to lender
+      let partnerCode: string | null = null;
+      if (loanAccount.partner?.code) {
+        partnerCode = loanAccount.partner.code;
+      } else if (loanAccount.lender) {
+        partnerCode = loanAccount.lender;
+      }
+
+      if (!partnerCode) {
+        throw new Error(
+          `No partner code found for Loan Account ${loanAccountId} while fetching penal charges`,
+        );
+      }
+
+      // Step 1: Find penal charges from existing invoices for this loan account
+      const latestInvoiceWithPenal = await this.invoiceRepository
+        .createQueryBuilder("invoice")
+        .where("invoice.loanAccountId = :loanAccountId", {
+          loanAccountId: loanAccount.id,
+        })
+        .andWhere("invoice.penalCharges IS NOT NULL")
+        .orderBy("invoice.createdAt", "DESC")
+        .getOne();
+
+      if (
+        latestInvoiceWithPenal?.penalCharges !== null &&
+        latestInvoiceWithPenal?.penalCharges !== undefined
+      ) {
+        console.log(
+          `Penal charges ${latestInvoiceWithPenal.penalCharges}% found from invoice ${latestInvoiceWithPenal.id} for loan account ${loanAccountId}`,
+        );
+        return Number(latestInvoiceWithPenal.penalCharges);
+      }
+
+      // Step 2: Fallback to credit sanction for this customer and partner
+      const creditSanction = await this.creditSanctionRepository.findOne({
+        where: {
+          customerId: loanAccount.customerId,
+          partner: partnerCode,
+          status: "approved",
+        },
+        order: { createdAt: "DESC" },
+      });
+
+      if (
+        creditSanction?.penalCharges !== null &&
+        creditSanction?.penalCharges !== undefined
+      ) {
+        console.log(
+          `Penal charges ${creditSanction.penalCharges}% found from credit sanction for customer ${loanAccount.customerId} and partner ${partnerCode}`,
+        );
+        return Number(creditSanction.penalCharges);
+      }
+
+      throw new Error(
+        `No penal charges found for loan account ${loanAccountId} (customer ${loanAccount.customerId}, partner ${partnerCode})`,
+      );
+    } catch (error) {
+      console.error("Error fetching penal charges:", error);
+      throw error;
     }
   }
 
@@ -978,7 +1081,8 @@ export class InvoiceDiscountingService {
     const invoiceDueDate = new Date(disbursementDate);
     invoiceDueDate.setDate(invoiceDueDate.getDate() + 90);
 
-    const roiPercentage = await this.getROIPercentage(invoice.loanAccountId!);
+    const roiPercentage = invoice.roiPercentage ?? await this.getROIPercentage(invoice.loanAccountId!);
+    const penalCharges = invoice.penalCharges ?? await this.getPenalCharges(invoice.loanAccountId!);
     const totalRoiAmount =
       (invoice.disbursementAmount! * roiPercentage * 90) / 365;
     const emiAmount = invoice.disbursementAmount! + totalRoiAmount;
@@ -989,6 +1093,7 @@ export class InvoiceDiscountingService {
     invoice.disbursementDate = disbursementDate;
     invoice.invoiceDueDate = invoiceDueDate;
     invoice.roiPercentage = roiPercentage;
+    invoice.penalCharges = penalCharges;
     invoice.roiAmount = totalRoiAmount;
     invoice.emiAmount = emiAmount;
     invoice.status = "PENDING_FINAL_OPS_L2_APPROVAL";
@@ -1007,7 +1112,7 @@ export class InvoiceDiscountingService {
       status: "PENDING_FINAL_OPS_L2_APPROVAL",
       previousStatus,
       changedBy: userId,
-      remarks: `Disbursement entry: UTR=${data.disbursementUtr}, ROI=${roiPercentage}%, EMI=${emiAmount}`,
+      remarks: `Disbursement entry: UTR=${data.disbursementUtr}, ROI=${roiPercentage}%, Penal=${penalCharges}%, EMI=${emiAmount}`,
     });
 
     return { invoice, workflow };
@@ -1495,7 +1600,8 @@ export class InvoiceDiscountingService {
 
     
     
-    const  roiPercentage = invoice.roiPercentage;
+    const roiPercentage = invoice.roiPercentage ?? 12.0;
+    const penalCharges = invoice.penalCharges ?? 0;
 
     if (errors.length > 0) {
       return { valid: false, errors };
@@ -1536,6 +1642,7 @@ export class InvoiceDiscountingService {
       invoice_due_date: invoiceDueDateStr,
       disbursement_utr: invoice.disbursementUtr,
       roi_percentage: roiPercentage,
+      penal_charges: penalCharges,
       total_roi_amount: totalRoiAmount,
       emi_amount: emiAmount,
     };

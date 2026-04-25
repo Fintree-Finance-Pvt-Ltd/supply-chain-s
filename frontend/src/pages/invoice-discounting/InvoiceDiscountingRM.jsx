@@ -22,6 +22,8 @@ export default function InvoiceDiscountingRM() {
     invoiceDate: '',
     invoiceAmount: '',
     disbursementAmount: '',
+    roiPercentage: '',
+    penalCharges: '',
   });
 
   useEffect(() => {
@@ -204,6 +206,8 @@ export default function InvoiceDiscountingRM() {
           invoiceDate: '',
           invoiceAmount: '',
           disbursementAmount: '',
+          roiPercentage: '',
+          penalCharges: '',
         });
         setSelectedCustomer(null);
         setSelectedLAN('');
@@ -228,6 +232,8 @@ export default function InvoiceDiscountingRM() {
           invoiceDate: '',
           invoiceAmount: '',
           disbursementAmount: '',
+          roiPercentage: '',
+          penalCharges: '',
         });
         setSelectedCustomer(null);
         setSelectedLAN('');
@@ -437,6 +443,38 @@ export default function InvoiceDiscountingRM() {
               style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px' }}
             />
           </div>
+
+          <div>
+            <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
+              <FiDollarSign style={{ marginRight: '8px' }} />ROI (%)
+            </label>
+            <input
+              type="number"
+              name="roiPercentage"
+              value={formData.roiPercentage}
+              onWheel={(e) => e.target.blur()}
+              onChange={handleInputChange}
+              placeholder="e.g. 12.5"
+              step="0.01"
+              style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px' }}
+            />
+          </div>
+
+          <div>
+            <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
+              <FiDollarSign style={{ marginRight: '8px' }} />Penal Charges (%)
+            </label>
+            <input
+              type="number"
+              name="penalCharges"
+              value={formData.penalCharges}
+              onWheel={(e) => e.target.blur()}
+              onChange={handleInputChange}
+              placeholder="e.g. 2.0"
+              step="0.01"
+              style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px' }}
+            />
+          </div>
         </div>
 
         {/* Action Buttons */}
@@ -488,6 +526,8 @@ export default function InvoiceDiscountingRM() {
               <th style={{ padding: '12px', textAlign: 'left', borderBottom: '2px solid #ddd' }}>Customer</th>
               <th style={{ padding: '12px', textAlign: 'left', borderBottom: '2px solid #ddd' }}>Supplier</th>
               <th style={{ padding: '12px', textAlign: 'right', borderBottom: '2px solid #ddd' }}>Amount</th>
+              <th style={{ padding: '12px', textAlign: 'right', borderBottom: '2px solid #ddd' }}>ROI %</th>
+              <th style={{ padding: '12px', textAlign: 'right', borderBottom: '2px solid #ddd' }}>Penal %</th>
               <th style={{ padding: '12px', textAlign: 'center', borderBottom: '2px solid #ddd' }}>Status</th>
               <th style={{ padding: '12px', textAlign: 'center', borderBottom: '2px solid #ddd' }}>Actions</th>
             </tr>
@@ -495,7 +535,7 @@ export default function InvoiceDiscountingRM() {
           <tbody>
             {!Array.isArray(invoices) || invoices.length === 0 ? (
               <tr>
-                <td colSpan="6" style={{ padding: '20px', textAlign: 'center', color: '#999' }}>
+                <td colSpan="8" style={{ padding: '20px', textAlign: 'center', color: '#999' }}>
                   No invoices found
                 </td>
               </tr>
@@ -506,6 +546,8 @@ export default function InvoiceDiscountingRM() {
                   <td style={{ padding: '12px' }}>{invoice.customer?.name || invoice.customer?.companyName || invoice.customerName || 'N/A'}</td>
                   <td style={{ padding: '12px' }}>{invoice.supplier?.supplierName || invoice.supplierName || 'N/A'}</td>
                   <td style={{ padding: '12px', textAlign: 'right' }}>₹{invoice.invoiceAmount?.toLocaleString()}</td>
+                  <td style={{ padding: '12px', textAlign: 'right' }}>{invoice.roiPercentage ?? '-'}</td>
+                  <td style={{ padding: '12px', textAlign: 'right' }}>{invoice.penalCharges ?? '-'}</td>
                   <td style={{ padding: '12px', textAlign: 'center' }}>{getStatusBadge(invoice.status)}</td>
                   <td style={{ padding: '12px', textAlign: 'center' }}>
                     {invoice.status === 'PENDING_CUSTOMER_APPROVAL' && (

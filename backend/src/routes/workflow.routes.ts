@@ -1211,6 +1211,8 @@ router.post('/invoices/create', checkRole(['relationship_manager']), async (req:
       invoiceAmount,
       invoiceDate,
       disbursementAmount,
+      roiPercentage,
+      penalCharges,
     } = req.body;
     const user = (req as any).user;
 
@@ -1230,6 +1232,8 @@ router.post('/invoices/create', checkRole(['relationship_manager']), async (req:
         invoiceAmount,
         invoiceDate,
         disbursementAmount,
+        roiPercentage,
+        penalCharges,
       },
       user.id,
     );

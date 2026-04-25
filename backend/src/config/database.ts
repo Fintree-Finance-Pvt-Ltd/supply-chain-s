@@ -106,7 +106,7 @@ export const AppDataSource = new DataSource({
   entities: entities,
 
   migrations: [
-    path.join(__dirname, '../migrations/**/*.js')
+    path.join(__dirname, '../migrations/**/*.{js,ts}')
   ],
 
   subscribers: [

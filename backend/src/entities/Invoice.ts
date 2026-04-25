@@ -95,6 +95,9 @@ export class Invoice {
   @Column({ type: 'decimal', precision: 15, scale: 2, nullable: true })
   emiAmount: number;
 
+  @Column({ type: 'decimal', precision: 5, scale: 2, nullable: true })
+  penalCharges: number;
+
   // Customer Approval Fields
   @Column({ type: 'enum', enum: ['pending', 'approved', 'rejected'], nullable: true })
   customerApprovalStatus: string;
