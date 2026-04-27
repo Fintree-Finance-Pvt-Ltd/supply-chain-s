@@ -16,6 +16,7 @@ export default function InvoiceDiscountingOPS1() {
   const [showDisbursementModal, setShowDisbursementModal] = useState(false);
   const [actionType, setActionType] = useState('');
   const [remarks, setRemarks] = useState('');
+  const [showViewModal, setShowViewModal] = useState(false);
   const [disbursementData, setDisbursementData] = useState({
     disbursementUtr: '',
     disbursementDate: '',
@@ -62,6 +63,12 @@ export default function InvoiceDiscountingOPS1() {
     });
     setShowDisbursementModal(true);
   };
+
+
+  const handleViewInvoice = (invoice) => {
+  setSelectedInvoice(invoice);
+  setShowViewModal(true);
+};
 
   const handleDisbursementDateChange = (date) => {
     const dueDate = new Date(date);
@@ -181,44 +188,157 @@ export default function InvoiceDiscountingOPS1() {
                       <FiFileText style={{ marginRight: '4px' }} /> Enter Disbursement
                     </button>
                   ) : (
-                    <>
-                      <button
-                        onClick={() => handleVerify(invoice, 'approve')}
-                        style={{
-                          padding: '6px 12px',
-                          background: '#28a745',
-                          color: '#fff',
-                          border: 'none',
-                          borderRadius: '4px',
-                          cursor: 'pointer',
-                          marginRight: '8px',
-                        }}
-                      >
-                        <FiCheck /> Approve
-                      </button>
-                      <button
-                        onClick={() => handleVerify(invoice, 'reject')}
-                        style={{
-                          padding: '6px 12px',
-                          background: '#dc3545',
-                          color: '#fff',
-                          border: 'none',
-                          borderRadius: '4px',
-                          cursor: 'pointer',
-                        }}
-                      >
-                        <FiX /> Reject
-                      </button>
-                    </>
-                  )}
+                    <div style={{
+  display: 'flex',
+  gap: '8px',
+  justifyContent: 'center',
+  alignItems: 'center',
+  flexWrap: 'wrap'
+}}>
+  
+  {/* VIEW */}
+  <button
+    onClick={() => handleViewInvoice(invoice)}
+    style={{
+      padding: '6px 12px',
+      background: '#007bff',
+      color: '#fff',
+      border: 'none',
+      borderRadius: '4px',
+      cursor: 'pointer',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '4px'
+    }}
+  >
+    👁 View
+  </button>
+
+  {/* APPROVE */}
+  <button
+    onClick={() => handleVerify(invoice, 'approve')}
+    style={{
+      padding: '6px 12px',
+      background: '#28a745',
+      color: '#fff',
+      border: 'none',
+      borderRadius: '4px',
+      cursor: 'pointer',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '4px'
+    }}
+  >
+    <FiCheck /> Approve
+  </button>
+
+  {/* REJECT */}
+  <button
+    onClick={() => handleVerify(invoice, 'reject')}
+    style={{
+      padding: '6px 12px',
+      background: '#dc3545',
+      color: '#fff',
+      border: 'none',
+      borderRadius: '4px',
+      cursor: 'pointer',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '4px'
+    }}
+  >
+    <FiX /> Reject
+  </button>
+
+</div>                  )}
                 </td>
               )}
             </tr>
           ))
         )}
       </tbody>
+
+
+      {showViewModal && (
+  <div style={{
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    background: 'rgba(0,0,0,0.5)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1000
+  }}>
+    <div style={{
+      background: '#fff',
+      padding: '25px',
+      borderRadius: '8px',
+      width: '500px',
+      maxHeight: '80vh',
+      overflowY: 'auto',
+      position: 'relative'
+    }}>
+
+      {/* CLOSE */}
+      <button
+        onClick={() => setShowViewModal(false)}
+        style={{
+          position: 'absolute',
+          top: '10px',
+          right: '10px',
+          border: 'none',
+          background: 'transparent',
+          cursor: 'pointer'
+        }}
+      >
+        <FiX size={20} />
+      </button>
+
+      <h3 style={{ marginBottom: '20px' }}>Invoice Details</h3>
+
+      <div style={{ marginBottom: '10px' }}>
+        <strong>Invoice #:</strong> {selectedInvoice?.invoiceNumber}
+      </div>
+
+      <div style={{ marginBottom: '10px' }}>
+        <strong>Customer:</strong> {selectedInvoice?.customer?.name || selectedInvoice?.customerName}
+      </div>
+
+      <div style={{ marginBottom: '10px' }}>
+        <strong>Supplier:</strong> {selectedInvoice?.supplier?.supplierName || selectedInvoice?.supplierName}
+      </div>
+
+      <div style={{ marginBottom: '10px' }}>
+        <strong>Invoice Amount:</strong> ₹{selectedInvoice?.invoiceAmount?.toLocaleString()}
+      </div>
+
+      <div style={{ marginBottom: '10px' }}>
+        <strong>Disbursement Amount:</strong> ₹{selectedInvoice?.disbursementAmount?.toLocaleString()}
+      </div>
+
+      <div style={{ marginBottom: '10px' }}>
+        <strong>ROI:</strong> {selectedInvoice?.roiPercentage}%
+      </div>
+
+      <div style={{ marginBottom: '10px' }}>
+        <strong>Penal Charges:</strong> {selectedInvoice?.penalCharges}%
+      </div>
+
+      <div style={{ marginBottom: '10px' }}>
+        <strong>Status:</strong> {getStatusBadge(selectedInvoice?.status)}
+      </div>
+
+    </div>
+  </div>
+)}
     </table>
   );
+
+
+  
 
   if (loading) return <LoadingSpinner />;
 
