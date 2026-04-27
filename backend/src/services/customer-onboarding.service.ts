@@ -1531,31 +1531,31 @@ if (!approved) {
 workflow.remarks = remarks;
 
 
-// ✅ ✅ ADD EMAIL LOGIC HERE (IMPORTANT)
-if (approved && workflow.currentStatus === "md_pending_terms") {
-  const customer = await this.customerRepository.findOne({
-    where: { id: customerId },
-    select: ["rmId"],
-  });
+// // ✅ ✅ ADD EMAIL LOGIC HERE (IMPORTANT)
+// if (approved && workflow.currentStatus === "md_pending_terms") {
+//   const customer = await this.customerRepository.findOne({
+//     where: { id: customerId },
+//     select: ["rmId"],
+//   });
 
-  if (customer?.rmId) {
-    const rmUser = await this.userRepository.findOne({
-      where: {
-        id: customer.rmId,
-        defaultRole: "RELATIONSHIP_MANAGER",
-      },
-      select: ["email"],
-    });
+//   if (customer?.rmId) {
+//     const rmUser = await this.userRepository.findOne({
+//       where: {
+//         id: customer.rmId,
+//         defaultRole: "RELATIONSHIP_MANAGER",
+//       },
+//       select: ["email"],
+//     });
 
-    if (rmUser?.email) {
-      await sendMail({
-        to: rmUser.email,
-        subject: "Case Returned by MD for Final Terms",
-        text: `Customer ID: ${customerId} has been reviewed by MD and is now pending final terms submission from you.`,
-      });
-    }
-  }
-}
+//     if (rmUser?.email) {
+//       await sendMail({
+//         to: rmUser.email,
+//         subject: "Case Returned by MD for Final Terms",
+//         text: `Customer ID: ${customerId} has been reviewed by MD and is now pending final terms submission from you.`,
+//       });
+//     }
+//   }
+// }
     /* ---------------------------------------
      CREATE LOAN ACCOUNTS ONLY AFTER FINAL MD APPROVAL
   --------------------------------------- */
