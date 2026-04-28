@@ -91,35 +91,48 @@ export default function InvoiceDiscountingRM() {
     }
   };
 
-  const handleViewCustomerInvoices = async (invoice) => {
-    try {
-      setLoading(true);
+const handleViewCustomerInvoices = async (invoice) => {
+  try {
+    setLoading(true);
 
-      const customerId = invoice.customer?.id;
+    const customerId = invoice.customer?.id;
 
-      // ✅ get all invoices (filter locally)
-      const customerInvoices = invoices.filter(
-        (inv) => inv.customer?.id === customerId,
-      );
+    const customerInvoices = invoices.filter(
+      (inv) => inv.customer?.id === customerId
+    );
 
-      setSelectedCustomerInvoices(customerInvoices);
-      setSelectedCustomerName(
-        invoice.customer?.name || invoice.customer?.companyName || "Customer",
-      );
+    setSelectedCustomerInvoices(customerInvoices);
 
-      // ✅ get documents
-      const res = await documentService.getDocumentsByCustomer(customerId);
-      const docs = res?.data || [];
+    setSelectedCustomerName(
+      invoice.customer?.name ||
+      invoice.customer?.companyName ||
+      "Customer"
+    );
 
-      const invoiceDocs = docs.filter((d) => d.documentType === "INVOICE");
+    const res = await documentService.getDocumentsByCustomer(customerId);
+    const docs = res?.data || [];
 
-      setSelectedCustomerDocs(invoiceDocs);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
+    // ✅ only invoice docs
+    const invoiceDocs = docs
+      .filter((d) => d.documentType === "INVOICE")
+      .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+
+    // ✅ map invoice → doc
+    const map = {};
+    customerInvoices
+      .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
+      .forEach((inv, index) => {
+        map[inv.id] = invoiceDocs[index] ? [invoiceDocs[index]] : [];
+      });
+
+    setSelectedCustomerDocs(map); 
+  } catch (err) {
+    console.error(err);
+  } finally {
+    setLoading(false);
+  }
+};
+
 
   const handleCustomerChange = async (customerId) => {
     // Convert string to number for comparison
@@ -523,41 +536,60 @@ export default function InvoiceDiscountingRM() {
     }
   };
 
-  return (
-    <div style={{ padding: "20px" }}>
-      <h2 style={{ marginBottom: "20px" }}>
-        Invoice Discounting - RM Dashboard
+ return (
+    <div style={{ 
+      padding: "30px", 
+      backgroundColor: "#f8fafc", 
+      minHeight: "100vh", 
+      fontFamily: "'Inter', system-ui, sans-serif",
+      color: "#1e293b"
+    }}>
+      <h2 style={{ 
+        marginBottom: "30px", 
+        fontSize: "26px", 
+        fontWeight: "700", 
+        color: "#0f172a",
+        letterSpacing: "-0.025em"
+      }}>
+        Invoice Discounting <span style={{ color: "#6366f1", fontWeight: "400" }}>— RM Dashboard</span>
       </h2>
 
       {/* Invoice Entry Form */}
       <div
         style={{
-          background: "#fff",
-          padding: "20px",
-          borderRadius: "8px",
-          marginBottom: "20px",
-          boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
+          background: "rgba(255, 255, 255, 0.9)",
+          backdropFilter: "blur(10px)",
+          padding: "32px",
+          borderRadius: "16px",
+          marginBottom: "32px",
+          boxShadow: "0 4px 20px -2px rgba(0, 0, 0, 0.05), 0 2px 10px -2px rgba(0, 0, 0, 0.02)",
+          border: "1px solid rgba(226, 232, 240, 0.8)",
         }}
       >
-        <h3 style={{ marginBottom: "20px" }}>Create New Invoice</h3>
+        <h3 style={{ marginBottom: "24px", fontSize: "18px", fontWeight: "600", color: "#334155" }}>
+          Create New Invoice
+        </h3>
 
         <div
           style={{
             display: "grid",
             gridTemplateColumns: "1fr 1fr",
-            gap: "20px",
+            gap: "24px",
           }}
         >
           {/* Customer Selection */}
           <div>
             <label
               style={{
-                display: "block",
+                display: "flex",
+                alignItems: "center",
                 marginBottom: "8px",
-                fontWeight: "bold",
+                fontWeight: "600",
+                fontSize: "14px",
+                color: "#202b3a"
               }}
             >
-              <FiUser style={{ marginRight: "8px" }} />
+              <FiUser style={{ marginRight: "8px", color: "#6366f1" }} />
               Select Customer
             </label>
             <select
@@ -565,9 +597,13 @@ export default function InvoiceDiscountingRM() {
               onChange={(e) => handleCustomerChange(e.target.value)}
               style={{
                 width: "100%",
-                padding: "10px",
-                border: "1px solid #ddd",
-                borderRadius: "4px",
+                padding: "12px",
+                border: "1px solid #e2e8f0",
+                borderRadius: "10px",
+                backgroundColor: "#fff",
+                fontSize: "14px",
+                outline: "none",
+                transition: "border-color 0.2s",
               }}
             >
               <option value="">Select Customer</option>
@@ -588,7 +624,9 @@ export default function InvoiceDiscountingRM() {
               style={{
                 display: "block",
                 marginBottom: "8px",
-                fontWeight: "bold",
+                fontWeight: "600",
+                fontSize: "14px",
+                color: "#202b3a"
               }}
             >
               Company Name
@@ -599,10 +637,12 @@ export default function InvoiceDiscountingRM() {
               disabled
               style={{
                 width: "100%",
-                padding: "10px",
-                border: "1px solid #ddd",
-                borderRadius: "4px",
-                background: "#f5f5f5",
+                padding: "12px",
+                border: "1px solid #e2e8f0",
+                borderRadius: "10px",
+                background: "#f1f5f9",
+                color: "#94a3b8",
+                fontSize: "14px",
               }}
             />
           </div>
@@ -611,12 +651,15 @@ export default function InvoiceDiscountingRM() {
           <div>
             <label
               style={{
-                display: "block",
+                display: "flex",
+                alignItems: "center",
                 marginBottom: "8px",
-                fontWeight: "bold",
+                fontWeight: "600",
+                fontSize: "14px",
+                color: "#202b3a"
               }}
             >
-              <FiFileText style={{ marginRight: "8px" }} />
+              <FiFileText style={{ marginRight: "8px", color: "#6366f1" }} />
               Select LAN
             </label>
             <select
@@ -625,9 +668,11 @@ export default function InvoiceDiscountingRM() {
               disabled={!selectedCustomer}
               style={{
                 width: "100%",
-                padding: "10px",
-                border: "1px solid #ddd",
-                borderRadius: "4px",
+                padding: "12px",
+                border: "1px solid #e2e8f0",
+                borderRadius: "10px",
+                backgroundColor: selectedCustomer ? "#fff" : "#f1f5f9",
+                fontSize: "14px",
               }}
             >
               <option value="">Select LAN</option>
@@ -646,7 +691,9 @@ export default function InvoiceDiscountingRM() {
               style={{
                 display: "block",
                 marginBottom: "8px",
-                fontWeight: "bold",
+                fontWeight: "600",
+                fontSize: "14px",
+                color: "#202b3a"
               }}
             >
               Select Supplier
@@ -657,9 +704,11 @@ export default function InvoiceDiscountingRM() {
               disabled={!selectedLAN}
               style={{
                 width: "100%",
-                padding: "10px",
-                border: "1px solid #ddd",
-                borderRadius: "4px",
+                padding: "12px",
+                border: "1px solid #e2e8f0",
+                borderRadius: "10px",
+                backgroundColor: selectedLAN ? "#fff" : "#f1f5f9",
+                fontSize: "16px",
               }}
             >
               <option value="">Select Supplier</option>
@@ -677,32 +726,37 @@ export default function InvoiceDiscountingRM() {
             <div
               style={{
                 gridColumn: "1 / -1",
-                background: "#f9f9f9",
-                padding: "15px",
-                borderRadius: "4px",
+                background: "#f8fafc",
+                padding: "20px",
+                borderRadius: "12px",
+                border: "1px dashed #cbd5e1",
               }}
             >
-              <h4 style={{ marginBottom: "10px" }}>Supplier Bank Details</h4>
+              <h4 style={{ marginBottom: "16px", fontSize: "16px", color: "#6366f1", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                Supplier Bank Details
+              </h4>
               <div
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "1fr 1fr 1fr",
-                  gap: "15px",
+                  gridTemplateColumns: "repeat(4, 1fr)",
+                  gap: "20px",
                 }}
               >
                 <div>
-                  <strong>Bank Name:</strong> {supplierBankDetails.bankName}
+                  <div style={{ fontSize: "14px", color: "#94a3b8" }}>Bank Name</div>
+                  <div style={{ fontWeight: "600", fontSize: "16px" }}>{supplierBankDetails.bankName}</div>
                 </div>
                 <div>
-                  <strong>Account Number:</strong>{" "}
-                  {supplierBankDetails.bankAccountNumber}
+                  <div style={{ fontSize: "14px", color: "#94a3b8" }}>Account Number</div>
+                  <div style={{ fontWeight: "600", fontSize: "16px" }}>{supplierBankDetails.bankAccountNumber}</div>
                 </div>
                 <div>
-                  <strong>IFSC Code:</strong> {supplierBankDetails.ifscCode}
+                  <div style={{ fontSize: "14px", color: "#94a3b8" }}>IFSC Code</div>
+                  <div style={{ fontWeight: "600", fontSize: "16px" }}>{supplierBankDetails.ifscCode}</div>
                 </div>
                 <div>
-                  <strong>Account Holder:</strong>{" "}
-                  {supplierBankDetails.accountHolderName}
+                  <div style={{ fontSize: "14px", color: "#94a3b8" }}>Account Holder</div>
+                  <div style={{ fontWeight: "600", fontSize: "16px" }}>{supplierBankDetails.accountHolderName}</div>
                 </div>
               </div>
             </div>
@@ -712,12 +766,15 @@ export default function InvoiceDiscountingRM() {
           <div>
             <label
               style={{
-                display: "block",
+                display: "flex",
+                alignItems: "center",
                 marginBottom: "8px",
-                fontWeight: "bold",
+                fontWeight: "600",
+                fontSize: "16px",
+                color: "#202b3a"
               }}
             >
-              <FiFileText style={{ marginRight: "8px" }} />
+              <FiFileText style={{ marginRight: "8px", color: "#6366f1" }} />
               Invoice Number
             </label>
             <input
@@ -725,12 +782,13 @@ export default function InvoiceDiscountingRM() {
               name="invoiceNumber"
               value={formData.invoiceNumber}
               onChange={handleInputChange}
-              placeholder="Enter Invoice Number"
+              placeholder="INV-001"
               style={{
                 width: "100%",
-                padding: "10px",
-                border: "1px solid #ddd",
-                borderRadius: "4px",
+                padding: "12px",
+                border: "1px solid #e2e8f0",
+                borderRadius: "10px",
+                fontSize: "16px",
               }}
             />
           </div>
@@ -738,12 +796,15 @@ export default function InvoiceDiscountingRM() {
           <div>
             <label
               style={{
-                display: "block",
+                display: "flex",
+                alignItems: "center",
                 marginBottom: "8px",
-                fontWeight: "bold",
+                fontWeight: "600",
+                fontSize: "16px",
+                color: "#202b3a"
               }}
             >
-              <FiCalendar style={{ marginRight: "8px" }} />
+              <FiCalendar style={{ marginRight: "8px", color: "#6366f1" }} />
               Invoice Date
             </label>
             <input
@@ -753,9 +814,10 @@ export default function InvoiceDiscountingRM() {
               onChange={handleInputChange}
               style={{
                 width: "100%",
-                padding: "10px",
-                border: "1px solid #ddd",
-                borderRadius: "4px",
+                padding: "12px",
+                border: "1px solid #e2e8f0",
+                borderRadius: "10px",
+                fontSize: "16px",
               }}
             />
           </div>
@@ -763,12 +825,15 @@ export default function InvoiceDiscountingRM() {
           <div>
             <label
               style={{
-                display: "block",
+                display: "flex",
+                alignItems: "center",
                 marginBottom: "8px",
-                fontWeight: "bold",
+                fontWeight: "600",
+                fontSize: "16px",
+                color: "#202b3a"
               }}
             >
-              <FiDollarSign style={{ marginRight: "8px" }} />
+              <FiDollarSign style={{ marginRight: "8px", color: "#6366f1" }} />
               Invoice Amount
             </label>
             <input
@@ -777,25 +842,30 @@ export default function InvoiceDiscountingRM() {
               value={formData.invoiceAmount}
               onWheel={(e) => e.target.blur()}
               onChange={handleInputChange}
-              placeholder="Enter Invoice Amount"
+              placeholder="0.00"
               style={{
                 width: "100%",
-                padding: "10px",
-                border: "1px solid #ddd",
-                borderRadius: "4px",
+                padding: "12px",
+                border: "1px solid #e2e8f0",
+                borderRadius: "10px",
+                fontSize: "16px",
+                fontWeight: "600"
               }}
             />
             {formData.invoiceAmount && (
               <p
                 style={{
-                  marginTop: "6px",
-                  fontSize: "12px",
-                  color: "purple",
-                  fontWeight: "500",
+                  marginTop: "8px",
+                  fontSize: "13px",
+                  color: "#6366f1",
+                  background: "#eef2ff",
+                  padding: "4px 10px",
+                  borderRadius: "20px",
+                  display: "inline-block",
+                  fontWeight: "600",
                 }}
               >
-                ₹ {formatINR(formData.invoiceAmount)} (
-                {numberToWords(formData.invoiceAmount)} Only)
+                ₹ {formatINR(formData.invoiceAmount)} ({numberToWords(formData.invoiceAmount)} Only)
               </p>
             )}
           </div>
@@ -803,12 +873,15 @@ export default function InvoiceDiscountingRM() {
           <div>
             <label
               style={{
-                display: "block",
+                display: "flex",
+                alignItems: "center",
                 marginBottom: "8px",
-                fontWeight: "bold",
+                fontWeight: "600",
+                fontSize: "16px",
+                color: "#202b3a"
               }}
             >
-              <FiDollarSign style={{ marginRight: "8px" }} />
+              <FiDollarSign style={{ marginRight: "8px", color: "#6366f1" }} />
               Disbursement Amount
             </label>
             <input
@@ -817,26 +890,31 @@ export default function InvoiceDiscountingRM() {
               value={formData.disbursementAmount}
               onWheel={(e) => e.target.blur()}
               onChange={handleInputChange}
-              placeholder="Enter Disbursement Amount"
+              placeholder="0.00"
               style={{
                 width: "100%",
-                padding: "10px",
-                border: "1px solid #ddd",
-                borderRadius: "4px",
+                padding: "12px",
+                border: "1px solid #e2e8f0",
+                borderRadius: "10px",
+                fontSize: "16px",
+                fontWeight: "600"
               }}
             />
 
             {formData.disbursementAmount && (
               <p
                 style={{
-                  marginTop: "6px",
-                  fontSize: "12px",
-                  color: "purple",
-                  fontWeight: "500",
+                  marginTop: "8px",
+                  fontSize: "13px",
+                  color: "#6366f1",
+                  background: "#eef2ff",
+                  padding: "4px 10px",
+                  borderRadius: "20px",
+                  display: "inline-block",
+                  fontWeight: "600",
                 }}
               >
-                ₹ {formatINR(formData.disbursementAmount)} (
-                {numberToWords(formData.disbursementAmount)} Only)
+                ₹ {formatINR(formData.disbursementAmount)} ({numberToWords(formData.disbursementAmount)} Only)
               </p>
             )}
           </div>
@@ -844,12 +922,15 @@ export default function InvoiceDiscountingRM() {
           <div>
             <label
               style={{
-                display: "block",
+                display: "flex",
+                alignItems: "center",
                 marginBottom: "8px",
-                fontWeight: "bold",
+                fontWeight: "600",
+                fontSize: "16px",
+                color: "#202b3a"
               }}
             >
-              <FiDollarSign style={{ marginRight: "8px" }} />
+              <FiDollarSign style={{ marginRight: "8px", color: "#6366f1" }} />
               ROI (%)
             </label>
             <input
@@ -862,9 +943,10 @@ export default function InvoiceDiscountingRM() {
               step="0.01"
               style={{
                 width: "100%",
-                padding: "10px",
-                border: "1px solid #ddd",
-                borderRadius: "4px",
+                padding: "12px",
+                border: "1px solid #e2e8f0",
+                borderRadius: "10px",
+                fontSize: "16px",
               }}
             />
           </div>
@@ -872,12 +954,15 @@ export default function InvoiceDiscountingRM() {
           <div>
             <label
               style={{
-                display: "block",
+                display: "flex",
+                alignItems: "center",
                 marginBottom: "8px",
-                fontWeight: "bold",
+                fontWeight: "600",
+                fontSize: "14px",
+                color: "#202b3a"
               }}
             >
-              <FiDollarSign style={{ marginRight: "8px" }} />
+              <FiDollarSign style={{ marginRight: "8px", color: "#6366f1" }} />
               Penal Charges (%)
             </label>
             <input
@@ -890,58 +975,59 @@ export default function InvoiceDiscountingRM() {
               step="0.01"
               style={{
                 width: "100%",
-                padding: "10px",
-                border: "1px solid #ddd",
-                borderRadius: "4px",
+                padding: "12px",
+                border: "1px solid #e2e8f0",
+                borderRadius: "10px",
+                fontSize: "14px",
               }}
             />
           </div>
-          <div style={{ gridColumn: "1 / -1", marginTop: "15px" }}>
-            <label style={{ fontWeight: "bold", marginBottom: "8px" }}>
+          <div style={{ gridColumn: "1 / -1", marginTop: "24px" }}>
+            <label style={{ fontWeight: "600", fontSize: "14px", color: "#334155", display: "block", marginBottom: "12px" }}>
               Upload Invoice Documents
             </label>
 
             {/* SHOW UPLOADED FILES */}
             {invoiceFiles.length > 0 && (
-              <div style={{ marginBottom: "10px" }}>
+              <div style={{ marginBottom: "16px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
                 {invoiceFiles.map((doc) => (
                   <div
                     key={doc.id}
                     style={{
                       display: "flex",
                       alignItems: "center",
-                      gap: "10px",
-                      padding: "10px",
-                      border: "1px solid #ddd",
-                      borderRadius: "8px",
-                      marginBottom: "6px",
+                      gap: "12px",
+                      padding: "12px 16px",
+                      background: "#fff",
+                      border: "1px solid #e2e8f0",
+                      borderRadius: "12px",
                     }}
                   >
-                    <FiFileText color="green" />
+                    <FiFileText color="#10b981" size={18} />
 
-                    <span style={{ flex: 1 }}>{doc.fileName}</span>
+                    <span style={{ flex: 1, fontSize: "13px", fontWeight: "500", color: "#475569", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {doc.fileName}
+                    </span>
 
-                    <button
-                      onClick={() => {
-                        const baseUrl =
-                          import.meta.env.VITE_API_BASE_URL?.replace(
-                            "/api",
-                            "",
-                          ) || "http://localhost:4000";
+                    <div style={{ display: "flex", gap: "8px" }}>
+                      <button
+                        style={{ border: "none", background: "#f1f5f9", padding: "6px", borderRadius: "6px", cursor: "pointer", color: "#202b3a" }}
+                        onClick={() => {
+                          const baseUrl = import.meta.env.VITE_API_BASE_URL?.replace("/api", "") || "http://localhost:4000";
+                          const fileUrl = doc.filePath?.startsWith("http") ? doc.filePath : `${baseUrl}/${doc.filePath?.replace(/\\/g, "/")}`;
+                          window.open(fileUrl, "_blank");
+                        }}
+                      >
+                        <FiEye size={14} />
+                      </button>
 
-                        const fileUrl = doc.filePath?.startsWith("http")
-                          ? doc.filePath
-                          : `${baseUrl}/${doc.filePath?.replace(/\\/g, "/")}`;
-
-                        window.open(fileUrl, "_blank");
-                      }}
-                    >
-                      <FiEye />
-                    </button>
-
-                    <button onClick={() => handleRemoveInvoice(doc.id)}>
-                      <FiX color="red" />
-                    </button>
+                      <button 
+                        style={{ border: "none", background: "#fef2f2", padding: "6px", borderRadius: "6px", cursor: "pointer", color: "#ef4444" }}
+                        onClick={() => handleRemoveInvoice(doc.id)}
+                      >
+                        <FiX size={14} />
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -950,49 +1036,59 @@ export default function InvoiceDiscountingRM() {
             {/* ALWAYS SHOW UPLOAD BUTTON */}
             <label
               style={{
-                display: "block",
-                border: "2px dashed #2563EB",
-                padding: "20px",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                border: "2px dashed #6366f1",
+                padding: "30px",
                 textAlign: "center",
-                borderRadius: "10px",
+                borderRadius: "16px",
                 cursor: "pointer",
-                background: "#EFF6FF",
+                background: "#f5f3ff",
+                transition: "all 0.2s ease",
               }}
             >
               <input
                 type="file"
-                multiple // ✅ KEY CHANGE
+                multiple
                 accept=".pdf,.jpg,.jpeg,.png"
                 onChange={handleInvoiceUpload}
                 style={{ display: "none" }}
               />
 
-              <FiUpload size={28} color="#2563EB" />
-              <p style={{ color: "#2563EB", fontWeight: "600" }}>
-                Upload More Invoice(s)
+              <FiUpload size={32} color="#6366f1" style={{ marginBottom: "12px" }} />
+              <p style={{ color: "#4338ca", fontWeight: "600", margin: 0, fontSize: "15px" }}>
+                Click to upload or drag & drop
+              </p>
+              <p style={{ color: "#6366f1", fontSize: "12px", marginTop: "4px" }}>
+                PDF, JPG or PNG (Max 10MB)
               </p>
             </label>
           </div>
         </div>
 
         {/* Action Buttons */}
-        <div style={{ marginTop: "20px", display: "flex", gap: "10px" }}>
+        <div style={{ marginTop: "32px", display: "flex", gap: "16px", justifyContent: "flex-end" }}>
           <button
             onClick={handleSave}
             disabled={loading}
             style={{
               display: "flex",
               alignItems: "center",
-              gap: "8px",
-              padding: "10px 20px",
-              background: "#6c757d",
-              color: "#fff",
-              border: "none",
-              borderRadius: "4px",
+              gap: "10px",
+              padding: "12px 24px",
+              background: "#fff",
+              color: "#475569",
+              border: "1px solid #e2e8f0",
+              borderRadius: "10px",
               cursor: "pointer",
+              fontWeight: "600",
+              fontSize: "14px",
+              transition: "all 0.2s"
             }}
           >
-            <FiSave /> Save
+            <FiSave /> Save Draft
           </button>
           <button
             onClick={handleSubmit}
@@ -1000,13 +1096,17 @@ export default function InvoiceDiscountingRM() {
             style={{
               display: "flex",
               alignItems: "center",
-              gap: "8px",
-              padding: "10px 20px",
-              background: "#007bff",
+              gap: "10px",
+              padding: "12px 28px",
+              background: "linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)",
               color: "#fff",
               border: "none",
-              borderRadius: "4px",
+              borderRadius: "10px",
               cursor: "pointer",
+              fontWeight: "600",
+              fontSize: "14px",
+              boxShadow: "0 4px 12px rgba(79, 70, 229, 0.3)",
+              transition: "all 0.2s"
             }}
           >
             <FiSend /> Submit for Approval
@@ -1018,170 +1118,100 @@ export default function InvoiceDiscountingRM() {
       <div
         style={{
           background: "#fff",
-          padding: "20px",
-          borderRadius: "8px",
-          boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
+          padding: "0",
+          borderRadius: "16px",
+          boxShadow: "0 4px 20px -2px rgba(0, 0, 0, 0.05)",
+          border: "1px solid #e2e8f0",
+          overflow: "hidden"
         }}
       >
-        <h3 style={{ marginBottom: "20px" }}>My Invoices</h3>
+        <div style={{ padding: "24px", borderBottom: "1px solid #f1f5f9", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+           <h3 style={{ margin: 0, fontSize: "18px", fontWeight: "600", color: "#334155" }}>My Invoices</h3>
+           <span style={{ fontSize: "12px", background: "#f1f5f9", padding: "4px 12px", borderRadius: "20px", color: "#202b3a", fontWeight: "600" }}>
+             Total: {invoices.length}
+           </span>
+        </div>
 
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
-            <tr style={{ background: "#f5f5f5" }}>
-              <th
-                style={{
-                  padding: "12px",
-                  textAlign: "left",
-                  borderBottom: "2px solid #ddd",
-                }}
-              >
-                Invoice #
-              </th>
-              <th
-                style={{
-                  padding: "12px",
-                  textAlign: "left",
-                  borderBottom: "2px solid #ddd",
-                }}
-              >
-                Customer
-              </th>
-              <th
-                style={{
-                  padding: "12px",
-                  textAlign: "left",
-                  borderBottom: "2px solid #ddd",
-                }}
-              >
-                Supplier
-              </th>
-              <th
-                style={{
-                  padding: "12px",
-                  textAlign: "right",
-                  borderBottom: "2px solid #ddd",
-                }}
-              >
-                Amount
-              </th>
-              <th
-                style={{
-                  padding: "12px",
-                  textAlign: "right",
-                  borderBottom: "2px solid #ddd",
-                }}
-              >
-                ROI %
-              </th>
-              <th
-                style={{
-                  padding: "12px",
-                  textAlign: "right",
-                  borderBottom: "2px solid #ddd",
-                }}
-              >
-                Penal %
-              </th>
-              <th
-                style={{
-                  padding: "12px",
-                  textAlign: "center",
-                  borderBottom: "2px solid #ddd",
-                }}
-              >
-                Status
-              </th>
-              <th
-                style={{
-                  padding: "12px",
-                  textAlign: "center",
-                  borderBottom: "2px solid #ddd",
-                }}
-              >
-                Actions
-              </th>
+            <tr style={{ background: "#f8fafc" }}>
+              <th style={{ padding: "16px 24px", textAlign: "left", fontSize: "12px", textTransform: "uppercase", letterSpacing: "0.05em", color: "#202b3a", fontWeight: "700" }}>Invoice #</th>
+              <th style={{ padding: "16px 24px", textAlign: "left", fontSize: "12px", textTransform: "uppercase", letterSpacing: "0.05em", color: "#202b3a", fontWeight: "700" }}>Customer</th>
+              <th style={{ padding: "16px 24px", textAlign: "left", fontSize: "12px", textTransform: "uppercase", letterSpacing: "0.05em", color: "#202b3a", fontWeight: "700" }}>Supplier</th>
+              <th style={{ padding: "16px 24px", textAlign: "right", fontSize: "12px", textTransform: "uppercase", letterSpacing: "0.05em", color: "#202b3a", fontWeight: "700" }}>Amount</th>
+              <th style={{ padding: "16px 24px", textAlign: "right", fontSize: "12px", textTransform: "uppercase", letterSpacing: "0.05em", color: "#202b3a", fontWeight: "700" }}>ROI %</th>
+              <th style={{ padding: "16px 24px", textAlign: "right", fontSize: "12px", textTransform: "uppercase", letterSpacing: "0.05em", color: "#202b3a", fontWeight: "700" }}>Penal %</th>
+              <th style={{ padding: "16px 24px", textAlign: "center", fontSize: "12px", textTransform: "uppercase", letterSpacing: "0.05em", color: "#202b3a", fontWeight: "700" }}>Status</th>
+              <th style={{ padding: "16px 24px", textAlign: "center", fontSize: "12px", textTransform: "uppercase", letterSpacing: "0.05em", color: "#202b3a", fontWeight: "700" }}>Actions</th>
             </tr>
           </thead>
           <tbody>
             {!Array.isArray(invoices) || invoices.length === 0 ? (
               <tr>
-                <td
-                  colSpan="8"
-                  style={{
-                    padding: "20px",
-                    textAlign: "center",
-                    color: "#999",
-                  }}
-                >
-                  No invoices found
+                <td colSpan="8" style={{ padding: "48px", textAlign: "center", color: "#94a3b8", fontSize: "14px" }}>
+                  No invoices found in your history
                 </td>
               </tr>
             ) : (
               invoices.map((invoice) => (
-                <tr key={invoice.id} style={{ borderBottom: "1px solid #eee" }}>
-                  <td style={{ padding: "12px" }}>{invoice.invoiceNumber}</td>
-                  <td style={{ padding: "12px" }}>
-                    {invoice.customer?.name ||
-                      invoice.customer?.companyName ||
-                      invoice.customerName ||
-                      "N/A"}
+                <tr key={invoice.id} style={{ borderBottom: "1px solid #f1f5f9", transition: "background 0.2s" }}>
+                  <td style={{ padding: "16px 24px", fontSize: "14px", fontWeight: "600", color: "#1e293b" }}>{invoice.invoiceNumber}</td>
+                  <td style={{ padding: "16px 24px", fontSize: "14px", color: "#475569" }}>
+                    {invoice.customer?.name || invoice.customer?.companyName || invoice.customerName || "N/A"}
                   </td>
-                  <td style={{ padding: "12px" }}>
-                    {invoice.supplier?.supplierName ||
-                      invoice.supplierName ||
-                      "N/A"}
+                  <td style={{ padding: "16px 24px", fontSize: "14px", color: "#475569" }}>
+                    {invoice.supplier?.supplierName || invoice.supplierName || "N/A"}
                   </td>
-                  <td style={{ padding: "12px", textAlign: "right" }}>
+                  <td style={{ padding: "16px 24px", textAlign: "right", fontSize: "14px", fontWeight: "700", color: "#0f172a" }}>
                     ₹{invoice.invoiceAmount?.toLocaleString()}
                   </td>
-                  <td style={{ padding: "12px", textAlign: "right" }}>
-                    {invoice.roiPercentage ?? "-"}
-                  </td>
-                  <td style={{ padding: "12px", textAlign: "right" }}>
-                    {invoice.penalCharges ?? "-"}
-                  </td>
-                  <td style={{ padding: "12px", textAlign: "center" }}>
+                  <td style={{ padding: "16px 24px", textAlign: "right", fontSize: "14px" }}>{invoice.roiPercentage ?? "-"}</td>
+                  <td style={{ padding: "16px 24px", textAlign: "right", fontSize: "14px" }}>{invoice.penalCharges ?? "-"}</td>
+                  <td style={{ padding: "16px 24px", textAlign: "center" }}>
                     {getStatusBadge(invoice.status)}
                   </td>
-                  <td style={{ padding: "12px", textAlign: "center" }}>
-                    {invoice.status === "PENDING_CUSTOMER_APPROVAL" && (
+                  <td style={{ padding: "16px 24px", textAlign: "center" }}>
+                    <div style={{ display: "flex", gap: "8px", justifyContent: "center" }}>
+                      {invoice.status === "PENDING_CUSTOMER_APPROVAL" && (
+                        <button
+                          onClick={() => handleSendApprovalEmail(invoice.id)}
+                          disabled={loading}
+                          style={{
+                            padding: "6px 12px",
+                            background: "#ecfdf5",
+                            color: "#059669",
+                            border: "1px solid #10b981",
+                            borderRadius: "6px",
+                            cursor: "pointer",
+                            fontSize: "12px",
+                            fontWeight: "600",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "4px",
+                          }}
+                        >
+                          <FiMail size={12} /> Email
+                        </button>
+                      )}
                       <button
-                        onClick={() => handleSendApprovalEmail(invoice.id)}
-                        disabled={loading}
-                        style={{
-                          padding: "6px 12px",
-                          background: "#28a745",
-                          color: "#fff",
-                          border: "none",
-                          borderRadius: "4px",
-                          cursor: "pointer",
-                          marginRight: "5px",
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: "4px",
+                        onClick={() => {
+                          handleViewCustomerInvoices(invoice);
+                          setShowInvoiceModal(true);
                         }}
-                        title="Send approval email to customer"
+                        style={{
+                          padding: "6px 16px",
+                          background: "#eef2ff",
+                          color: "#4f46e5",
+                          border: "1px solid #6366f1",
+                          borderRadius: "6px",
+                          cursor: "pointer",
+                          fontSize: "12px",
+                          fontWeight: "600",
+                        }}
                       >
-                        <FiMail size={12} /> Email
+                        View
                       </button>
-                    )}
-                    <button
-                      // onClick={() => navigate(`/invoice-discounting/rm/${invoice.id}`)}
-                      onClick={() => {
-                        handleViewCustomerInvoices(invoice);
-                        setShowInvoiceModal(true);
-                      }}
-                      style={{
-                        padding: "6px 12px",
-                        background: "#007bff",
-                        color: "#fff",
-                        border: "none",
-                        borderRadius: "4px",
-                        cursor: "pointer",
-                      }}
-                    >
-                      View
-                    </button>
+                    </div>
                   </td>
                 </tr>
               ))
@@ -1189,6 +1219,7 @@ export default function InvoiceDiscountingRM() {
           </tbody>
         </table>
       </div>
+
       {showInvoiceModal && (
         <div
           style={{
@@ -1197,7 +1228,8 @@ export default function InvoiceDiscountingRM() {
             left: 0,
             width: "100%",
             height: "100%",
-            background: "rgba(0,0,0,0.5)",
+            background: "rgba(15, 23, 42, 0.6)",
+            backdropFilter: "blur(4px)",
             display: "flex",
             justifyContent: "center",
             alignItems: "center",
@@ -1207,13 +1239,14 @@ export default function InvoiceDiscountingRM() {
           {/* MODAL BOX */}
           <div
             style={{
-              width: "80%",
-              maxHeight: "80vh",
+              width: "800px",
+              maxHeight: "85vh",
               overflowY: "auto",
               background: "#fff",
-              borderRadius: "10px",
-              padding: "20px",
+              borderRadius: "20px",
+              padding: "32px",
               position: "relative",
+              boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25)",
             }}
           >
             {/* CLOSE BUTTON */}
@@ -1221,69 +1254,133 @@ export default function InvoiceDiscountingRM() {
               onClick={() => setShowInvoiceModal(false)}
               style={{
                 position: "absolute",
-                top: "10px",
-                right: "10px",
+                top: "20px",
+                right: "20px",
                 border: "none",
-                background: "transparent",
+                background: "#f1f5f9",
+                width: "32px",
+                height: "32px",
+                borderRadius: "50%",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                cursor: "pointer",
+                color: "#202b3a"
+              }}
+            >
+              <FiX size={18} />
+            </button>
+
+            <h3 style={{ marginBottom: "24px", fontSize: "20px", fontWeight: "700", color: "#1e293b", paddingRight: "40px" }}>
+              {selectedCustomerName} <span style={{ fontWeight: "400", color: "#202b3a" }}>Details</span>
+            </h3>
+{selectedCustomerInvoices.map((inv) => (
+  <div
+    key={inv.id}
+    style={{
+      background: "#fff",
+      padding: "20px",
+      marginBottom: "24px", // Increased margin for better separation
+      borderRadius: "16px",
+      border: "1px solid #e2e8f0", // Subtle but visible border
+      boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)", // Soft shadow for depth
+      position: "relative",
+      overflow: "hidden"
+    }}
+  >
+    {/* Decorative side accent to clearly mark the start of a new card */}
+    <div style={{
+      position: "absolute",
+      left: 0,
+      top: 0,
+      bottom: 0,
+      width: "4px",
+      background: "#6366f1"
+    }} />
+
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+      <strong style={{ fontSize: "16px", color: "#1e293b" }}>Invoice #{inv.invoiceNumber}</strong>
+      <span style={{ fontSize: "18px", fontWeight: "800", color: "#6366f1" }}>₹{inv.invoiceAmount}</span>
+    </div>
+    
+    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "20px" }}>
+        <div style={{ fontSize: "13px" }}><span style={{ color: "#94a3b8" }}>ROI:</span> <span style={{ fontWeight: "600" }}>{inv.roiPercentage}%</span></div>
+        <div style={{ fontSize: "13px" }}><span style={{ color: "#94a3b8" }}>Penal:</span> <span style={{ fontWeight: "600" }}>{inv.penalCharges}%</span></div>
+    </div>
+
+    {/* DOCUMENTS */}
+    <div style={{ borderTop: "1px solid #f1f5f9", paddingTop: "16px" }}>
+      <strong style={{ fontSize: "13px", color: "#475569", display: "block", marginBottom: "10px" }}>Attached Documents:</strong>
+
+      {selectedCustomerDocs.length === 0 ? (
+        <p style={{ fontSize: "13px", color: "#94a3b8", fontStyle: "italic" }}>No documents available</p>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+       {(() => {
+  const docs = selectedCustomerDocs[inv.id] || [];
+
+  if (docs.length === 0) {
+    return (
+      <p style={{ fontSize: "13px", color: "#94a3b8", fontStyle: "italic" }}>
+        No documents available
+      </p>
+    );
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+      {docs.map((doc) => {
+        const baseUrl =
+          import.meta.env.VITE_API_BASE_URL?.replace("/api", "") ||
+          "http://localhost:4000";
+
+        const fileUrl = doc.filePath?.startsWith("http")
+          ? doc.filePath
+          : `${baseUrl}/${doc.filePath?.replace(/\\/g, "/")}`;
+
+        return (
+          <div
+            key={doc.id}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              background: "#f8fafc",
+              padding: "10px 14px",
+              borderRadius: "8px",
+              border: "1px solid #e2e8f0",
+            }}
+          >
+            <span style={{ fontSize: "14px", fontWeight: "500" }}>
+              📄 {doc.fileName}
+            </span>
+
+            <button
+              onClick={() => window.open(fileUrl, "_blank")}
+              style={{
+                background: "#6366f1",
+                color: "#fff",
+                border: "none",
+                padding: "5px 12px",
+                borderRadius: "6px",
+                fontSize: "14px",
+                fontWeight: "600",
                 cursor: "pointer",
               }}
             >
-              <FiX size={20} />
+              View File
             </button>
-
-            <h3 style={{ marginBottom: "15px" }}>
-              {selectedCustomerName} - Invoice Details
-            </h3>
-
-            {selectedCustomerInvoices.map((inv) => (
-              <div
-                key={inv.id}
-                style={{
-                  border: "1px solid #ddd",
-                  padding: "15px",
-                  marginBottom: "15px",
-                  borderRadius: "6px",
-                }}
-              >
-                <strong>Invoice #: {inv.invoiceNumber}</strong>
-                <p>Amount: ₹{inv.invoiceAmount}</p>
-                <p>ROI: {inv.roiPercentage}</p>
-                <p>Penal: {inv.penalCharges}</p>
-
-                {/* DOCUMENTS */}
-                <div style={{ marginTop: "10px" }}>
-                  <strong>Documents:</strong>
-
-                  {selectedCustomerDocs.length === 0 ? (
-                    <p>No documents</p>
-                  ) : (
-                    selectedCustomerDocs.map((doc) => {
-                      const baseUrl =
-                        import.meta.env.VITE_API_BASE_URL?.replace(
-                          "/api",
-                          "",
-                        ) || "http://localhost:4000";
-
-                      const fileUrl = doc.filePath?.startsWith("http")
-                        ? doc.filePath
-                        : `${baseUrl}/${doc.filePath?.replace(/\\/g, "/")}`;
-
-                      return (
-                        <div key={doc.id} style={{ marginTop: "5px" }}>
-                          📄 {doc.fileName}
-                          <button
-                            onClick={() => window.open(fileUrl, "_blank")}
-                            style={{ marginLeft: "10px" }}
-                          >
-                            View
-                          </button>
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
-              </div>
-            ))}
+          </div>
+        );
+      })}
+    </div>
+  );
+})()}
+        </div>
+      )}
+    </div>
+  </div>
+))}
           </div>
         </div>
       )}

@@ -11,12 +11,12 @@ import LoadingSpinner from "../../components/LoadingSpinner";
 import CustomerFullDetails from "../../components/CustomerFullDetails";
 import { formatDate } from "../../utils/format";
 import { FiCheck, FiX, FiEye, FiFileText, FiDownload } from "react-icons/fi";
- 
+
 const ApprovalScreen = () => {
   const { id } = useParams(); // This is now customerId
   const navigate = useNavigate();
   const { user } = useSelector((state) => state.auth);
- 
+
   const [customer, setCustomer] = useState(null);
   const [workflow, setWorkflow] = useState(null);
   // For CEO: support multiple partner sanctions
@@ -33,18 +33,18 @@ const ApprovalScreen = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [previewedDocs, setPreviewedDocs] = useState(new Set());
- 
+
   // Dynamic partners from API
   const [partners, setPartners] = useState([]);
   const [partnersLoading, setPartnersLoading] = useState(true);
- 
+
   // Fallback to default if API fails or for non-credit_team_l1 roles
   // For CEO/MD roles: they don't fetch from API, so use fallback
   const PARTNERS = partners.length > 0 ? partners : ["FFPL"];
- 
+
   // Get user role (lowercase for comparison)
   const userRole = (user?.role || "").toLowerCase();
- 
+
   // Fetch partners from API - role-based logic
   // credit_l1: fetch from partners table (for new sanctions)
   // other roles (ceo, md, credit_l2, etc.): DO NOT fetch from partners table - use partners from sanction records
@@ -60,7 +60,7 @@ const ApprovalScreen = () => {
       setPartnersLoading(false);
       return;
     }
- 
+
     const fetchPartners = async () => {
       try {
         const data = await partnerService.getActivePartners();
@@ -73,43 +73,43 @@ const ApprovalScreen = () => {
         setPartnersLoading(false);
       }
     };
- 
+
     fetchPartners();
   }, [userRole]);
- 
+
   // Track if initial data load is done (useRef to persist across renders)
   const dataLoadedRef = useRef(false);
- 
+
   useEffect(() => {
     // Reset dataLoadedRef when id changes
     dataLoadedRef.current = false;
- 
+
     const loadData = async () => {
       // Prevent multiple calls - only load once
       if (dataLoadedRef.current) {
         return;
       }
- 
+
       // For credit_team_l1, wait for partners to load first (they come from partners table)
       if (userRole === "credit_team_l1" && partnersLoading) {
         console.log("loadData: credit_team_l1 waiting for partners to load");
         return;
       }
- 
+
       try {
         setIsLoading(true);
- 
+
         // Fetch customer details and sanctions separately (like credit L2)
         const custResponse = await customerService.getCustomerById(id);
         setCustomer(custResponse.data);
- 
+
         // Fetch sanctions using the dedicated API (like credit L2 for non-CREDIT_L1 roles)
         const sanctionsResponse = await api.get(`/sanctions/customer/${id}`);
         const sanctionsData = sanctionsResponse.data;
         const sanctions = Array.isArray(sanctionsData)
           ? sanctionsData
           : sanctionsData.sanctions || [];
- 
+
         // For CEO: load all partner sanctions from credit_sanctions table
         // This is the correct source of truth - use partner field for mapping
         if (sanctions.length > 0) {
@@ -119,7 +119,7 @@ const ApprovalScreen = () => {
             const partner = item.partner;
             partnerMap[partner] = {
               partner: partner,
-             sanctionAmount: parseFloat(item.sanctionAmount || 0) || "",
+              sanctionAmount: parseFloat(item.sanctionAmount || 0) || "",
               tenure: item.tenure || 0,
               interestRate: item.interestRate || 0,
               penalCharges: item.penalCharges || 0,
@@ -128,10 +128,10 @@ const ApprovalScreen = () => {
               hasData: true,
             };
           });
- 
+
           // Get all unique partners from sanctions
           const uniquePartners = Object.keys(partnerMap);
- 
+
           // Create array with ALL partners from sanctions data
           const partners = uniquePartners.map((p) => ({
             partner: p,
@@ -158,7 +158,7 @@ const ApprovalScreen = () => {
             const existingDate = partnerMap[partner]
               ? new Date(partnerMap[partner].createdAt || 0)
               : new Date(0);
- 
+
             // Always use the latest entry (most recent createdAt)
             if (!partnerMap[partner] || itemDate > existingDate) {
               partnerMap[partner] = {
@@ -195,7 +195,7 @@ const ApprovalScreen = () => {
             })),
           );
         }
- 
+
         // Also set the main sanction data for backward compatibility
         if (custResponse.data?.creditSanctions?.[0]) {
           const s = custResponse.data.creditSanctions[0];
@@ -208,7 +208,7 @@ const ApprovalScreen = () => {
             conditions: s.conditions || "",
           });
         }
- 
+
         // Find the customer onboarding workflow in the history or relations
         // For simplicity, we assume the data comes from getCustomerById
         // which should include the workflow status history.
@@ -220,22 +220,22 @@ const ApprovalScreen = () => {
         dataLoadedRef.current = true;
       }
     };
- 
+
     if (id) {
       loadData();
     }
   }, [id, partnersLoading]);
- 
+
   const handleApprove = async () => {
     if (!comments.trim()) {
       toast.info("Please add comments before approving");
       return;
     }
- 
+
     setIsSubmitting(true);
     try {
       const userRole = (user?.role || "").toLowerCase();
- 
+
       // For CEO and MD: use partnerSanctions format
       if (userRole === "ceo") {
         const ceoSanctionData = {
@@ -256,7 +256,12 @@ const ApprovalScreen = () => {
             sanctionAmount: ps.sanctionAmount || 0,
             tenure: ps.tenure || 0,
             interestRate: ps.interestRate || 0,
-            penalCharges: ps.penalCharges || 0,
+            penalCharges:
+              ps.penalCharges !== "" &&
+              ps.penalCharges !== null &&
+              ps.penalCharges !== undefined
+                ? Number(ps.penalCharges) / 12
+                : 0,
             processingFees: ps.processingFees || 0,
             conditions: ps.conditions || "",
           })),
@@ -267,7 +272,7 @@ const ApprovalScreen = () => {
       } else {
         throw new Error("Unauthorized role for this action");
       }
- 
+
       toast.success("Approval processed successfully");
       navigate("/management/dashboard");
     } catch (error) {
@@ -279,13 +284,13 @@ const ApprovalScreen = () => {
       setIsSubmitting(false);
     }
   };
- 
+
   const handleReject = async () => {
     if (!comments.trim()) {
       toast.info("Please add rejection reason");
       return;
     }
- 
+
     setIsSubmitting(true);
     try {
       const userRole = (user?.role || "").toLowerCase();
@@ -296,7 +301,7 @@ const ApprovalScreen = () => {
       } else {
         throw new Error("Unauthorized role for this action");
       }
- 
+
       toast.success("Approval rejected");
       navigate("/management/dashboard");
     } catch (error) {
@@ -308,15 +313,15 @@ const ApprovalScreen = () => {
       setIsSubmitting(false);
     }
   };
- 
+
   if (isLoading) {
     return <LoadingSpinner />;
   }
- 
+
   if (!customer) {
     return <div>Customer record not found</div>;
   }
- 
+
   // Format history for timeline
   const formattedApprovals = (customer.statusHistory || []).map((action) => ({
     approverName: action.changedByUser?.name || "Workflow System",
@@ -332,12 +337,12 @@ const ApprovalScreen = () => {
     penalCharges: action.penalCharges,
     processingFees: action.processingFees,
   }));
- 
+
   const isCreditDoc = (doc) => {
     const role = doc.uploadedByUser?.defaultRole?.toLowerCase() || "";
     return role.includes("credit");
   };
- 
+
   // Helper function to detect MIME type from file extension
   const getMimeType = (fileName) => {
     const ext = fileName?.toLowerCase().split(".").pop() || "";
@@ -355,7 +360,7 @@ const ApprovalScreen = () => {
     };
     return mimeTypes[ext] || "application/octet-stream";
   };
- 
+
   const handlePreview = async (doc, mode = "inline") => {
     setPreviewedDocs((prev) => new Set(prev).add(doc.id));
     try {
@@ -368,7 +373,7 @@ const ApprovalScreen = () => {
       const mimeType = getMimeType(doc.fileName);
       const blob = new Blob([response.data], { type: mimeType });
       const blobUrl = URL.createObjectURL(blob);
- 
+
       if (mode === "attachment") {
         const link = document.createElement("a");
         link.href = blobUrl;
@@ -383,17 +388,17 @@ const ApprovalScreen = () => {
       console.error("Failed to preview document:", error);
     }
   };
- 
+
   const handlePreviewClick = (doc) => handlePreview(doc, "inline");
   const handleDownloadClick = (doc) => handlePreview(doc, "attachment");
- 
+
   const role = (user?.role || "").toLowerCase();
- 
+
   // RM, MD, and CEO can access sanction details
   const canAccessSanctionDetails = () => {
     return role === "relationship_manager" || role === "md" || role === "ceo";
   };
- 
+
   const isReadOnly =
     customer.status === "credit_l2_rejected" ||
     customer.status === "ceo_rejected" ||
@@ -404,19 +409,19 @@ const ApprovalScreen = () => {
     (role === "ceo" && customer.status !== "credit_l2_approved") ||
     (role === "md" &&
       !["ceo_approved", "md_terms_submitted"].includes(customer.status));
- 
+
   const visibleDocuments = customer.documents || [];
   // Management (CEO/MD) can approve even without viewing documents as per new request
   const allDocsPreviewed = true;
- 
+
   const formatINR = (num) => {
     if (!num) return "";
     return new Intl.NumberFormat("en-IN").format(Number(num));
   };
- 
+
   const numberToWords = (num) => {
     if (!num) return "";
- 
+
     const a = [
       "",
       "One",
@@ -439,7 +444,7 @@ const ApprovalScreen = () => {
       "Eighteen",
       "Nineteen",
     ];
- 
+
     const b = [
       "",
       "",
@@ -452,7 +457,7 @@ const ApprovalScreen = () => {
       "Eighty",
       "Ninety",
     ];
- 
+
     const inWords = (n) => {
       if (n < 20) return a[n];
       if (n < 100) return b[Math.floor(n / 10)] + " " + a[n % 10];
@@ -466,10 +471,10 @@ const ApprovalScreen = () => {
         inWords(Math.floor(n / 10000000)) + " Crore " + inWords(n % 10000000)
       );
     };
- 
+
     return inWords(Number(num)).trim();
   };
- 
+
   return (
     <div className="space-y-6">
       <div>
@@ -481,18 +486,18 @@ const ApprovalScreen = () => {
         </button>
         <h1 className="text-3xl font-bold text-gray-900">Approval Screen</h1>
       </div>
- 
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
           <CustomerFullDetails customer={customer} />
- 
+
           {/* Only show sanction details for RM and MD roles */}
           {canAccessSanctionDetails() && (
             <div className="card border-l-4 border-secondary-600">
               <h2 className="text-xl font-semibold text-gray-900 mb-4">
                 Sanction Details (Review & Revise)
               </h2>
- 
+
               {/* CEO sees only sanction amount, MD sees all fields */}
               {role === "ceo" && (
                 <div className="space-y-4 mb-4">
@@ -546,7 +551,9 @@ const ApprovalScreen = () => {
                   ))}
                 </div>
               )}
- 
+
+              {/*  MD sees all fields */}
+
               {role === "md" && (
                 <div className="space-y-4 mb-4">
                   <p className="text-sm text-gray-600 mb-2">
@@ -573,22 +580,24 @@ const ApprovalScreen = () => {
                             Sanction Amount (₹)
                           </label>
                           <input
-  type="number"
-  value={ps.sanctionAmount || ""}
-  onFocus={(e) => {
-    if (e.target.value === "0") e.target.value = "";
-  }}
-  onWheel={(e) => e.target.blur()}
-  onChange={(e) => {
-    const updated = [...partnerSanctions];
-    updated[index].sanctionAmount =
-      e.target.value === "" ? "" : parseFloat(e.target.value);
-    setPartnerSanctions(updated);
-  }}
-  className="input-field text-sm"
-  readOnly={isReadOnly}
-/>
- 
+                            type="number"
+                            value={ps.sanctionAmount || ""}
+                            onFocus={(e) => {
+                              if (e.target.value === "0") e.target.value = "";
+                            }}
+                            onWheel={(e) => e.target.blur()}
+                            onChange={(e) => {
+                              const updated = [...partnerSanctions];
+                              updated[index].sanctionAmount =
+                                e.target.value === ""
+                                  ? ""
+                                  : parseFloat(e.target.value);
+                              setPartnerSanctions(updated);
+                            }}
+                            className="input-field text-sm"
+                            readOnly={isReadOnly}
+                          />
+
                           {ps.sanctionAmount && (
                             <p className="mt-1 text-sm text-red-700 font-semibold">
                               ₹ {formatINR(ps.sanctionAmount)}
@@ -620,7 +629,7 @@ const ApprovalScreen = () => {
                         </div>
                         <div>
                           <label className="block text-xs text-gray-500 mb-1">
-                            ROI (%)
+                            ROI (%) (yearly)
                           </label>
                           <input
                             type="number"
@@ -644,7 +653,7 @@ const ApprovalScreen = () => {
                       <div className="grid grid-cols-3 gap-3 mt-3">
                         <div>
                           <label className="block text-xs text-gray-500 mb-1">
-                            Penal Charges (%)
+                            Penal Charges (%) (yearly)
                           </label>
                           <input
                             type="number"
@@ -705,7 +714,7 @@ const ApprovalScreen = () => {
                   ))}
                 </div>
               )}
- 
+
               {/* RM sees read-only view */}
               {role === "relationship_manager" && (
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
@@ -748,7 +757,7 @@ const ApprovalScreen = () => {
               )}
             </div>
           )}
- 
+
           <div className="card">
             <h2 className="text-xl font-semibold text-gray-900 mb-4">
               Documents for Review
@@ -812,7 +821,7 @@ const ApprovalScreen = () => {
                         </button>
                       </div>
                     </div>
- 
+
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mt-2">
                       <div>
                         <p className="text-[10px] text-gray-400 uppercase font-bold">
@@ -851,7 +860,7 @@ const ApprovalScreen = () => {
               </p>
             )}
           </div>
- 
+
           <div className="card">
             <h2 className="text-xl font-semibold text-gray-900 mb-4">
               Approval Remarks
@@ -869,12 +878,12 @@ const ApprovalScreen = () => {
             />
           </div>
         </div>
- 
+
         <div className="space-y-6">
           <div className="card">
             <ApprovalTimeline approvals={formattedApprovals} />
           </div>
- 
+
           <div className="card">
             {!isReadOnly ? (
               <div className="space-y-3">
@@ -930,7 +939,5 @@ const ApprovalScreen = () => {
     </div>
   );
 };
- 
+
 export default ApprovalScreen;
- 
- 

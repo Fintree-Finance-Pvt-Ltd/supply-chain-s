@@ -473,17 +473,41 @@ const CreditCaseDetail = () => {
     }
   }
  
-  const handleVerifyDocument = async (docId, status) => {
-    const remark = docRemarks[docId] || ''
-    try {
-      await workflowService.verifyDocument(docId, status, remark)
-      toast.success('Document status updated')
-      dispatch(fetchCaseById(id))
-    } catch (error) {
-      toast.error('Verification failed: ' + (error.response?.data?.message || error.message))
-    }
-  }
+  // const handleVerifyDocument = async (docId, status) => {
+  //   const remark = docRemarks[docId] || ''
+  //   try {
+  //     await workflowService.verifyDocument(docId, status, remark)
+  //     toast.success('Document status updated')
+  //     dispatch(fetchCaseById(id))
+  //   } catch (error) {
+  //     toast.error('Verification failed: ' + (error.response?.data?.message || error.message))
+  //   }
+  // }
  
+
+const handleVerifyDocument = async (docId, status) => {
+  const remark = docRemarks[docId] || '';
+
+  // ✅ Save current scroll position
+  const scrollY = window.scrollY;
+
+  try {
+    await workflowService.verifyDocument(docId, status, remark);
+
+    toast.success('Document status updated');
+
+    await dispatch(fetchCaseById(id)); // re-fetch data
+
+    //  Restore scroll position AFTER re-render
+    setTimeout(() => {
+      window.scrollTo({ top: scrollY, behavior: 'auto' });
+    }, 0);
+
+  } catch (error) {
+    toast.error('Verification failed: ' + (error.response?.data?.message || error.message));
+  }
+};
+
   const handleSaveSanction = async () => {
     if (readOnly) return;
     setIsSubmitting(true)
@@ -733,6 +757,7 @@ const formatINR = (num) => {
                       </div>
                       <div className="flex items-center space-x-2">
                         <button
+                        
                           onClick={() => handlePreviewClick(doc)}
                           className={`p-1 ${previewedDocs.has(doc.id) ? 'text-green-600' : 'text-gray-600'} hover:bg-primary-50 rounded flex items-center space-x-1`}
                           title="Preview"
