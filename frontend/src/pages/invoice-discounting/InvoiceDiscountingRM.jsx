@@ -37,6 +37,7 @@ export default function InvoiceDiscountingRM() {
     disbursementAmount: "",
     roiPercentage: "",
     penalCharges: "",
+    serviceFee: "",
   });
 
   useEffect(() => {
@@ -296,6 +297,7 @@ const handleViewCustomerInvoices = async (invoice) => {
           disbursementAmount: "",
           roiPercentage: "",
           penalCharges: "",
+          serviceFee: "",
         });
         setSelectedCustomer(null);
         setSelectedLAN("");
@@ -324,6 +326,7 @@ const handleViewCustomerInvoices = async (invoice) => {
           disbursementAmount: "",
           roiPercentage: "",
           penalCharges: "",
+          serviceFee: "",
         });
         setSelectedCustomer(null);
         setSelectedLAN("");
@@ -982,6 +985,38 @@ const handleViewCustomerInvoices = async (invoice) => {
               }}
             />
           </div>
+
+          <div>
+            <label
+              style={{
+                display: "flex",
+                alignItems: "center",
+                marginBottom: "8px",
+                fontWeight: "600",
+                fontSize: "14px",
+                color: "#202b3a"
+              }}
+            >
+              <FiDollarSign style={{ marginRight: "8px", color: "#6366f1" }} />
+             Service Fee
+            </label>
+            <input
+              type="number"
+              name="serviceFee"
+              value={formData.serviceFee}
+              onWheel={(e) => e.target.blur()}
+              onChange={handleInputChange}
+              placeholder="e.g. 2.0"
+              step="0.01"
+              style={{
+                width: "100%",
+                padding: "12px",
+                border: "1px solid #e2e8f0",
+                borderRadius: "10px",
+                fontSize: "14px",
+              }}
+            />
+          </div>
           <div style={{ gridColumn: "1 / -1", marginTop: "24px" }}>
             <label style={{ fontWeight: "600", fontSize: "14px", color: "#334155", display: "block", marginBottom: "12px" }}>
               Upload Invoice Documents
@@ -1167,6 +1202,8 @@ const handleViewCustomerInvoices = async (invoice) => {
                   </td>
                   <td style={{ padding: "16px 24px", textAlign: "right", fontSize: "14px" }}>{invoice.roiPercentage ?? "-"}</td>
                   <td style={{ padding: "16px 24px", textAlign: "right", fontSize: "14px" }}>{invoice.penalCharges ?? "-"}</td>
+                  <td style={{ padding: "16px 24px", textAlign: "right", fontSize: "14px" }}>{invoice.serviceFee ?? "-"}</td>
+
                   <td style={{ padding: "16px 24px", textAlign: "center" }}>
                     {getStatusBadge(invoice.status)}
                   </td>
@@ -1306,6 +1343,7 @@ const handleViewCustomerInvoices = async (invoice) => {
     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "20px" }}>
         <div style={{ fontSize: "13px" }}><span style={{ color: "#94a3b8" }}>ROI:</span> <span style={{ fontWeight: "600" }}>{inv.roiPercentage}%</span></div>
         <div style={{ fontSize: "13px" }}><span style={{ color: "#94a3b8" }}>Penal:</span> <span style={{ fontWeight: "600" }}>{inv.penalCharges}%</span></div>
+        <div style={{ fontSize: "13px" }}><span style={{ color: "#94a3b8" }}>Service Fee:</span> <span style={{ fontWeight: "600" }}>{inv.serviceFee}</span></div>
     </div>
 
     {/* DOCUMENTS */}

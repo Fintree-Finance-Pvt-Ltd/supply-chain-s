@@ -31,6 +31,10 @@ export class Invoice {
   @Column({ type: 'varchar', length: 50, unique: true })
   invoiceNumber: string;
 
+  @Column({ type: "decimal", precision: 10, scale: 2, nullable: true })
+serviceFee: number;
+  
+
   @Column({ type: 'date' })
   invoiceDate: Date;
 
@@ -167,4 +171,5 @@ export class Invoice {
 
   @OneToMany(() => CaseStatusHistory, history => history.invoice)
   statusHistory: CaseStatusHistory[];
+
 }

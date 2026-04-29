@@ -129,7 +129,7 @@ export const DOCUMENT_TYPES = {
 
   // Other Business Documents
   DEBTOR_AGEING: 'debtor_ageing',
-  Civil_Consent: 'civil_consent',
+  Cibil_Consent: 'cibil_consent',
   OBLIGATION_SHEET: 'obligation_sheet',
 
   // Additional Photos & Bank docs

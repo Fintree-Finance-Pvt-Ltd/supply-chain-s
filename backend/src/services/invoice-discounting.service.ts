@@ -56,6 +56,7 @@ interface InvoiceDisbursementPayload {
   penal_charges: number;
   total_roi_amount: number;
   emi_amount: number;
+    service_fee: number; 
 }
 
 export class InvoiceDiscountingService {
@@ -427,6 +428,7 @@ export class InvoiceDiscountingService {
       disbursementAmount: number;
       roiPercentage?: number;
       penalCharges?: number;
+        serviceFee?: number;
     },
     rmId: number,
   ) {
@@ -460,10 +462,13 @@ export class InvoiceDiscountingService {
 
     const invoice = this.invoiceRepository.create({
       ...data,
+      
       invoiceDate: new Date(data.invoiceDate),
       createdByUserId: rmId,
       status: "DRAFT",
     });
+
+
     const savedInvoice = await this.invoiceRepository.save(invoice);
 
     const workflow = this.workflowRepository.create({
@@ -499,6 +504,7 @@ export class InvoiceDiscountingService {
       disbursementAmount?: number;
       roiPercentage?: number;
       penalCharges?: number;
+        serviceFee?: number; 
     },
     userId: number,
   ) {
@@ -1645,6 +1651,10 @@ export class InvoiceDiscountingService {
       penal_charges: penalCharges,
       total_roi_amount: totalRoiAmount,
       emi_amount: emiAmount,
+   service_fee:
+    invoice.serviceFee !== null && invoice.serviceFee !== undefined
+      ? Number(invoice.serviceFee)
+      : 0, // Added THIS
     };
 
     return { valid: true, payload, errors: [] };

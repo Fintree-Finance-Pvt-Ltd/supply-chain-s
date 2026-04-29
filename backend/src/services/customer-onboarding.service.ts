@@ -168,6 +168,7 @@ export class CustomerOnboardingService {
       "interestRate",
       "penalCharges",
       "processingFees",
+      "legalCharges",
       "conditions",
     ];
 
@@ -614,6 +615,8 @@ if (approved) {
               sanctionAmount: ps.sanctionAmount,
               tenure: ps.tenure || 0,
               interestRate: ps.interestRate || 0,
+              legalCharges: ps.legalCharges || 0,
+
               conditions: ps.conditions || null,
               penalCharges: ps.penalCharges || 0,
               processingFees: ps.processingFees || 0,
@@ -1160,6 +1163,7 @@ await this.customerRepository.save(customer);
             interestRate: partnerSanction.interestRate || 0,
             penalCharges: partnerSanction.penalCharges || 0,
             processingFees: partnerSanction.processingFees || 0,
+            legalCharges: partnerSanction.legalCharges || 0,
             conditions: partnerSanction.conditions || "",
             status: "approved",
             creditOfficerId: rmId,
@@ -1175,6 +1179,7 @@ await this.customerRepository.save(customer);
             interestRate: partnerSanction.interestRate || 0,
             penalCharges: partnerSanction.penalCharges || 0,
             processingFees: partnerSanction.processingFees || 0,
+            legalCharges: partnerSanction.legalCharges || 0,
             conditions: partnerSanction.conditions || "",
             status: "approved",
           });
@@ -1196,6 +1201,7 @@ await this.customerRepository.save(customer);
             interestRate: partnerSanction.interestRate,
             penalCharges: partnerSanction.penalCharges || 0,
             processingFees: partnerSanction.processingFees || 0,
+              legalCharges: partnerSanction.legalCharges || 0,
             conditions: partnerSanction.conditions || "",
           }),
         );
@@ -1433,6 +1439,7 @@ await this.customerRepository.save(customer);
               interestRate: partnerSanction.interestRate || 0,
               penalCharges: partnerSanction.penalCharges || 0,
               processingFees: partnerSanction.processingFees || 0,
+              legalCharges: partnerSanction.legalCharges || 0,
               conditions: partnerSanction.conditions || "",
               status: "approved",
             });
@@ -1445,6 +1452,7 @@ await this.customerRepository.save(customer);
               interestRate: partnerSanction.interestRate || 0,
               penalCharges: partnerSanction.penalCharges || 0,
               processingFees: partnerSanction.processingFees || 0,
+              legalCharges: partnerSanction.legalCharges || 0,
               conditions: partnerSanction.conditions || "",
               status: "approved",
               creditOfficerId: userId,

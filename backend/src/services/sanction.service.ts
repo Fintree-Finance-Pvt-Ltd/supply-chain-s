@@ -104,6 +104,7 @@ export class SanctionService {
       interestRate?: number;
       penalCharges?: number;
       processingFees?: number;
+      legalCharges?: number;
       conditions?: string;
       partnerSanctions?: Array<{
         partner: string;
@@ -112,6 +113,7 @@ export class SanctionService {
         interestRate?: number;
         penalCharges?: number;
         processingFees?: number;
+        legalCharges?: number;
         conditions?: string;
       }>;
     },
@@ -198,6 +200,8 @@ export class SanctionService {
         // Handle multi-partner sanctions
         if (sanctionData.partnerSanctions && sanctionData.partnerSanctions.length > 0) {
           for (const ps of sanctionData.partnerSanctions) {
+
+             
             // For new sanctions (CREDIT_L1), validate partner is active
             // For existing sanctions (CREDIT_L2, CEO, MD), find partner without checking status
             let partner: Partner;
@@ -238,21 +242,41 @@ export class SanctionService {
             }
 
             // Create/update credit sanction (use first partner for backward compatibility)
-            if (ps === sanctionData.partnerSanctions[0]) {
-              await this.upsertCreditSanction(
-                sanctionRepo,
-                customerId,
-                userId,
-                ps.sanctionAmount,
-                ps.tenure,
-                ps.interestRate,
-                ps.penalCharges,
-                ps.processingFees,
-                ps.conditions,
-                role === 'MD' ? 'approved' : 'pending',
-                ps.partner // Store partner code in credit_sanctions table
-              );
-            }
+            // if (ps === sanctionData.partnerSanctions[0]) {
+            //   console.log("UPSERT INPUT legalCharges:", ps.legalCharges);
+            //   await this.upsertCreditSanction(
+            //     sanctionRepo,
+            //     customerId,
+            //     userId,
+            //     ps.sanctionAmount,
+            //     ps.tenure,
+            //     ps.interestRate,
+            //     ps.penalCharges,
+            //     ps.processingFees,
+            //     ps.legalCharges,
+            //     ps.conditions,
+            //     role === 'MD' ? 'approved' : 'pending',
+            //     ps.partner // Store partner code in credit_sanctions table
+            //   );
+            // }
+
+
+            console.log("UPSERT INPUT legalCharges:", ps.legalCharges);
+
+await this.upsertCreditSanction(
+  sanctionRepo,
+  customerId,
+  userId,
+  ps.sanctionAmount,
+  ps.tenure,
+  ps.interestRate,
+  ps.penalCharges,
+  ps.processingFees,
+  ps.legalCharges,  
+  ps.conditions,
+  role === 'MD' ? 'approved' : 'pending',
+  ps.partner
+);
 
             // Insert into sanction_limit_history (append-only via audit service)
             await sanctionHistoryRepo.save(sanctionHistoryRepo.create({
@@ -262,6 +286,7 @@ export class SanctionService {
               interestRate: ps.interestRate || 0,
               penalCharges: ps.penalCharges || 0,
               processingFees: ps.processingFees || 0,
+              legalCharges: ps.legalCharges || 0, // ✅ ADD THIS
               conditions: ps.conditions || undefined,
               remarks: remarks || undefined,
               changedByRole: role,
@@ -320,6 +345,7 @@ export class SanctionService {
             sanctionData.interestRate,
             sanctionData.penalCharges,
             sanctionData.processingFees,
+            sanctionData.legalCharges, // ✅ ADD THIS
             sanctionData.conditions,
             role === 'MD' ? 'approved' : 'pending',
             lender
@@ -333,6 +359,7 @@ export class SanctionService {
             interestRate: sanctionData.interestRate || 0,
             penalCharges: sanctionData.penalCharges || 0,
             processingFees: sanctionData.processingFees || 0,
+            legalCharges: sanctionData.legalCharges || 0,
             conditions: sanctionData.conditions || undefined,
             remarks: remarks || undefined,
             changedByRole: role,
@@ -414,37 +441,45 @@ export class SanctionService {
     interestRate?: number,
     penalCharges?: number,
     processingFees?: number,
+      legalCharges?: number,
     conditions?: string,
     status?: string,
     partner?: string // Partner code to store in credit_sanctions table
   ): Promise<void> {
-    const existing = await repo.findOne({ where: { customerId } });
-    if (existing) {
-      await repo.update(existing.id, {
-        sanctionAmount,
-        tenure: tenure || 0,
-        interestRate: interestRate || 0,
-        penalCharges: penalCharges || 0,
-        processingFees: processingFees || 0,
-        conditions: conditions || null,
-        creditOfficerId,
-        status: status || 'pending',
-        partner: partner || existing.partner, // Preserve existing partner if not provided
-      });
-    } else {
-      await repo.save(repo.create({
-        customerId,
-        creditOfficerId,
-        sanctionAmount,
-        tenure: tenure || 0,
-        interestRate: interestRate || 0,
-        penalCharges: penalCharges || 0,
-        processingFees: processingFees || 0,
-        conditions: conditions || null,
-        status: status || 'pending',
-        partner: partner || null,
-      }));
-    }
+
+
+    const existing = await repo.findOne({
+  where: { customerId, partner }
+});
+
+if (existing) {
+  await repo.update(existing.id, {
+  sanctionAmount: Number(sanctionAmount) || 0,
+  tenure: Number(tenure) || 0,
+  interestRate: Number(interestRate) || 0,
+  penalCharges: Number(penalCharges) || 0,
+  processingFees: Number(processingFees) || 0,
+  legalCharges: Number(legalCharges) || 0,   //  MUST ADD
+  conditions: conditions || null,
+    creditOfficerId,
+    status: status || 'pending',
+    partner,
+  });
+} else {
+  await repo.save(repo.create({
+    customerId,
+    creditOfficerId,
+    sanctionAmount,
+    tenure: tenure || 0,
+    interestRate: interestRate || 0,
+    penalCharges: penalCharges || 0,
+    processingFees: processingFees || 0,
+    legalCharges: Number(legalCharges) || 0, 
+    conditions: conditions || null,
+    status: status || 'pending',
+    partner,
+  }));
+}
   }
 
   /**

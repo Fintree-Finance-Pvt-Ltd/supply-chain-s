@@ -16,7 +16,7 @@ const COMMON_FINANCIALS = [
     { key: 'bank_statement', label: 'Bank Statement (Last 12 months)', mandatory: true, documentType: 'bank_statement', supportMultiple: true },
     { key: 'obligation_sheet', label: 'Obligation Sheet', mandatory: false, documentType: 'obligation_sheet' },
     { key: 'debtor_ageing', label: 'Debtor Ageing', mandatory: true, documentType: 'debtor_ageing' },
-    { key: 'civil_consent', label: 'Civil Consent', mandatory: true, documentType: 'civil_consent' },
+    { key: 'cibil_consent', label: 'Cibil Consent', mandatory: true, documentType: 'cibil_consent' },
 ]
 
 // Proprietorship Document Checklist

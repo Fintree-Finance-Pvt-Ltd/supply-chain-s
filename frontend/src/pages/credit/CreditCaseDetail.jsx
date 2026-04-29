@@ -660,8 +660,8 @@ const handleVerifyDocument = async (docId, status) => {
     )
   }
  
-  const allDocsPreviewed = currentCase.documents?.every(doc => previewedDocs.has(doc.id)) || true
- 
+  // const allDocsPreviewed = currentCase.documents?.every(doc => previewedDocs.has(doc.id)) || true  // Default to true if no documents to avoid blocking actions when there are no docs
+   const allDocsPreviewed = currentCase.documents?.every(doc => previewedDocs.has(doc.id)) || true
 const numberToWords = (num) => {
   if (!num) return "";
  
