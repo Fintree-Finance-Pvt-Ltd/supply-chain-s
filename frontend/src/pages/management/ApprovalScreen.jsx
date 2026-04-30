@@ -28,6 +28,7 @@
       penalCharges: "",
       processingFees: "",
       legalCharges: "", 
+      serviceFee: "",
       conditions: "",
     });
     const [comments, setComments] = useState("");
@@ -102,6 +103,7 @@
 
           // Fetch customer details and sanctions separately (like credit L2)
           const custResponse = await customerService.getCustomerById(id);
+          console.log("Customer response:", custResponse);
           setCustomer(custResponse.data);
 
           // Fetch sanctions using the dedicated API (like credit L2 for non-CREDIT_L1 roles)
@@ -131,6 +133,7 @@
                     : "",
                 processingFees: item.processingFees || 0,
                 legalCharges: item.legalCharges || 0,
+                serviceFee: item.serviceFee || 0,
                 conditions: item.conditions || "",
                 hasData: true,
               };
@@ -148,6 +151,7 @@
               penalCharges: partnerMap[p]?.penalCharges || 0,
               processingFees: partnerMap[p]?.processingFees || 0,
               legalCharges: partnerMap[p]?.legalCharges || 0,
+              serviceFee: partnerMap[p]?.serviceFee || 0,
               conditions: partnerMap[p]?.conditions || "",
               hasData: true,
             }));
@@ -251,6 +255,7 @@
               partner: ps.partner,
               sanctionAmount: ps.sanctionAmount || 0,
                 legalCharges: ps.legalCharges || 0,
+                serviceFee: ps.serviceFee || 0,
               // CEO can only modify sanctionAmount
             })),
           };
@@ -274,6 +279,7 @@
                   : 0,
               processingFees: ps.processingFees || 0,
               legalCharges: ps.legalCharges || 0, 
+              serviceFee: ps.serviceFee || 0,
               conditions: ps.conditions || "",
             })),
           };
@@ -720,8 +726,9 @@
 
                           <div>
                             <label className="block text-xs text-gray-500 mb-1">
-                              Legal Charges (₹)
+                              Legal Charges (%)
                             </label>
+
                             <input
                               type="number"
                               step="0.01"
@@ -743,6 +750,39 @@
                               className="input-field text-sm"
                               readOnly={isReadOnly}
                             />
+
+
+                  
+                          </div>
+                          <div>
+                            <label className="block text-xs text-gray-500 mb-1">
+                              Service Fee Charges (%)
+                            </label>
+
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={
+                                ps.serviceFee === 0
+                                  ? ""
+                                  : (ps.serviceFee ?? "")
+                              }
+                              placeholder="Service Fee Charges"
+                              onWheel={(e) => e.target.blur()}
+                              onChange={(e) => {
+                                const updated = [...partnerSanctions];
+                                updated[index].serviceFee =
+                                  e.target.value === ""
+                                    ? ""
+                                    : parseFloat(e.target.value);
+                                setPartnerSanctions(updated);
+                              }}
+                              className="input-field text-sm"
+                              readOnly={isReadOnly}
+                            />
+
+
+                  
                           </div>
                           <div>
                             <label className="block text-xs text-gray-500 mb-1">

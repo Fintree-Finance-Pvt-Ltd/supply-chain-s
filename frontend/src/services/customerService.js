@@ -17,7 +17,10 @@ export const customerService = {
 
     getCustomerById: async (id) => {
         try {
-            const response = await api.get(API_ENDPOINTS.CUSTOMER_BY_ID(id))
+            const response = await api.get(API_ENDPOINTS.CUSTOMER_BY_ID(id),
+        {
+                timeout: 180000 // 3 minutes = 180,000 ms
+            })
             return {
                 data: response.data.success ? response.data.data : null
             }
