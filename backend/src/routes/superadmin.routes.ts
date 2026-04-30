@@ -662,52 +662,73 @@ router.get('/user-performance/:userId', roleMiddleware([ROLES.SUPERADMIN]), asyn
  * GET /api/superadmin/cases
  * Get all cases across all users for SUPERADMIN view
  * Uses workflow data similar to user dashboards
- * Supports filtering by stage (credit_l1, credit_l2, ops, rm)
+ * Supports filtering by stage, status, user, and date range
+ * 
+ * UPDATED: Fixed visibility and filter issues
+ * - All fields always present in response
+ * - assigned_to always visible
+ * - completed_at always visible  
+ * - status field appears correctly
+ * - Filters work correctly
  */
 router.get('/cases', roleMiddleware([ROLES.SUPERADMIN]), async (req: Request, res: Response) => {
   try {
-    const { stage, limit, page } = req.query;
+    const { 
+      stage, 
+      status, 
+      userId, 
+      startDate, 
+      endDate,
+      limit, 
+      page 
+    } = req.query;
 
-    const customerService = new CustomerOnboardingService();
-    let allCases: any[] = [];
-
-    // Map stage to role for fetching workflow data
-    const stageToRole: Record<string, string> = {
-      'credit_l1': 'CREDIT_TEAM_L1',
-      'credit_l2': 'CREDIT_TEAM_L2',
-      'ps_l1': 'OPERATIONS_HEAD',
-      'ps_l2': 'OPERATIONS_HEAD',
-      'rm': 'RELATIONSHIP_MANAGER',
+    // Use the userPerformanceService which has proper filtering logic
+    const filters = {
+      stage: stage as string || undefined,
+      status: status as string || undefined,
+      userId: userId ? parseInt(userId as string) : undefined,
+      startDate: startDate ? new Date(startDate as string) : undefined,
+      endDate: endDate ? new Date(endDate as string) : undefined,
+      limit: limit ? parseInt(limit as string) : 50,
+      offset: page ? (parseInt(page as string) - 1) * (limit ? parseInt(limit as string) : 50) : 0,
     };
 
-    const stageFilter = stage as string;
+    const result = await userPerformanceService.getAllCasesByUsers(filters);
 
-    if (stageFilter && stageToRole[stageFilter]) {
-      // Get cases for specific role
-      const roleName = stageToRole[stageFilter];
-      const dashboard = await customerService.getCreditTeamPending(roleName);
-      allCases = [...(dashboard.pending || []), ...(dashboard.handled || [])];
-    } else {
-      // Get ALL cases from all roles
-      const roles = ['CREDIT_TEAM_L1', 'CREDIT_TEAM_L2', 'OPERATIONS_HEAD', 'RELATIONSHIP_MANAGER'];
-      for (const role of roles) {
-        const dashboard = await customerService.getCreditTeamPending(role);
-        allCases = [...allCases, ...(dashboard.pending || []), ...(dashboard.handled || [])];
-      }
-    }
+    // Transform response to ensure all fields are always present (SuperAdmin visibility fix)
+    const casesWithVisibility = result.cases.map(c => ({
+      ...c,
+      // Ensure assigned_to is always visible
+      assignedTo: c.userId || null,
+      assignedToName: c.userName || null,
+      assignedToEmail: c.userEmail || null,
+      // Ensure created_at is always visible
+      createdAt: c.createdAt || null,
+      // Ensure completed_at is always visible
+      completedAt: c.completedAt || null,
+      // Ensure status is always visible
+      status: c.status || 'pending',
+      // Ensure role_stage_time is calculated correctly
+      roleStageTime: c.totalCompletionTimeMinutes || null,
+      l1TimeMinutes: c.l1ProcessingTimeMinutes || null,
+      l2TimeMinutes: c.l2ProcessingTimeMinutes || null,
+    }));
 
-    // Remove duplicates
-    allCases = Array.from(new Map(allCases.map(item => [item.id, item])).values());
-
-    // Apply pagination
-    const limitNum = limit ? parseInt(limit as string) : 10;
+    // Calculate total pages
+    const limitNum = limit ? parseInt(limit as string) : 50;
+    const totalPages = Math.ceil(result.total / limitNum);
     const pageNum = page ? parseInt(page as string) : 1;
-    const offsetNum = (pageNum - 1) * limitNum;
-    const total = allCases.length;
-    const totalPages = Math.ceil(total / limitNum);
-    const paginatedCases = allCases.slice(offsetNum, offsetNum + limitNum);
 
-    res.json({ success: true, data: { cases: paginatedCases, total, page: pageNum, totalPages } });
+    res.json({ 
+      success: true, 
+      data: { 
+        cases: casesWithVisibility, 
+        total: result.total, 
+        page: pageNum, 
+        totalPages 
+      } 
+    });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
   }

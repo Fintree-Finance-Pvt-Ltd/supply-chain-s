@@ -3,8 +3,49 @@ import { TaskTimeTracking } from '../entities/TaskTimeTracking';
 import { Repository } from 'typeorm';
 
 /**
+ * Roles that should NOT have timing calculated
+ * Admin and SuperAdmin are excluded from time tracking
+ */
+const EXCLUDED_ROLES = ['admin', 'superadmin'];
+
+/**
+ * Operational roles that ARE included in time tracking
+ */
+const OPERATIONAL_ROLES = [
+  'relationship_manager',
+  'credit_team_l1',
+  'credit_team_l2',
+  'credit_head',
+  'operations_team_l1',
+  'operations_team_l2',
+  'operations_head',
+  'ceo',
+  'md',
+];
+
+/**
+ * Check if a role should have timing calculated
+ * @param roleName - The role name to check
+ * @returns true if timing should be calculated, false otherwise
+ */
+function shouldCalculateTiming(roleName: string): boolean {
+  const normalizedRole = roleName.toLowerCase();
+  // Don't calculate timing for Admin or SuperAdmin
+  if (EXCLUDED_ROLES.includes(normalizedRole)) {
+    return false;
+  }
+  // Calculate timing for all operational roles
+  return OPERATIONAL_ROLES.includes(normalizedRole) || normalizedRole.includes('operations') || normalizedRole.includes('credit');
+}
+
+/**
  * Task Time Tracking Service
  * Tracks and manages task timing metrics
+ * 
+ * Updated to:
+ * - Calculate timing for all operational roles (except Admin and SuperAdmin)
+ * - Add role_stage_time calculation for workflow transitions
+ * - Ensure visibility of assigned_to, created_at, completed_at for all roles
  */
 export class TaskTimeTrackingService {
   private taskTimeTrackingRepository: Repository<TaskTimeTracking>;

@@ -24,6 +24,38 @@ const SCORE_WEIGHTS = {
   REWARD_POINTS: 25,      // Weight for reward points earned
 };
 
+// Valid roles for performance tracking (ops, credit, rm)
+// Updated: Include all operational roles EXCEPT Admin and SuperAdmin
+const VALID_ROLES = [
+  'operations_team_l1',
+  'operations_team_l2', 
+  'operations_head',
+  'credit_team_l1',
+  'credit_team_l2',
+  'credit_head',
+  'relationship_manager',
+  'ceo',
+  'md',
+];
+
+// Roles EXCLUDED from time tracking
+const EXCLUDED_ROLES = ['admin', 'superadmin'];
+
+/**
+ * Check if timing should be calculated for a role
+ * @param roleName - The role name to check
+ * @returns true if timing should be calculated
+ */
+function shouldCalculateTimingForRole(roleName: string): boolean {
+  const normalizedRole = roleName.toLowerCase();
+  // Don't calculate timing for Admin or SuperAdmin
+  if (EXCLUDED_ROLES.includes(normalizedRole)) {
+    return false;
+  }
+  // Calculate timing for all operational roles
+  return true;
+}
+
 export interface PerformanceFilters {
   startDate?: Date;
   endDate?: Date;
@@ -83,7 +115,6 @@ export class UserPerformanceService {
   private userRoleRepository: Repository<UserRole>;
   private roleRepository: Repository<Role>;
   private caseWorkflowRepository: Repository<CaseWorkflow>;
-  private customerRepository: Repository<Customer>;
 
   constructor() {
     this.taskTimeTrackingRepository = AppDataSource.getRepository(TaskTimeTracking);
@@ -92,38 +123,57 @@ export class UserPerformanceService {
     this.userRoleRepository = AppDataSource.getRepository(UserRole);
     this.roleRepository = AppDataSource.getRepository(Role);
     this.caseWorkflowRepository = AppDataSource.getRepository(CaseWorkflow);
-    this.customerRepository = AppDataSource.getRepository(Customer);
   }
 
   /**
    * Get overall performance summary for superadmin dashboard
    */
-  async getOverallSummary(): Promise<OverallPerformanceSummary> {
-    // Get unique users with task tracking
+   async getOverallSummary(): Promise<OverallPerformanceSummary> {
+    // Get unique users with task tracking and valid roles
     const userStats = await this.taskTimeTrackingRepository
       .createQueryBuilder('tracking')
+      .innerJoin('tracking.user', 'user')
+      .innerJoin('user.userRoles', 'ur')
+      .innerJoin('ur.role', 'role')
+      .where('role.name IN (:...validRoles)', { validRoles: VALID_ROLES })
+      .andWhere('ur.isActive = :isActive', { isActive: true })
       .select('COUNT(DISTINCT tracking.userId)', 'totalUsers')
       .getRawOne();
 
-    // Get total completed cases
+    // Get total completed cases (with valid roles)
     const completedStats = await this.taskTimeTrackingRepository
       .createQueryBuilder('tracking')
+      .innerJoin('tracking.user', 'user')
+      .innerJoin('user.userRoles', 'ur')
+      .innerJoin('ur.role', 'role')
+      .where('role.name IN (:...validRoles)', { validRoles: VALID_ROLES })
+      .andWhere('ur.isActive = :isActive', { isActive: true })
+      .andWhere('tracking.status = :status', { status: 'completed' })
       .select('COUNT(*)', 'totalCompleted')
-      .where('tracking.status = :status', { status: 'completed' })
       .getRawOne();
 
     // Get total rewards distributed
     const rewardStats = await this.rewardPointRepository
       .createQueryBuilder('reward')
+      .innerJoin('reward.user', 'user')
+      .innerJoin('user.userRoles', 'ur')
+      .innerJoin('ur.role', 'role')
+      .where('role.name IN (:...validRoles)', { validRoles: VALID_ROLES })
+      .andWhere('ur.isActive = :isActive', { isActive: true })
       .select('SUM(reward.points)', 'totalPoints')
       .getRawOne();
 
-    // Get average completion time
+    // Get average completion time (with valid roles)
     const avgTimeStats = await this.taskTimeTrackingRepository
       .createQueryBuilder('tracking')
-      .select('AVG(tracking.totalCompletionTimeMinutes)', 'avgTime')
-      .where('tracking.status = :status', { status: 'completed' })
+      .innerJoin('tracking.user', 'user')
+      .innerJoin('user.userRoles', 'ur')
+      .innerJoin('ur.role', 'role')
+      .where('role.name IN (:...validRoles)', { validRoles: VALID_ROLES })
+      .andWhere('ur.isActive = :isActive', { isActive: true })
+      .andWhere('tracking.status = :status', { status: 'completed' })
       .andWhere('tracking.totalCompletionTimeMinutes IS NOT NULL')
+      .select('AVG(tracking.totalCompletionTimeMinutes)', 'avgTime')
       .getRawOne();
 
     // Get top 5 performers
@@ -152,13 +202,17 @@ export class UserPerformanceService {
   }> {
     const { startDate, endDate, stage, userId, limit = 20, offset = 0, sortBy = 'efficiencyScore', sortOrder = 'DESC' } = filters;
 
-    // Build base query
-    const baseQuery = this.taskTimeTrackingRepository
-      .createQueryBuilder('tracking')
-      .leftJoin('tracking.user', 'user')
-      .select('tracking.userId', 'userId')
-      .addSelect('user.name', 'userName')
-      .addSelect('user.email', 'email');
+     // Build base query - only include users with valid roles
+     const baseQuery = this.taskTimeTrackingRepository
+       .createQueryBuilder('tracking')
+       .innerJoin('tracking.user', 'user')
+       .innerJoin('user.userRoles', 'ur')
+       .innerJoin('ur.role', 'role')
+       .where('role.name IN (:...validRoles)', { validRoles: VALID_ROLES })
+       .andWhere('ur.isActive = :isActive', { isActive: true })
+       .select('tracking.userId', 'userId')
+       .addSelect('user.name', 'userName')
+       .addSelect('user.email', 'email');
 
     // Apply date filters
     if (startDate) {
@@ -174,28 +228,28 @@ export class UserPerformanceService {
       baseQuery.andWhere('tracking.userId = :userId', { userId });
     }
 
-    // Get total count of unique users
-    const countQuery = baseQuery.clone();
-    const totalResult = await countQuery
-      .select('COUNT(DISTINCT tracking.userId)', 'total')
-      .getRawOne();
-    const total = parseInt(totalResult?.total) || 0;
+     // Get total count of unique users
+     const countQuery = baseQuery.clone();
+     const totalResult = await countQuery
+       .select('COUNT(DISTINCT tracking.userId)', 'total')
+       .getRawOne();
+     const total = parseInt(totalResult?.total) || 0;
 
-    // Get aggregated stats per user
-    const validSortColumns = ['completedCases', 'totalRewards', 'avgCompletionTime', 'efficiencyScore'];
-    const sortColumn = validSortColumns.includes(sortBy) ? sortBy : 'efficiencyScore';
+     // Get aggregated stats per user
+     const validSortColumns = ['completedCases', 'totalRewards', 'avgCompletionTime', 'efficiencyScore'];
+     const sortColumn = validSortColumns.includes(sortBy) ? sortBy : 'efficiencyScore';
 
-    const userStats = await baseQuery
-      .addSelect('COUNT(*)', 'totalCases')
-      .addSelect('SUM(CASE WHEN tracking.status = \'completed\' THEN 1 ELSE 0 END)', 'completedCases')
-      .addSelect('SUM(CASE WHEN tracking.status = \'pending\' THEN 1 ELSE 0 END)', 'pendingCases')
-      .addSelect('SUM(CASE WHEN tracking.status = \'in_progress\' THEN 1 ELSE 0 END)', 'inProgressCases')
-      .addSelect('SUM(CASE WHEN tracking.status = \'rejected\' THEN 1 ELSE 0 END)', 'rejectedCases')
-      .addSelect('AVG(tracking.totalCompletionTimeMinutes)', 'avgCompletionTime')
-      .addSelect('SUM(tracking.totalCompletionTimeMinutes)', 'totalCompletionTime')
-      .groupBy('tracking.userId')
-      .addGroupBy('user.name')
-      .addGroupBy('user.email')
+const userStats = await baseQuery
+       .addSelect('COUNT(*)', 'totalCases')
+       .addSelect('SUM(CASE WHEN tracking.status = \'completed\' THEN 1 ELSE 0 END)', 'completedCases')
+       .addSelect('SUM(CASE WHEN tracking.status = \'pending\' THEN 1 ELSE 0 END)', 'pendingCases')
+       .addSelect('SUM(CASE WHEN tracking.status = \'in_progress\' THEN 1 ELSE 0 END)', 'inProgressCases')
+       .addSelect('SUM(CASE WHEN tracking.status = \'rejected\' THEN 1 ELSE 0 END)', 'rejectedCases')
+       .addSelect('AVG(tracking.totalCompletionTimeMinutes)', 'avgCompletionTime')
+       .addSelect('SUM(tracking.totalCompletionTimeMinutes)', 'totalCompletionTime')
+       .groupBy('tracking.userId')
+       .addGroupBy('user.name')
+       .addGroupBy('user.email')
       .orderBy(sortColumn === 'efficiencyScore' ? 'completedCases' : sortColumn, sortOrder)
       .limit(limit)
       .offset(offset)
@@ -404,7 +458,7 @@ export class UserPerformanceService {
 
     // Get rewards for these tasks
     const taskIds = tasks.map(t => t.taskId);
-    let rewardMap: Record<string, number> = {};
+let rewardMap: Record<string, number> = {};
     
     if (taskIds.length > 0) {
       const rewards = await this.rewardPointRepository
@@ -468,7 +522,7 @@ export class UserPerformanceService {
     }));
   }
 
-  /**
+/**
    * Get all cases across all users for SUPERADMIN view
    * Supports filtering by status, stage/bucket, and date range
    * Combines TaskTimeTracking AND CaseWorkflow data for complete case view
@@ -485,7 +539,7 @@ export class UserPerformanceService {
     cases: Array<{
       id: number;
       taskId: string;
-      taskType: string;
+      companyName: string;
       bucket: string | null;
       status: string;
       isOverdue: boolean;
@@ -537,7 +591,7 @@ export class UserPerformanceService {
         .addSelect('null', 'l2ProcessingTimeMinutes')
         .addSelect('workflow.createdAt', 'createdAt')
         .innerJoin('workflow.customer', 'customer')
-        .addSelect('customer.name', 'customerName')
+        .addSelect('customer.companyName', 'customerName')
         .where('workflow.workflowType = :type', { type: 'CUSTOMER_ONBOARDING' })
         .andWhere('workflow.currentStatus IN (:...statuses)', { statuses: workflowStatuses })
         .andWhere('workflow.isCompleted = :completed', { completed: false });
@@ -549,11 +603,11 @@ export class UserPerformanceService {
         workflowQuery.andWhere('workflow.createdAt <= :endDate', { endDate });
       }
 
-      const workflowCases = await workflowQuery.getRawMany();
+const workflowCases = await workflowQuery.getRawMany();
       allCases = workflowCases.map(c => ({
         id: parseInt(c.id),
         taskId: `CUST${String(c.id).padStart(6, '0')}`,
-        taskType: c.taskType,
+        companyName: c.customerName || 'Unknown',
         bucket: c.bucket,
         status: c.status,
         isOverdue: false,
@@ -570,7 +624,7 @@ export class UserPerformanceService {
       }));
     }
 
-    // Also get task tracking cases
+// Also get task tracking cases
     const trackingQuery = this.taskTimeTrackingRepository
       .createQueryBuilder('tracking')
       .select('tracking.id', 'id')
@@ -589,7 +643,11 @@ export class UserPerformanceService {
       .addSelect('tracking.l1ProcessingTimeMinutes', 'l1ProcessingTimeMinutes')
       .addSelect('tracking.l2ProcessingTimeMinutes', 'l2ProcessingTimeMinutes')
       .addSelect('tracking.createdAt', 'createdAt')
-      .leftJoin('tracking.user', 'user');
+      .addSelect('COALESCE(workflowCustomer.companyName, taskCustomer.companyName)', 'customerName')
+      .leftJoin('tracking.user', 'user')
+      .leftJoin('tracking.caseWorkflow', 'workflow')
+      .leftJoin('workflow.customer', 'workflowCustomer')
+      .leftJoin(Customer, 'taskCustomer', 'taskCustomer.id = tracking.taskId');
 
     if (stage && stage !== 'credit_l2') {
       trackingQuery.andWhere('tracking.bucket = :stage', { stage });
@@ -616,10 +674,11 @@ export class UserPerformanceService {
       .orderBy('tracking.createdAt', 'DESC')
       .getRawMany();
 
+    // Map tracking cases with company names
     const mappedTrackingCases = trackingCases.map((c: any) => ({
       id: parseInt(c.id),
       taskId: c.taskId,
-      taskType: c.taskType,
+      companyName: c.customerName || '',
       bucket: c.bucket,
       status: c.status,
       isOverdue: Boolean(c.isOverdue),
@@ -718,31 +777,35 @@ export class UserPerformanceService {
     return labels[stage] || stage;
   }
 
-  /**
-   * Internal method to get top performers
-   */
-  private async getTopPerformersInternal(limit: number): Promise<Array<{
-    userId: number;
-    userName: string;
-    efficiencyScore: number;
-  }>> {
-    const userStats = await this.taskTimeTrackingRepository
-      .createQueryBuilder('tracking')
-      .select('tracking.userId', 'userId')
-      .addSelect('user.name', 'userName')
-      .addSelect('COUNT(*)', 'totalCases')
-      .addSelect('SUM(CASE WHEN tracking.status = \'completed\' THEN 1 ELSE 0 END)', 'completedCases')
-      .addSelect('AVG(tracking.totalCompletionTimeMinutes)', 'avgCompletionTime')
-      .leftJoin('tracking.user', 'user')
-      .groupBy('tracking.userId')
-      .addGroupBy('user.name')
-      .orderBy('completedCases', 'DESC')
-      .limit(limit)
-      .getRawMany();
+   /**
+    * Internal method to get top performers
+    */
+   private async getTopPerformersInternal(limit: number): Promise<Array<{
+     userId: number;
+     userName: string;
+     efficiencyScore: number;
+   }>> {
+     const userStats = await this.taskTimeTrackingRepository
+       .createQueryBuilder('tracking')
+       .select('tracking.userId', 'userId')
+       .addSelect('user.name', 'userName')
+       .addSelect('COUNT(*)', 'totalCases')
+       .addSelect('SUM(CASE WHEN tracking.status = \'completed\' THEN 1 ELSE 0 END)', 'completedCases')
+       .addSelect('AVG(tracking.totalCompletionTimeMinutes)', 'avgCompletionTime')
+       .innerJoin('tracking.user', 'user')
+       .innerJoin('user.userRoles', 'ur')
+       .innerJoin('ur.role', 'role')
+       .where('role.name IN (:...validRoles)', { validRoles: VALID_ROLES })
+       .andWhere('ur.isActive = :isActive', { isActive: true })
+       .groupBy('tracking.userId')
+       .addGroupBy('user.name')
+       .orderBy('completedCases', 'DESC')
+       .limit(limit)
+       .getRawMany();
 
-    // Get rewards
-    const userIds = userStats.map(u => parseInt(u.userId));
-    let rewardMap: Record<number, number> = {};
+     // Get rewards
+     const userIds = userStats.map(u => parseInt(u.userId));
+     let rewardMap: Record<number, number> = {};
     
     if (userIds.length > 0) {
       const rewards = await this.rewardPointRepository

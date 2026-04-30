@@ -8,6 +8,7 @@ import {
   JoinColumn,
 } from 'typeorm';
 import { User } from './User';
+import { CaseWorkflow } from './CaseWorkflow';
 
 /**
  * Task Time Tracking Entity
@@ -20,6 +21,9 @@ export class TaskTimeTracking {
 
   @Column({ type: 'int' })
   userId: number;
+
+  @Column({ type: 'int', nullable: true })
+  caseWorkflowId: number | null; // Link to CaseWorkflow for customer name join
 
   @Column({ type: 'varchar', length: 255 })
   taskId: string; // Task identifier (could be customer_id, case_id, etc.)
@@ -64,4 +68,8 @@ export class TaskTimeTracking {
   @ManyToOne(() => User, (user) => user.id, { onDelete: 'SET NULL' })
   @JoinColumn({ name: 'userId' })
   user: User;
+
+  @ManyToOne(() => CaseWorkflow, (workflow) => workflow.id, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'caseWorkflowId' })
+  caseWorkflow: CaseWorkflow;
 }
