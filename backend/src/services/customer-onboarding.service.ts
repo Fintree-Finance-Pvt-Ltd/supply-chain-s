@@ -1951,15 +1951,13 @@ workflow.remarks = remarks;
 
     // 🔧 FIX: Filter by assignedUserId for user-specific visibility
     // If userId provided, only show cases assigned to this user
-    const whereConditions: any = {
+    // Get pending workflows (base query)
+    const pendingWorkflows = await this.workflowRepository.find({
+      where: {
       workflowType: "CUSTOMER_ONBOARDING",
       currentStatus: statusFilter as any,
       currentApproverRoleName: r,
-    };
-
-    // Get pending workflows (base query)
-    const pendingWorkflows = await this.workflowRepository.find({
-      where: whereConditions,
+    },
       relations: ["customer"],
     });
 
