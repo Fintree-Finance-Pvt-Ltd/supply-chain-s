@@ -13,16 +13,25 @@ import { KycDetail } from "../entities/KycDetail";
 import { CustomerAddress } from "../entities/CustomerAddress";
 import { OnboardingIntegrationService } from "./onboarding-integration.service";
 import { TaskDistributionService } from "./task-distribution.service";
-import { DEFAULT_PARTNER_CODES } from "../config/constants";
+import { DEFAULT_PARTNER_CODES, ROLES } from "../config/constants";
 import { WorkflowValidatorService } from "./workflow-validator.service";
 import { AuditService } from "./audit.service";
 import { RewardService } from "./reward.service";
 import axios from "axios";
-import { sendMail } from "./emailService";
-import { User } from "../entities";
+
+
+import { getRepository } from "typeorm";
+import { User } from "../entities/User";
+import { sendMail } from "../utils/emailService";
+// import { Role, UserRole } from "../entities";
+import { taskTimeTrackingService } from "./task-time-tracking.service";
+
 const customerRepository = AppDataSource.getRepository(Customer);
 const userRepository = AppDataSource.getRepository(User);
- 
+// const roleRepository = AppDataSource.getRepository(Role);
+// const userRoleRepository = AppDataSource.getRepository(UserRole);
+
+
 /**
  * LMS Supply Chain API Payload interfaces
  */
@@ -59,9 +68,14 @@ interface LMSSupplyChainPayload {
   }>;
 }
 
-export class CustomerOnboardingService {
-  private customerRepository = AppDataSource.getRepository(Customer);
+export class 
+CustomerOnboardingService {
   private userRepository = AppDataSource.getRepository(User);
+  // private roleRepository = AppDataSource.getRepository(Role);
+  // private userRoleRepository = AppDataSource.getRepository(UserRole);
+
+
+  private customerRepository = AppDataSource.getRepository(Customer);
   private workflowRepository = AppDataSource.getRepository(CaseWorkflow);
   private historyRepository = AppDataSource.getRepository(CaseStatusHistory);
   private sanctionRepository = AppDataSource.getRepository(CreditSanction);
@@ -169,6 +183,7 @@ export class CustomerOnboardingService {
       "penalCharges",
       "processingFees",
       "legalCharges",
+      "serviceFee",
       "conditions",
     ];
 
@@ -584,10 +599,10 @@ export class CustomerOnboardingService {
 
     const workflow = await this.getOrCreateWorkflow(customerId);
     if (workflow.currentStatus !== "draft" &&
-  workflow.currentStatus !== "returned_to_rm" )
-    throw new Error("Submission allowed only from draft or returned cases");
-   
-  // throw new Error("Can only submit from draft status");
+      workflow.currentStatus !== "returned_to_rm")
+      throw new Error("Submission allowed only from draft or returned cases");
+
+    // throw new Error("Can only submit from draft status");
 
     /* ----------------------------------------
      🔁 SILENT BUREAU (NON-BLOCKING)
@@ -603,16 +618,16 @@ export class CustomerOnboardingService {
     // workflow.currentStatus = "submitted";
     // workflow.currentApproverRoleName = "CREDIT_TEAM_L1";
     let newStatus = "submitted";
-let approverRole = "CREDIT_TEAM_L1";
+    let approverRole = "CREDIT_TEAM_L1";
 
-if (pushedTo === "rm") {
-  newStatus = "returned_to_rm";
-  approverRole = "RELATIONSHIP_MANAGER";
-}
+    if (pushedTo === "rm") {
+      newStatus = "returned_to_rm";
+      approverRole = "RELATIONSHIP_MANAGER";
+    }
 
-workflow.currentStatus = newStatus;
-workflow.currentApproverRoleName = approverRole;
-workflow.remarks = remarks;
+    workflow.currentStatus = newStatus;
+    workflow.currentApproverRoleName = approverRole;
+    workflow.remarks = remarks;
     workflow.remarks = remarks;
 
     // 🔧 FIX: Trigger task distribution and assign user
@@ -620,51 +635,51 @@ workflow.remarks = remarks;
       const taskDistributionService = new TaskDistributionService();
       // const workflowStage =
       //   taskDistributionService.getWorkflowStageFromStatus("submitted");
-const workflowStage =
-  taskDistributionService.getWorkflowStageFromStatus(newStatus);
+      const workflowStage =
+        taskDistributionService.getWorkflowStageFromStatus(newStatus);
 
-let assignedUserId: number | undefined =
-  workflow.assignedUserId ?? undefined;
+      let assignedUserId: number | undefined =
+        workflow.assignedUserId ?? undefined;
 
-  // If case already had a Credit user earlier → reuse same user
-  if (!assignedUserId && newStatus === "submitted") {
-    const assignmentResult =
-      await taskDistributionService.assignCase(
-        customerId.toString(),
-        "CUSTOMER_ONBOARDING",
-        newStatus,
-        // "submitted",
-        workflowStage,
-      );
+      // If case already had a Credit user earlier → reuse same user
+      if (!assignedUserId && newStatus === "submitted") {
+        const assignmentResult =
+          await taskDistributionService.assignCase(
+            customerId.toString(),
+            "CUSTOMER_ONBOARDING",
+            newStatus,
+            // "submitted",
+            workflowStage,
+          );
 
-    assignedUserId = assignmentResult.assignedUserId ?? undefined;
-  }
+        assignedUserId = assignmentResult.assignedUserId ?? undefined;
+      }
 
-  if (assignedUserId) {
-    workflow.assignedUserId = assignedUserId;
-    workflow.assignedStage = workflowStage;
+      if (assignedUserId) {
+        workflow.assignedUserId = assignedUserId;
+        workflow.assignedStage = workflowStage;
 
-    await this.customerRepository.update(customerId, {
-      assignedUserId,
-      assignedStage: workflowStage,
-    });
-      // const assignmentResult = await taskDistributionService.assignCase(
-      //   customerId.toString(),
-      //   "CUSTOMER_ONBOARDING",
-      //   "submitted",
-      //   workflowStage,
-      // );
+        await this.customerRepository.update(customerId, {
+          assignedUserId,
+          assignedStage: workflowStage,
+        });
+        // const assignmentResult = await taskDistributionService.assignCase(
+        //   customerId.toString(),
+        //   "CUSTOMER_ONBOARDING",
+        //   "submitted",
+        //   workflowStage,
+        // );
 
-      // if (assignmentResult.assignedUserId) {
-      //   // Update workflow with assigned user
-      //   workflow.assignedUserId = assignmentResult.assignedUserId;
-      //   workflow.assignedStage = workflowStage;
+        // if (assignmentResult.assignedUserId) {
+        //   // Update workflow with assigned user
+        //   workflow.assignedUserId = assignmentResult.assignedUserId;
+        //   workflow.assignedStage = workflowStage;
 
-      //   // Also update customer record
-      //   await this.customerRepository.update(customerId, {
-      //     assignedUserId: assignmentResult.assignedUserId,
-      //     assignedStage: workflowStage,
-      //   });
+        //   // Also update customer record
+        //   await this.customerRepository.update(customerId, {
+        //     assignedUserId: assignmentResult.assignedUserId,
+        //     assignedStage: workflowStage,
+        //   });
 
         console.log(
           `[TaskDistribution] Case ${customerId} assigned to user ${assignedUserId})`,
@@ -685,7 +700,7 @@ let assignedUserId: number | undefined =
 
     // Sync customer status and pushedTo
     const updateData: any = { status: newStatus };
-   // const updateData: any = { status: "submitted" };
+    // const updateData: any = { status: "submitted" };
     if (pushedTo) updateData.pushedTo = pushedTo;
 
     await this.customerRepository.update(customerId, updateData);
@@ -759,6 +774,8 @@ await this.awardOpsApprovalRewards(
   ) {
     const customer = await this.customerRepository.findOne({
       where: { id: customerId },
+      // select: ["id", "companyName"],
+
     });
     if (!customer) throw new Error("Customer not found");
 
@@ -783,28 +800,138 @@ await this.awardOpsApprovalRewards(
     await this.workflowRepository.save(workflow);
 
 
-if (approved) {
-  const creditUsers = await this.userRepository.find({
-    where: {
- defaultRole: In(["CREDIT_TEAM_L2", "MD"]),
-    },
-    select: ["id", "email"],
-  });
- 
-  for (const user of creditUsers) {
-    if (user.email) {
-      await sendMail({
-        to: user.email,
-        subject: "Case Pending for Credit L2 Approval",
-        text: `Customer case ${customerId} approved by Credit L1 and pending your review.`,
-      });
-    }
-  }
-}
- 
+
+    // if (approved) {
+    //   const creditUsers = await this.userRepository.find({
+    //     where: {
+    //       defaultRole: "CREDIT_TEAM_L2",
+    //     },
+    //     select: ["id", "email"],
+    //   });
+
+    //   for (const user of creditUsers) {
+    //     if (user.email) {
+    //       await sendMail({
+    //         to: user.email,
+    //         subject: "Case Pending for Credit L2 Approval",
+    //         text: `Customer case ${customerId} approved by Credit L1 and pending your review.`,
+    //       });
+    //     }
+    //   }
+    // }
 
 
 
+//coorect one with role based email notification to credit team L2
+
+//     if (approved) {
+//       const customerName = customer?.companyName || customer?.customerName || `ID ${customerId}`;
+
+//       // Step 1: Get roleId from roles table
+//       const role = await this.roleRepository.findOne({
+//         where: { name: "CREDIT_TEAM_L2" }, // change if column name differs
+//         select: ["id"], // primary key column
+//       });
+
+//       if (!role) {
+//         throw new Error("CREDIT_TEAM_L2 role not found");
+//       }
+
+//       // Step 2: Get all userIds mapped to this roleId from user_roles table
+//       const userRoles = await this.userRoleRepository.find({
+//         where: { roleId: role.id }, // IMPORTANT: use role.id unless schema differs
+//         select: ["userId"],
+//       });
+
+//       if (!userRoles.length) {
+//         console.log("No users assigned to CREDIT_TEAM_L2 role");
+//         return;
+//       }
+
+//       // Step 3: Extract userIds
+//       const userIds = userRoles.map((ur) => ur.userId);
+
+//       // Step 4: Fetch emails from users table
+//       const creditUsers = await this.userRepository.find({
+//         where: {
+//           id: In(userIds),
+//         },
+//         select: ["id", "email"],
+//       });
+
+//       // Step 5: Send email to each user
+//       for (const user of creditUsers) {
+//         if (user.email) {
+//           await sendMail({
+//             to: user.email,
+//             subject: "Case Pending for Credit L2 Approval",
+//             // text: `Customer case ${customerName} approved by Credit L1 and pending your review.`,
+//             text: `
+// Dear Team,
+
+// The credit case for customer ${customerName} has been approved by Credit L1 and is now pending your review and approval at the Credit L2 stage.
+
+// Please log in to the LMS and take the necessary action.
+
+// Customer Name : ${customerName}
+// Case ID       : ${customerId}
+// Current Stage : Credit L2 Approval
+
+// Regards,
+// Credit Workflow System
+// Fintree Finance Pvt. Ltd.
+// `,
+//           });
+//         }
+//       }
+//     }
+
+
+
+
+
+
+    // if (approved) {
+
+    //   // Step 1: Get roleId from roles table
+    //   const role = await this.roleRepository.findOne({
+    //     where: { name: "CREDIT_TEAM_L2" }, // adjust column if different
+    //     select: ["id"],
+    //   });
+
+    //   if (!role) {
+    //     throw new Error("Role CREDIT_TEAM_L2 not found");
+    //   }
+
+    //   // Step 2: Get userIds from user_roles table
+    //   const userRoles = await this.userRoleRepository.find({
+    //     where: { roleId: role.roleId },
+    //     select: ["userId"],
+    //   });
+
+    //   const userIds = userRoles.map((ur) => ur.userId);
+
+    //   if (!userIds.length) return;
+
+    //   // Step 3: Fetch emails from users table
+    //   const creditUsers = await this.userRepository.find({
+    //     where: {
+    //       id: In(userIds),
+    //     },
+    //     select: ["id", "email"],
+    //   });
+
+    //   // Step 4: Send emails
+    //   for (const user of creditUsers) {
+    //     if (user.email) {
+    //       await sendMail({
+    //         to: user.email,
+    //         subject: "Case Pending for Credit L2 Approval",
+    //         text: `Customer case ${customerId} approved by Credit L1 and pending your review.`,
+    //       });
+    //     }
+    //   }
+    // }
     if (approved && sanctionData) {
       const { partnerSanctions } = sanctionData;
 
@@ -847,7 +974,7 @@ if (approved) {
               tenure: ps.tenure || 0,
               interestRate: ps.interestRate || 0,
               legalCharges: ps.legalCharges || 0,
-
+              serviceFee: ps.serviceFee || 0,
               conditions: ps.conditions || null,
               penalCharges: ps.penalCharges || 0,
               processingFees: ps.processingFees || 0,
@@ -934,53 +1061,53 @@ if (approved) {
 
 
   async returnToRM(
-  customerId: number,
-  userId: number,
-  remarks: string
-) {
-  const workflow = await this.getOrCreateWorkflow(customerId);
+    customerId: number,
+    userId: number,
+    remarks: string
+  ) {
+    const workflow = await this.getOrCreateWorkflow(customerId);
 
-  if (workflow.currentStatus !== "submitted") {
-    throw new Error("Only submitted cases can be returned to RM");
+    if (workflow.currentStatus !== "submitted") {
+      throw new Error("Only submitted cases can be returned to RM");
+    }
+
+    const previousStatus = workflow.currentStatus;
+
+    workflow.currentStatus = "returned_to_rm";
+    workflow.currentApproverRoleName = "RELATIONSHIP_MANAGER";
+
+    workflow.remarks = remarks;
+
+    await this.workflowRepository.save(workflow);
+
+    // await this.customerRepository.update(customerId, {
+    //   status: "returned_to_rm",
+    //   assignedStage: "rm",
+    // });
+    const customer = await this.customerRepository.findOne({
+      where: { id: customerId },
+    });
+
+    if (!customer) {
+      throw new Error("Customer not found while updating status");
+    }
+    customer.status = "draft";
+    // customer.status = "returned_to_rm";
+    customer.assignedStage = "rm";
+
+    await this.customerRepository.save(customer);
+
+    await this.logHistory({
+      customerId,
+      caseWorkflowId: workflow.id,
+      status: "returned_to_rm",
+      previousStatus,
+      changedBy: userId,
+      remarks,
+    });
+
+    return workflow;
   }
-
-  const previousStatus = workflow.currentStatus;
-
-  workflow.currentStatus = "returned_to_rm";
-  workflow.currentApproverRoleName = "RELATIONSHIP_MANAGER";
-  
-  workflow.remarks = remarks;
-
-  await this.workflowRepository.save(workflow);
-
-  // await this.customerRepository.update(customerId, {
-  //   status: "returned_to_rm",
-  //   assignedStage: "rm",
-  // });
-  const customer = await this.customerRepository.findOne({
-  where: { id: customerId },
-});
-
-if (!customer) {
-  throw new Error("Customer not found while updating status");
-}
-  customer.status = "draft";
-// customer.status = "returned_to_rm";
-customer.assignedStage = "rm";
-
-await this.customerRepository.save(customer);
-
-  await this.logHistory({
-    customerId,
-    caseWorkflowId: workflow.id,
-    status: "returned_to_rm",
-    previousStatus,
-    changedBy: userId,
-    remarks,
-  });
-
-  return workflow;
-}
 
   /**
    * Get all sanction limits for a customer based on customerId
@@ -1102,6 +1229,91 @@ await this.customerRepository.save(customer);
 
     const previousStatus = workflow.currentStatus;
 
+
+    //correct one with role based email notification to CEO
+//     if (approved) {
+//       const customerName = customer?.companyName || customer?.customerName || `ID ${customerId}`;
+
+//       // Step 1: Get roleId from roles table
+//       const role = await this.roleRepository.findOne({
+//         where: { name: "CEO" }, // change if column name differs
+//         select: ["id"], // primary key column
+//       });
+
+//       if (!role) {
+//         throw new Error("CEO role not found");
+//       }
+
+//       // Step 2: Get all userIds mapped to this roleId from user_roles table
+//       const userRoles = await this.userRoleRepository.find({
+//         where: { roleId: role.id }, // IMPORTANT: use role.id unless schema differs
+//         select: ["userId"],
+//       });
+
+//       if (!userRoles.length) {
+//         console.log("No users assigned to CREDIT_TEAM_L2 role");
+//         return;
+//       }
+
+//       // Step 3: Extract userIds
+//       const userIds = userRoles.map((ur) => ur.userId);
+
+//       // Step 4: Fetch emails from users table
+//       const creditUsers = await this.userRepository.find({
+//         where: {
+//           id: In(userIds),
+//         },
+//         select: ["id", "email"],
+//       });
+
+//       // Step 5: Send email to each user
+//       for (const user of creditUsers) {
+//         if (user.email) {
+//           await sendMail({
+//             to: user.email,
+//             subject: "Case Pending for Credit L2 Approval",
+//             // text: `Customer case ${customerName} approved by Credit L1 and pending your review.`,
+//             text: `
+// Dear Team,
+
+// The credit case for customer ${customerName} has been approved by Credit L1 and is now pending your review and approval at the Credit L2 stage.
+
+// Please log in to the LMS and take the necessary action.
+
+// Customer Name : ${customerName}
+// Case ID       : ${customerId}
+// Current Stage : Credit L2 Approval
+
+// Regards,
+// Credit Workflow System
+// Fintree Finance Pvt. Ltd.
+// `,
+//           });
+//         }
+//       }
+//     }
+
+
+
+
+    // if (approved) {
+    //   const creditUsers = await this.userRepository.find({
+    //     where: {
+    //       defaultRole: "CEO",
+    //     },
+    //     select: ["id", "email"],
+    //   });
+
+    //   for (const user of creditUsers) {
+    //     if (user.email) {
+    //       await sendMail({
+    //         to: user.email,
+    //         subject: "Case Pending for CEO Approval",
+    //         text: `Customer case ${customerId} approved by Credit L2 and pending your review.`,
+    //       });
+    //     }
+    //   }
+    // }
     if (approved && sanctionData) {
       // Get existing sanction values for comparison
       const existingSanction = await this.sanctionRepository.findOne({
@@ -1242,6 +1454,89 @@ await this.customerRepository.save(customer);
       throw new Error("Cannot approve: Pending at CEO");
 
     const previousStatus = workflow.currentStatus;
+    //correct one with role based email notification to MD
+    // if (approved) {
+    //   const creditUsers = await this.userRepository.find({
+    //     where: {
+    //       defaultRole: "MD",
+    //     },
+    //     select: ["id", "email"],
+    //   });
+
+    //   for (const user of creditUsers) {
+    //     if (user.email) {
+    //       await sendMail({
+    //         to: user.email,
+    //         subject: "Case Pending for MD Approval",
+    //         text: `Customer case ${customerId} approved by Ceo and pending your review.`,
+    //       });
+    //     }
+    //   }
+    // }
+
+
+
+//     if (approved) {
+//       const customerName = customer?.companyName || customer?.customerName || `ID ${customerId}`;
+
+//       // Step 1: Get roleId from roles table
+//       const role = await this.roleRepository.findOne({
+//         where: { name: "CREDIT_TEAM_L2" }, // change if column name differs
+//         select: ["id"], // primary key column
+//       });
+
+//       if (!role) {
+//         throw new Error("CREDIT_TEAM_L2 role not found");
+//       }
+
+//       // Step 2: Get all userIds mapped to this roleId from user_roles table
+//       const userRoles = await this.userRoleRepository.find({
+//         where: { roleId: role.id }, // IMPORTANT: use role.id unless schema differs
+//         select: ["userId"],
+//       });
+
+//       if (!userRoles.length) {
+//         console.log("No users assigned to CREDIT_TEAM_L2 role");
+//         return;
+//       }
+
+//       // Step 3: Extract userIds
+//       const userIds = userRoles.map((ur) => ur.userId);
+
+//       // Step 4: Fetch emails from users table
+//       const creditUsers = await this.userRepository.find({
+//         where: {
+//           id: In(userIds),
+//         },
+//         select: ["id", "email"],
+//       });
+
+//       // Step 5: Send email to each user
+//       for (const user of creditUsers) {
+//         if (user.email) {
+//           await sendMail({
+//             to: user.email,
+//             subject: "Case Pending for Credit L2 Approval",
+//             // text: `Customer case ${customerName} approved by Credit L1 and pending your review.`,
+//             text: `
+// Dear Team,
+
+// The credit case for customer ${customerName} has been approved by Credit L1 and is now pending your review and approval at the Credit L2 stage.
+
+// Please log in to the LMS and take the necessary action.
+
+// Customer Name : ${customerName}
+// Case ID       : ${customerId}
+// Current Stage : Credit L2 Approval
+
+// Regards,
+// Credit Workflow System
+// Fintree Finance Pvt. Ltd.
+// `,
+//           });
+//         }
+//       }
+//     }
 
     if (approved && sanctionData) {
       // Get existing sanction values for comparison
@@ -1431,6 +1726,7 @@ await this.customerRepository.save(customer);
             penalCharges: partnerSanction.penalCharges || 0,
             processingFees: partnerSanction.processingFees || 0,
             legalCharges: partnerSanction.legalCharges || 0,
+            serviceFee: partnerSanction.serviceFee || 0,
             conditions: partnerSanction.conditions || "",
             status: "pending",
             creditOfficerId: rmId,
@@ -1447,6 +1743,7 @@ await this.customerRepository.save(customer);
             penalCharges: partnerSanction.penalCharges || 0,
             processingFees: partnerSanction.processingFees || 0,
             legalCharges: partnerSanction.legalCharges || 0,
+            serviceFee: partnerSanction.serviceFee || 0,
             conditions: partnerSanction.conditions || "",
             status: "pending",
           });
@@ -1469,6 +1766,7 @@ await this.customerRepository.save(customer);
             penalCharges: partnerSanction.penalCharges || 0,
             processingFees: partnerSanction.processingFees || 0,
               legalCharges: partnerSanction.legalCharges || 0,
+              serviceFee: partnerSanction.serviceFee || 0,
             conditions: partnerSanction.conditions || "",
           }),
         );
@@ -1531,6 +1829,28 @@ await this.customerRepository.save(customer);
     workflow.remarks = remarks;
     await this.workflowRepository.save(workflow);
 
+    await this.workflowRepository.save(workflow);
+
+    // Notify MD after RM submits final terms
+    
+    // if (workflow.currentStatus === "md_terms_submitted") {
+    //   const mdUsers = await this.userRepository.find({
+    //     where: {
+    //       defaultRole: "MD",
+    //     },
+    //     select: ["id", "email"],
+    //   });
+
+    //   for (const user of mdUsers) {
+    //     if (user.email) {
+    //       await sendMail({
+    //         to: user.email,
+    //         subject: "Case Pending for MD Approval",
+    //         text: `Customer case ${customerId} final terms submitted by RM and pending your approval.`,
+    //       });
+    //     }
+    //   }
+    // }
     // Sync customer status
     await this.customerRepository.update(customerId, {
       status: workflow.currentStatus as any,
@@ -1714,7 +2034,24 @@ await this.customerRepository.save(customer);
     /* ---------------------------------------
      SAVE / UPDATE SANCTIONS
   --------------------------------------- */
+    // if (approved) {
+    //   const creditUsers = await this.userRepository.find({
+    //     where: {
+    //       defaultRole: "operations_team_l1",
+    //     },
+    //     select: ["id", "email"],
+    //   });
 
+    //   for (const user of creditUsers) {
+    //     if (user.email) {
+    //       await sendMail({
+    //         to: user.email,
+    //         subject: "Case Pending for operations_team_l1 Approval",
+    //         text: `Customer case ${customerId} approved by MD and pending your review.`,
+    //       });
+    //     }
+    //   }
+    // }
     if (approved && sanctionData) {
       const existingSanction = await this.sanctionRepository.findOne({
         where: { customerId },
@@ -1759,6 +2096,7 @@ await this.customerRepository.save(customer);
               penalCharges: partnerSanction.penalCharges || 0,
               processingFees: partnerSanction.processingFees || 0,
               legalCharges: partnerSanction.legalCharges || 0,
+              serviceFee: partnerSanction.serviceFee || 0,
               conditions: partnerSanction.conditions || "",
               status: sanctionStatus,
             });
@@ -1772,6 +2110,7 @@ await this.customerRepository.save(customer);
               penalCharges: partnerSanction.penalCharges || 0,
               processingFees: partnerSanction.processingFees || 0,
               legalCharges: partnerSanction.legalCharges || 0,
+              serviceFee: partnerSanction.serviceFee || 0,
               conditions: partnerSanction.conditions || "",
               status: sanctionStatus,
               creditOfficerId: userId,
@@ -1903,6 +2242,31 @@ workflow.remarks = remarks;
   --------------------------------------- */
 
     if (approved && workflow.currentStatus === "md_approved") {
+
+      // // Step 1: Get RM id from customer table
+      // const customer = await this.customerRepository.findOne({
+      //   where: { id: customerId },
+      //   select: ["id", "rmId"],
+      // });
+
+      // // Step 2: Fetch RM email from users table
+      // if (customer?.rmId) {
+      //   const rmUser = await this.userRepository.findOne({
+      //     where: { id: customer.rmId },
+      //     select: ["id", "email"],
+      //   });
+
+      //   // Step 3: Send email to RM
+      //   if (rmUser?.email) {
+      //     await sendMail({
+      //       to: rmUser.email,
+      //       subject: "Case Approved by MD",
+      //       text: `Customer case ${customerId} has been approved by MD and pending your review.`,
+      //     });
+      //   }
+      // }
+
+
       const allSanctions = await this.sanctionRepository.find({
         where: { customerId },
       });
@@ -1944,6 +2308,171 @@ workflow.remarks = remarks;
 
     return workflow;
   }
+/**
+   * RM adds a new partner and submits directly to MD
+   * Bypasses Credit L1/L2 approval
+   * Flow: RM selects partner → enters sanction terms → direct to MD → MD approves → eSign/eNach → Loan Accounts
+   */
+  // async rmSubmitDirectToMD(
+  //   customerId: number,
+  //   rmId: number,
+  //   partner: string,
+  //   sanctionAmount: number,
+  //   tenure: number,
+  //   interestRate: number,
+  //   conditions?: string,
+  //   penalCharges?: number,
+  //   processingFees?: number,
+  //   remarks?: string,
+  // ) {
+  //   const customer = await this.customerRepository.findOne({
+  //     where: { id: customerId },
+  //   });
+  //   if (!customer) throw new Error("Customer not found");
+
+  //   // Allow from completed or md_approved status only
+  //   const validStatuses = ["completed", "md_approved", "ops_l1_review", "ops_l1_approved"];
+  //   const workflow = await this.getOrCreateWorkflow(customerId);
+  //   const currentStatus = workflow.currentStatus.toLowerCase();
+    
+  //   if (!validStatuses.includes(currentStatus)) {
+  //     throw new Error(
+  //       `Cannot add new partner. Case must be completed or MD approved. Current status: ${currentStatus}`
+  //     );
+  //   }
+
+  //   const partnerCode = partner.toUpperCase();
+    
+  //   // Validate partner exists
+  //   const validPartner = await this.partnerRepository.findOne({
+  //     where: { code: partnerCode },
+  //   });
+  //   if (!validPartner) {
+  //     throw new Error(`Invalid partner: ${partner}. Valid partners are: FFPL, MFL, KITE`);
+  //   }
+
+  //   // Check if this partner already has a sanctioned limit for this customer
+  //   const existingPartnerSanction = await this.sanctionRepository.findOne({
+  //     where: { customerId, partner: partnerCode, status: "approved" },
+  //   });
+  //   if (existingPartnerSanction) {
+  //     throw new Error(
+  //       `Partner ${partnerCode} already has active sanction for this customer. ` +
+  //       `Existing limit: ₹${existingPartnerSanction.sanctionAmount}`
+  //     );
+  //   }
+
+  //   // Check if partner already has any record (not just approved)
+  //   const existingAnyRecord = await this.sanctionRepository.findOne({
+  //     where: { customerId, partner: partnerCode },
+  //   });
+  //   if (existingAnyRecord) {
+  //     throw new Error(
+  //       `Partner ${partnerCode} already has a record for this customer. Please use different partner.`
+  //     );
+  //   }
+
+  //   const previousStatus = workflow.currentStatus;
+
+  //   // Step 1: Create new credit_sanction for the partner
+  //   const newSanction = this.sanctionRepository.create({
+  //     customerId,
+  //     partner: partnerCode,
+  //     creditOfficerId: rmId,
+  //     sanctionAmount,
+  //     tenure: tenure || 12,
+  //     interestRate: interestRate || 0,
+  //     penalCharges: penalCharges || 0,
+  //     processingFees: processingFees || 0,
+  //     legalCharges: 0,
+  //     serviceFee: 0,
+  //     conditions: conditions || "",
+  //     status: "pending", // Will be marked approved after MD finalizes
+  //   });
+  //   await this.sanctionRepository.save(newSanction);
+
+  //   // Step 2: Generate LAN and create loan account for this partner
+  //   const lanId = await this.getNextLanId(partnerCode);
+    
+  //   // Check if loan account already exists for this partner
+  //   let loanAccount = await this.loanAccountRepository.findOne({
+  //     where: { customerId, lender: partnerCode as any },
+  //   });
+    
+  //   if (loanAccount) {
+  //     // Update existing
+  //     await this.loanAccountRepository.update(loanAccount.id, {
+  //       sanctionedAmount,
+  //       status: "active",
+  //     });
+  //   } else {
+  //     // Create new
+  //     loanAccount = this.loanAccountRepository.create({
+  //       customerId,
+  //       partnerId: validPartner.id,
+  //       lender: partnerCode as any,
+  //       lanId,
+  //       sanctionedAmount,
+  //       disbursedAmount: 0,
+  //       status: "active",
+  //     });
+  //     await this.loanAccountRepository.save(loanAccount);
+  //   }
+
+  //   // Step 3: Record in sanction_limit_history (pending MD approval)
+  //   await this.sanctionHistoryRepository.save(
+  //     this.sanctionHistoryRepository.create({
+  //       customerId,
+  //       partner: partnerCode,
+  //       changedByUserId: rmId,
+  //       changedByRole: "RM",
+  //       remarks: remarks || "New partner submission directly to MD",
+  //       sanctionAmount,
+  //       tenure: tenure || 12,
+  //       interestRate: interestRate || 0,
+  //       penalCharges: penalCharges || 0,
+  //       processingFees: processingFees || 0,
+  //       conditions: conditions || "",
+  //     })
+  //   );
+
+  //   // Step 4: Update workflow to route to MD directly
+  //   // Set status to ceo_approved so MD can approve (bypass credit L1/L2)
+  //   workflow.currentStatus = "ceo_approved";
+  //   workflow.currentApproverRoleName = "MD";
+  //   workflow.remarks = remarks || `New partner ${partnerCode} added - direct to MD`;
+  //   await this.workflowRepository.save(workflow);
+
+  //   // Step 5: Update customer status
+  //   customer.status = "ceo_approved";
+  //   await this.customerRepository.save(customer);
+
+  //   // Step 6: Log history
+  //   await this.logHistory({
+  //     customerId,
+  //     caseWorkflowId: workflow.id,
+  //     status: "ceo_approved",
+  //     previousStatus,
+  //     changedBy: rmId,
+  //     remarks: remarks || `New partner ${partnerCode} submitted directly to MD`,
+  //     sanctionData: {
+  //       partner: partnerCode,
+  //       sanctionAmount,
+  //       tenure: tenure || 12,
+  //       interestRate: interestRate || 0,
+  //       penalCharges: penalCharges || 0,
+  //       processingFees: processingFees || 0,
+  //     },
+  //   });
+
+  //   console.log(
+  //     `[CustomerOnboardingService] New partner ${partnerCode} added for customer ${customerId}, ` +
+  //     `LAN: ${lanId}, submitted directly to MD for approval`
+  //   );
+
+  //   return workflow;
+  // }
+
   async submitForOperationsApproval(
     customerId: number,
     rmId: number,
@@ -1958,6 +2487,23 @@ workflow.remarks = remarks;
     workflow.currentApproverRoleName = "OPERATIONS_TEAM_L1";
     workflow.remarks = remarks;
     await this.workflowRepository.save(workflow);
+
+    // const opsUsers = await this.userRepository.find({
+    //   where: {
+    //     defaultRole: "operations_team_l1",
+    //   },
+    //   select: ["id", "email"],
+    // });
+
+    // for (const user of opsUsers) {
+    //   if (user.email) {
+    //     await sendMail({
+    //       to: user.email,
+    //       subject: "Case Pending for Operations L1 Review",
+    //       text: `Customer case ${customerId} is approved by MD and pending Operations L1 review.`,
+    //     });
+    //   }
+    // }
 
     // Sync customer status
     await this.customerRepository.update(customerId, {
@@ -1992,6 +2538,23 @@ workflow.remarks = remarks;
     if (!approved) workflow.isRejected = true;
     workflow.remarks = remarks;
     await this.workflowRepository.save(workflow);
+
+    // const opsUsers = await this.userRepository.find({
+    //   where: {
+    //     defaultRole: "operations_head",
+    //   },
+    //   select: ["id", "email"],
+    // });
+
+    // for (const user of opsUsers) {
+    //   if (user.email) {
+    //     await sendMail({
+    //       to: user.email,
+    //       subject: "Case Pending for Operations head Review",
+    //       text: `Customer case ${customerId} is approved by Operations team l1 and pending Operations L1 review.`,
+    //     });
+    //   }
+    // }
 
     // Sync customer status
     await this.customerRepository.update(customerId, {
@@ -2281,7 +2844,7 @@ workflow.remarks = remarks;
     const statusFilter =
       r === "CREDIT_TEAM_L2" ? "credit_l1_approved" : "submitted";
     console.log(r);
-    console.log("status-->",statusFilter);
+    console.log("status-->", statusFilter);
 
     // 🔧 FIX: Filter by assignedUserId for user-specific visibility
     // If userId provided, only show cases assigned to this user
@@ -2298,7 +2861,7 @@ workflow.remarks = remarks;
     // 🔧 FIX: Filter by assignedUserId - only show cases assigned to this specific user
     // Check both case_workflow.assignedUserId and customer.assignedUserId
     let filteredPending = pendingWorkflows;
-    if (userId && statusFilter=='submitted' ) {
+    if (userId && statusFilter == 'submitted') {
       filteredPending = pendingWorkflows.filter(
         (w) =>
           w.assignedUserId === userId ||

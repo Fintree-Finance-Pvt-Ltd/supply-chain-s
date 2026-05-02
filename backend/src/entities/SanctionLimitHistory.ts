@@ -37,6 +37,8 @@ export class SanctionLimitHistory {
 
     @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
 legalCharges: number; // ₹ flat amount
+  @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
+serviceFee: number; // ₹ flat amount
 
     @Column({ type: 'text', nullable: true })
     conditions: string;

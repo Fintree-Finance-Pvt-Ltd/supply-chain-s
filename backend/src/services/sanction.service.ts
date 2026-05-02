@@ -105,6 +105,8 @@ export class SanctionService {
       penalCharges?: number;
       processingFees?: number;
       legalCharges?: number;
+      serviceFee?: number;
+      
       conditions?: string;
       partnerSanctions?: Array<{
         partner: string;
@@ -114,6 +116,7 @@ export class SanctionService {
         penalCharges?: number;
         processingFees?: number;
         legalCharges?: number;
+        serviceFee?: number;
         conditions?: string;
       }>;
     },
@@ -273,6 +276,7 @@ await this.upsertCreditSanction(
   ps.penalCharges,
   ps.processingFees,
   ps.legalCharges,  
+  ps.serviceFee,
   ps.conditions,
   role === 'MD' ? 'approved' : 'pending',
   ps.partner
@@ -287,6 +291,7 @@ await this.upsertCreditSanction(
               penalCharges: ps.penalCharges || 0,
               processingFees: ps.processingFees || 0,
               legalCharges: ps.legalCharges || 0, // ✅ ADD THIS
+              serviceFee: ps.serviceFee || 0, // ✅ ADD THIS
               conditions: ps.conditions || undefined,
               remarks: remarks || undefined,
               changedByRole: role,
@@ -346,6 +351,7 @@ await this.upsertCreditSanction(
             sanctionData.penalCharges,
             sanctionData.processingFees,
             sanctionData.legalCharges, // ✅ ADD THIS
+            sanctionData.serviceFee, // ✅ ADD THIS
             sanctionData.conditions,
             role === 'MD' ? 'approved' : 'pending',
             lender
@@ -360,6 +366,7 @@ await this.upsertCreditSanction(
             penalCharges: sanctionData.penalCharges || 0,
             processingFees: sanctionData.processingFees || 0,
             legalCharges: sanctionData.legalCharges || 0,
+            serviceFee: sanctionData.serviceFee || 0,
             conditions: sanctionData.conditions || undefined,
             remarks: remarks || undefined,
             changedByRole: role,
@@ -442,6 +449,7 @@ await this.upsertCreditSanction(
     penalCharges?: number,
     processingFees?: number,
       legalCharges?: number,
+      serviceFee?: number,
     conditions?: string,
     status?: string,
     partner?: string // Partner code to store in credit_sanctions table
@@ -460,6 +468,7 @@ if (existing) {
   penalCharges: Number(penalCharges) || 0,
   processingFees: Number(processingFees) || 0,
   legalCharges: Number(legalCharges) || 0,   //  MUST ADD
+  serviceFee: Number(serviceFee) || 0,   //  MUST ADD
   conditions: conditions || null,
     creditOfficerId,
     status: status || 'pending',
@@ -474,7 +483,8 @@ if (existing) {
     interestRate: interestRate || 0,
     penalCharges: penalCharges || 0,
     processingFees: processingFees || 0,
-    legalCharges: Number(legalCharges) || 0, 
+    legalCharges: Number(legalCharges) || 0,
+    serviceFee: Number(serviceFee) || 0, 
     conditions: conditions || null,
     status: status || 'pending',
     partner,
