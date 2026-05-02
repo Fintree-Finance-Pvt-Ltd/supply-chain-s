@@ -101,6 +101,8 @@ const CreditCaseDetail = () => {
   const userRoles = (user?.roles || []).map(r => (r.name || r || '').toLowerCase())
   const hasL1Role = userRoles.includes('credit_team_l1')
   const hasL2Role = userRoles.includes('credit_team_l2')
+  const isSanctionLocked = (partnerCode) =>
+    (partnerSanctions[partnerCode]?.status || '').toLowerCase() === 'approved'
  
   // Fetch partners from API - role-based logic
   // credit_l1: fetch from partners table (for new sanctions)
@@ -184,17 +186,31 @@ const CreditCaseDetail = () => {
          
           // Extract partners from existing sanctions - for ALL roles
           // Handle both 'partner' and 'partner_code' field names
-          const existingPartners = sanctionsArray.map(s => ({
-            id: s.partner || s.partner_code,
-            code: s.partner || s.partner_code,
-            name: s.partnerName || s.partner
-          }))
+          const existingPartners = Array.from(
+            new Map(
+              sanctionsArray.map(s => {
+                const partnerCode = s.partner || s.partner_code
+                return [partnerCode, {
+                  id: partnerCode,
+                  code: partnerCode,
+                  name: s.partnerName || partnerCode
+                }]
+              })
+            ).values()
+          )
           console.log('Extracted partners:', existingPartners)
+          const hasApprovedSanctions = sanctionsArray.some(
+            s => (s.status || '').toLowerCase() === 'approved'
+          )
          
           // For credit_team_l1: merge partners from partners table with partners from sanctions
           // Users with both L1+L2 roles should also merge (they have L1 functionality)
           // For other roles: use partners from sanctions only
           if (hasL1Role) {
+            if (hasApprovedSanctions) {
+              setPartners(existingPartners)
+              setPartnersLoading(false)
+            } else {
             // Use functional update to get the current partners state from partners table
             setPartners(currentPartners => {
               // Merge: add sanction partners that don't exist in the current partners list
@@ -209,6 +225,7 @@ const CreditCaseDetail = () => {
               console.log('Merged partners:', mergedPartners)
               return mergedPartners
             })
+            }
           } else {
             // For other roles, use partners from sanctions only
             setPartners(existingPartners)
@@ -222,11 +239,12 @@ const CreditCaseDetail = () => {
             sanctionMap[s.partner || s.partner_code] = {
               // sanctionAmount: s.sanction_limit || s.sanctionAmount || '',
               sanctionAmount: parseFloat(s.sanction_limit || s.sanctionAmount || 0) || '',
-              tenor: s.tenor || '',
-              roi: s.roi || '',
+              tenor: s.tenure || s.tenor || '',
+              roi: s.interestRate || s.roi || '',
               conditions: s.conditions || '',
               penalCharges: s.penalCharges || '',
-              processingFees: s.processingFees || ''
+              processingFees: s.processingFees || '',
+              status: s.status || 'pending'
             }
           })
  
@@ -244,6 +262,7 @@ const CreditCaseDetail = () => {
                   conditions: '',
                   penalCharges: '',
                   processingFees: '',
+                  status: 'pending',
                 }
               }
               // Then update with sanction data
@@ -295,6 +314,7 @@ const CreditCaseDetail = () => {
           conditions: '',
           penalCharges: '',
           processingFees: '',
+          status: 'pending',
         };
       });
      
@@ -312,6 +332,7 @@ const CreditCaseDetail = () => {
               conditions: sanction.conditions || '',
               penalCharges: sanction.penalCharges || '',
               processingFees: sanction.processingFees || '',
+              status: sanction.status || 'pending',
             };
           }
         });
@@ -330,6 +351,7 @@ const CreditCaseDetail = () => {
               conditions: limit.conditions || '',
               penalCharges: limit.penalCharges || '',
               processingFees: limit.processingFees || '',
+              status: limit.status || 'pending',
             };
           }
         });
@@ -526,7 +548,11 @@ const handleVerifyDocument = async (docId, status) => {
  
       // Build partner sanctions array - only include partners with sanction amount
       const sanctionsArray = PARTNERS
-        .filter(partner => partnerSanctions[partner.code]?.sanctionAmount)
+        .filter(
+          partner =>
+            !isSanctionLocked(partner.code) &&
+            partnerSanctions[partner.code]?.sanctionAmount
+        )
         .map(partner => ({
           partner: partner.code,
           sanctionAmount: parseFloat(partnerSanctions[partner.code].sanctionAmount) || 0,
@@ -536,6 +562,10 @@ const handleVerifyDocument = async (docId, status) => {
           processingFees: parseFloat(partnerSanctions[partner.code].processingFees) || 0,
           conditions: partnerSanctions[partner.code].conditions,
         }))
+
+      if (sanctionsArray.length === 0) {
+        throw new Error('No new or pending partner sanction request is available for this approval')
+      }
  
       const sanctionPayload = {
         partnerSanctions: sanctionsArray,
@@ -878,7 +908,14 @@ const formatINR = (num) => {
             ) : (
               PARTNERS.map((partner) => (
                 <div key={partner.id} className="mb-6 pb-6 border-b border-gray-200 last:border-0">
-                  <h3 className="text-lg font-medium text-gray-800 mb-3">{partner.name}</h3>
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-lg font-medium text-gray-800">{partner.name || partner.code}</h3>
+                    {isSanctionLocked(partner.code) && (
+                      <span className="text-xs font-bold uppercase text-gray-600 bg-gray-100 border border-gray-200 rounded px-2 py-1">
+                        Locked
+                      </span>
+                    )}
+                  </div>
                   <div className="space-y-4">
                     {canViewSanctionAmount() && (
                       <div>
@@ -910,7 +947,7 @@ const formatINR = (num) => {
   })}
   className="input-field"
   placeholder="Enter amount"
-  disabled={readOnly || !canEditSanctionAmount()}
+  disabled={readOnly || !canEditSanctionAmount() || isSanctionLocked(partner.code)}
 />
  
 {/* ADD THIS BELOW INPUT */}
@@ -954,7 +991,7 @@ const formatINR = (num) => {
                           })}
                           className="input-field"
                           placeholder="Enter ROI %"
-                          disabled={readOnly || !canEditROI()}
+                          disabled={readOnly || !canEditROI() || isSanctionLocked(partner.code)}
                         />
                       </div>
                     )}
@@ -971,7 +1008,7 @@ const formatINR = (num) => {
                           })}
                           className="input-field"
                           placeholder="Enter tenor in months"
-                          disabled={readOnly || !canEditTenure()}
+                          disabled={readOnly || !canEditTenure() || isSanctionLocked(partner.code)}
                         />
                       </div>
                     )}

@@ -5,6 +5,8 @@ export const workflowService = {
     // Customer Onboarding
     createCustomer: (data) => api.post(API_ENDPOINTS.WORKFLOW_CUSTOMER_CREATE, data),
     submitCustomer: (id, remarks, pushedTo) => api.post(API_ENDPOINTS.WORKFLOW_CUSTOMER_SUBMIT(id), { remarks, pushedTo }),
+    resendPartnerSanction: (id, partnerCodes, remarks) =>
+      api.post(`/workflows/customers/${id}/resend-partner-sanction`, { partnerCodes, remarks }),
     
     returnToRM: (id, remarks) =>
   api.post(API_ENDPOINTS.WORKFLOW_CUSTOMER_RETURN(id), { remarks }),

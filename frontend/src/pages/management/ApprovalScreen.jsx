@@ -91,6 +91,8 @@
 
     // Track if initial data load is done (useRef to persist across renders)
     const dataLoadedRef = useRef(false);
+    const isPartnerLocked = (partnerSanction) =>
+      (partnerSanction.status || "").toLowerCase() === "approved";
 
     useEffect(() => {
       // Reset dataLoadedRef when id changes
@@ -145,6 +147,7 @@
                 legalCharges: item.legalCharges || 0,
                 serviceFee: item.serviceFee || 0,
                 conditions: item.conditions || "",
+                status: item.status || "pending",
                 hasData: true,
               };
             });
@@ -163,6 +166,7 @@
               legalCharges: partnerMap[p]?.legalCharges || 0,
               serviceFee: partnerMap[p]?.serviceFee || 0,
               conditions: partnerMap[p]?.conditions || "",
+              status: partnerMap[p]?.status || "pending",
               hasData: true,
             }));
             setPartnerSanctions(partners);
@@ -189,6 +193,7 @@
                   tenure: item.tenure || 0,
                   interestRate: item.interestRate || 0,
                   lanId: item.lanId || "",
+                  status: item.status || "pending",
                   createdAt: item.createdAt,
                 };
               }
@@ -202,6 +207,7 @@
               tenure: partnerMap[p]?.tenure || 0,
               interestRate: partnerMap[p]?.interestRate || 0,
               lanId: partnerMap[p]?.lanId || "",
+              status: partnerMap[p]?.status || "pending",
               hasData: !!partnerMap[p],
             }));
             setPartnerSanctions(partners);
@@ -213,6 +219,7 @@
                 sanctionAmount: 0,
                 tenure: 0,
                 interestRate: 0,
+                status: "pending",
                 hasData: false,
               })),
             );
@@ -260,8 +267,13 @@
 
         // For CEO and MD: use partnerSanctions format
         if (userRole === "ceo") {
+          const editablePartnerSanctions =
+            partnerSanctions.filter((ps) => !isPartnerLocked(ps));
+          if (editablePartnerSanctions.length === 0) {
+            throw new Error("No new or pending partner sanction request is available");
+          }
           const ceoSanctionData = {
-            partnerSanctions: partnerSanctions.map((ps) => ({
+            partnerSanctions: editablePartnerSanctions.map((ps) => ({
               partner: ps.partner,
               sanctionAmount: ps.sanctionAmount || 0,
                 legalCharges: ps.legalCharges || 0,
@@ -274,9 +286,14 @@
           });
         } else if (userRole === "md") {
 
+          const editablePartnerSanctions =
+            partnerSanctions.filter((ps) => !isPartnerLocked(ps));
+          if (editablePartnerSanctions.length === 0) {
+            throw new Error("No new or pending partner sanction request is available");
+          }
           // MD can modify all fields
           const mdSanctionData = {
-            partnerSanctions: partnerSanctions.map((ps) => ({
+            partnerSanctions: editablePartnerSanctions.map((ps) => ({
               partner: ps.partner,
               sanctionAmount: ps.sanctionAmount || 0,
               tenure: ps.tenure || 0,
@@ -539,11 +556,15 @@
                           <span className="font-bold text-primary-600">
                             {ps.partner}
                           </span>
-                          {ps.lanId && (
+                          {isPartnerLocked(ps) ? (
+                            <span className="text-xs font-bold uppercase text-gray-600 bg-gray-100 border border-gray-200 rounded px-2 py-1">
+                              Locked
+                            </span>
+                          ) : ps.lanId ? (
                             <span className="text-xs text-gray-500">
                               LAN: {ps.lanId}
                             </span>
-                          )}
+                          ) : null}
                         </div>
                         <div className="grid grid-cols-1 gap-3">
                           <div>
@@ -566,7 +587,7 @@
                                 setPartnerSanctions(updated);
                               }}
                               className="input-field text-sm"
-                              readOnly={isReadOnly}
+                              readOnly={isReadOnly || isPartnerLocked(ps)}
                             />
                             {ps.sanctionAmount && (
                               <p className="mt-1 text-xs text-red-600 font-medium italic">
@@ -597,11 +618,15 @@
                           <span className="font-bold text-primary-600">
                             {ps.partner}
                           </span>
-                          {ps.lanId && (
+                          {isPartnerLocked(ps) ? (
+                            <span className="text-xs font-bold uppercase text-gray-600 bg-gray-100 border border-gray-200 rounded px-2 py-1">
+                              Locked
+                            </span>
+                          ) : ps.lanId ? (
                             <span className="text-xs text-gray-500">
                               LAN: {ps.lanId}
                             </span>
-                          )}
+                          ) : null}
                         </div>
                         <div className="grid grid-cols-3 gap-3">
                           <div>
@@ -624,7 +649,7 @@
                                 setPartnerSanctions(updated);
                               }}
                               className="input-field text-sm"
-                              readOnly={isReadOnly}
+                              readOnly={isReadOnly || isPartnerLocked(ps)}
                             />
 
                             {ps.sanctionAmount && (
@@ -653,7 +678,7 @@
                                 setPartnerSanctions(updated);
                               }}
                               className="input-field text-sm"
-                              readOnly={isReadOnly}
+                              readOnly={isReadOnly || isPartnerLocked(ps)}
                             />
                           </div>
                           <div>
@@ -674,7 +699,7 @@
                                 setPartnerSanctions(updated);
                               }}
                               className="input-field text-sm"
-                              readOnly={isReadOnly}
+                              readOnly={isReadOnly || isPartnerLocked(ps)}
                             />
                           </div>
                         </div>
@@ -704,7 +729,7 @@
                                 setPartnerSanctions(updated);
                               }}
                               className="input-field text-sm"
-                              readOnly={isReadOnly}
+                              readOnly={isReadOnly || isPartnerLocked(ps)}
                             />
                           </div>
                           <div>
@@ -730,7 +755,7 @@
                                 setPartnerSanctions(updated);
                               }}
                               className="input-field text-sm"
-                              readOnly={isReadOnly}
+                              readOnly={isReadOnly || isPartnerLocked(ps)}
                             />
                           </div>
 
@@ -758,7 +783,7 @@
                                 setPartnerSanctions(updated);
                               }}
                               className="input-field text-sm"
-                              readOnly={isReadOnly}
+                              readOnly={isReadOnly || isPartnerLocked(ps)}
                             />
 
 
@@ -788,7 +813,7 @@
                                 setPartnerSanctions(updated);
                               }}
                               className="input-field text-sm"
-                              readOnly={isReadOnly}
+                              readOnly={isReadOnly || isPartnerLocked(ps)}
                             />
 
 
@@ -807,7 +832,7 @@
                                 setPartnerSanctions(updated);
                               }}
                               className="input-field text-sm"
-                              readOnly={isReadOnly}
+                              readOnly={isReadOnly || isPartnerLocked(ps)}
                             />
                           </div>
                         </div>

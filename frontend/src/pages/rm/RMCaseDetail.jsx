@@ -55,11 +55,35 @@ const RMCaseDetail = () => {
 
   // Dynamic partners from API
   const [partners, setPartners] = useState([]);
+  const [activePartners, setActivePartners] = useState([]);
   const [partnersLoading, setPartnersLoading] = useState(true);
+  const [newPartnerCode, setNewPartnerCode] = useState("");
   const PARTNERS = partners;
 
   // Store sanction data for each partner
   const [partnerSanctions, setPartnerSanctions] = useState({});
+
+  const isSanctionLocked = (partnerCode) =>
+    (partnerSanctions[partnerCode]?.status || "").toLowerCase() === "approved";
+
+  const buildUnlockedSanctionsArray = () =>
+    PARTNERS.filter(
+      (partner) =>
+        !isSanctionLocked(partner.code) &&
+        partnerSanctions[partner.code]?.sanctionAmount,
+    ).map((partner) => ({
+      partner: partner.code,
+      sanctionAmount:
+        parseFloat(partnerSanctions[partner.code].sanctionAmount) || 0,
+      tenure: parseInt(partnerSanctions[partner.code].tenure) || 0,
+      interestRate:
+        parseFloat(partnerSanctions[partner.code].interestRate) || 0,
+      penalCharges:
+        parseFloat(partnerSanctions[partner.code].penalCharges) || 0,
+      processingFees:
+        parseFloat(partnerSanctions[partner.code].processingFees) || 0,
+      conditions: partnerSanctions[partner.code].conditions || "",
+    }));
 
   // Camera/OCR State
   const [isCameraOpen, setIsCameraOpen] = useState(false);
@@ -87,6 +111,18 @@ const RMCaseDetail = () => {
 
   // Initialize partners - will be populated from sanctions API response
   // No longer fetching from /api/partners/active endpoint
+  useEffect(() => {
+    const fetchActivePartners = async () => {
+      try {
+        const response = await api.get("/partners/active");
+        setActivePartners(response.data?.partners || []);
+      } catch (err) {
+        console.error("RMCaseDetail: Failed to fetch active partners:", err);
+      }
+    };
+
+    fetchActivePartners();
+  }, []);
 
   // Fetch sanctions from dedicated API (/sanctions/customer/:customerId)
   // This is the same endpoint used by credit_l2, CEO, and MD roles
@@ -128,6 +164,7 @@ const RMCaseDetail = () => {
                 penalCharges: s.penalCharges || "",
                 processingFees: s.processingFees || "",
                 conditions: s.conditions || "",
+                status: s.status || "pending",
               };
             }
           });
@@ -158,26 +195,9 @@ const RMCaseDetail = () => {
   const handleSaveBankDetails = async () => {
     setIsUpdating(true);
     try {
-      // Build partner sanctions array
-      const sanctionsArray = PARTNERS.filter(
-        (partner) => partnerSanctions[partner.code]?.sanctionAmount,
-      ).map((partner) => ({
-        partner: partner.code,
-        sanctionAmount:
-          parseFloat(partnerSanctions[partner.code].sanctionAmount) || 0,
-        tenure: parseInt(partnerSanctions[partner.code].tenure) || 0,
-        interestRate:
-          parseFloat(partnerSanctions[partner.code].interestRate) || 0,
-        penalCharges:
-          parseFloat(partnerSanctions[partner.code].penalCharges) || 0,
-        processingFees:
-          parseFloat(partnerSanctions[partner.code].processingFees) || 0,
-        conditions: partnerSanctions[partner.code].conditions || "",
-      }));
-
       await workflowService.updateBankDetails(id, {
         ...bankDetails,
-        partnerSanctions: sanctionsArray,
+        partnerSanctions: buildUnlockedSanctionsArray(),
       });
       toast.success("Details saved successfully");
       dispatch(fetchCaseById({ id, sections: DETAIL_SECTIONS }));
@@ -259,22 +279,12 @@ const RMCaseDetail = () => {
   const handleSubmitToMD = async () => {
     setIsSubmitting(true);
     try {
-      // Build partner sanctions array
-      const sanctionsArray = PARTNERS.filter(
-        (partner) => partnerSanctions[partner.code]?.sanctionAmount,
-      ).map((partner) => ({
-        partner: partner.code,
-        sanctionAmount:
-          parseFloat(partnerSanctions[partner.code].sanctionAmount) || 0,
-        tenure: parseInt(partnerSanctions[partner.code].tenure) || 0,
-        interestRate:
-          parseFloat(partnerSanctions[partner.code].interestRate) || 0,
-        penalCharges:
-          parseFloat(partnerSanctions[partner.code].penalCharges) || 0,
-        processingFees:
-          parseFloat(partnerSanctions[partner.code].processingFees) || 0,
-        conditions: partnerSanctions[partner.code].conditions || "",
-      }));
+      const sanctionsArray = buildUnlockedSanctionsArray();
+
+      if (sanctionsArray.length === 0) {
+        toast.error("No fresh partner sanction request is available to submit");
+        return;
+      }
 
       await workflowService.submitRMToMD(id, "Final terms confirmed by RM", {
         partnerSanctions: sanctionsArray,
@@ -284,6 +294,31 @@ const RMCaseDetail = () => {
       navigate("/rm/dashboard");
     } catch (error) {
       toast.error("Submission failed");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleResendToPartner = async () => {
+    if (!newPartnerCode) {
+      toast.info("Select a new partner section");
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      await workflowService.resendPartnerSanction(
+        id,
+        [newPartnerCode],
+        `Resent for fresh sanction: ${newPartnerCode}`,
+      );
+      toast.success("Case resent to new partner section");
+      dispatch(fetchCaseById({ id, sections: DETAIL_SECTIONS }));
+      navigate("/rm/dashboard");
+    } catch (error) {
+      toast.error(
+        "Resend failed: " + (error.response?.data?.message || error.message),
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -505,6 +540,14 @@ const RMCaseDetail = () => {
 
   const isStage1 = currentCase.status === "md_pending_terms";
   const isStage2 = currentCase.status === "md_approved";
+  const existingPartnerCodes = new Set(
+    Object.keys(partnerSanctions).map((partnerCode) =>
+      partnerCode.toUpperCase(),
+    ),
+  );
+  const availableNewPartners = activePartners.filter(
+    (partner) => !existingPartnerCodes.has((partner.code || "").toUpperCase()),
+  );
 
   const statusLabel = isStage1
     ? "MD APPROVED - PENDING FINAL TERMS"
@@ -572,12 +615,23 @@ const RMCaseDetail = () => {
               /* Show tabs/sections for each partner */
               PARTNERS.map((partner) => (
                 <div
-                  key={partner.id}
+                  key={partner.code}
                   className="mb-6 pb-6 border-b border-gray-200 last:border-0 last:mb-0 last:pb-0"
                 >
-                  <h3 className="text-lg font-medium text-gray-800 mb-3">
-                    {partner.name || partner.code} ({partner.code})
-                  </h3>
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-lg font-medium text-gray-800">
+                      {partner.name || partner.code} ({partner.code})
+                    </h3>
+                    {isSanctionLocked(partner.code) ? (
+                      <span className="text-xs font-bold uppercase text-gray-600 bg-gray-100 border border-gray-200 rounded px-2 py-1">
+                        Locked
+                      </span>
+                    ) : (
+                      <span className="text-xs font-bold uppercase text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
+                        Fresh Request
+                      </span>
+                    )}
+                  </div>
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                     <div className="p-3 bg-indigo-50 rounded-lg">
                       <label className="block text-[10px] text-indigo-600 uppercase font-bold mb-1">
@@ -603,7 +657,11 @@ const RMCaseDetail = () => {
                           })
                         }
                         className="w-full bg-transparent border-none p-0 text-lg font-bold focus:ring-0"
-                        readOnly={isReadOnly || isStage2}
+                        readOnly={
+                          isReadOnly ||
+                          isStage2 ||
+                          isSanctionLocked(partner.code)
+                        }
                       />
                       {partnerSanctions[partner.code]?.sanctionAmount && (
                         <p className="mt-1 text-xs text-red-600 font-semibold">
@@ -640,7 +698,11 @@ const RMCaseDetail = () => {
                           })
                         }
                         className="w-full bg-transparent border-none p-0 text-lg font-bold focus:ring-0"
-                        readOnly={isReadOnly || isStage2}
+                        readOnly={
+                          isReadOnly ||
+                          isStage2 ||
+                          isSanctionLocked(partner.code)
+                        }
                       />
                     </div>
                     <div className="p-3 bg-indigo-50 rounded-lg">
@@ -664,7 +726,11 @@ const RMCaseDetail = () => {
                           })
                         }
                         className="w-full bg-transparent border-none p-0 text-lg font-bold focus:ring-0"
-                        readOnly={isReadOnly || isStage2}
+                        readOnly={
+                          isReadOnly ||
+                          isStage2 ||
+                          isSanctionLocked(partner.code)
+                        }
                       />
                     </div>
                     <div className="p-3 bg-indigo-50 rounded-lg">
@@ -688,7 +754,11 @@ const RMCaseDetail = () => {
                           })
                         }
                         className="w-full bg-transparent border-none p-0 text-lg font-bold focus:ring-0"
-                        readOnly={isReadOnly || isStage2}
+                        readOnly={
+                          isReadOnly ||
+                          isStage2 ||
+                          isSanctionLocked(partner.code)
+                        }
                       />
                     </div>
                     <div className="p-3 bg-indigo-50 rounded-lg">
@@ -712,7 +782,11 @@ const RMCaseDetail = () => {
                           })
                         }
                         className="w-full bg-transparent border-none p-0 text-lg font-bold focus:ring-0"
-                        readOnly={isReadOnly || isStage2}
+                        readOnly={
+                          isReadOnly ||
+                          isStage2 ||
+                          isSanctionLocked(partner.code)
+                        }
                       />
                     </div>
                   </div>
@@ -720,6 +794,45 @@ const RMCaseDetail = () => {
               ))
             )}
           </div>
+
+{availableNewPartners.length > 0 && (
+            <div className="card border-l-4 border-amber-500">
+              <h2 className="text-xl font-semibold text-gray-900 mb-4">
+                Resend for Fresh Partner Sanction
+              </h2>
+              <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-3">
+                <select
+                  value={newPartnerCode}
+                  onChange={(e) => setNewPartnerCode(e.target.value)}
+                  className="input-field"
+                  disabled={availableNewPartners.length === 0 || isSubmitting}
+                >
+                  <option value="">
+                    {availableNewPartners.length === 0
+                      ? "No new partners available"
+                      : "Select new partner"}
+                  </option>
+                  {availableNewPartners.map((partner) => (
+                    <option key={partner.code} value={partner.code}>
+                      {partner.name || partner.code} ({partner.code})
+                    </option>
+                  ))}
+                </select>
+                <button
+                  onClick={handleResendToPartner}
+                  disabled={
+                    isSubmitting ||
+                    !newPartnerCode ||
+                    availableNewPartners.length === 0
+                  }
+                  className="btn-primary flex items-center justify-center space-x-2"
+                >
+                  <FiRefreshCw />
+                  <span>Resend</span>
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Stage 1 Actions */}
           {isStage1 && (

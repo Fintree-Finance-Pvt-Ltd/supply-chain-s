@@ -214,6 +214,7 @@ export class CustomerOnboardingService {
     await this.sanctionHistoryRepository.save(
       this.sanctionHistoryRepository.create({
         customerId,
+        partner: newValues.partner || oldValues.partner || null,
         changedByUserId,
         changedByRole,
         remarks,
@@ -230,6 +231,227 @@ export class CustomerOnboardingService {
       `[SanctionHistory] Inserted history for customer ${customerId} due to financial value changes`,
     );
     return true;
+  }
+
+  private normalizePartnerCode(partner?: string): string {
+    return (partner || "FFPL").trim().toUpperCase();
+  }
+
+  private normalizePartnerSanctionInput(partnerSanction: any): any {
+    return {
+      ...partnerSanction,
+      partner: this.normalizePartnerCode(partnerSanction.partner),
+      sanctionAmount: Number(partnerSanction.sanctionAmount || 0),
+      tenure: Number(partnerSanction.tenure || partnerSanction.tenor || 0),
+      interestRate: Number(
+        partnerSanction.interestRate || partnerSanction.roi || 0,
+      ),
+      penalCharges: Number(partnerSanction.penalCharges || 0),
+      processingFees: Number(partnerSanction.processingFees || 0),
+      legalCharges: Number(partnerSanction.legalCharges || 0),
+      conditions: partnerSanction.conditions || "",
+    };
+  }
+
+  private hasLockedSanctionChanged(
+    existingSanction: CreditSanction,
+    incomingSanction: any,
+  ): boolean {
+    const numericFields = [
+      "sanctionAmount",
+      "tenure",
+      "interestRate",
+      "penalCharges",
+      "processingFees",
+      "legalCharges",
+    ];
+
+    for (const field of numericFields) {
+      if (
+        incomingSanction[field] !== undefined &&
+        incomingSanction[field] !== null &&
+        incomingSanction[field] !== ""
+      ) {
+        const oldValue = Number((existingSanction as any)[field] || 0);
+        const newValue = Number(incomingSanction[field] || 0);
+        if (oldValue !== newValue) return true;
+      }
+    }
+
+    if (
+      incomingSanction.conditions !== undefined &&
+      incomingSanction.conditions !== null
+    ) {
+      const oldConditions = existingSanction.conditions || "";
+      const newConditions = incomingSanction.conditions || "";
+      if (oldConditions !== newConditions) return true;
+    }
+
+    return false;
+  }
+
+  private async getEditablePartnerSanctions(
+    customerId: number,
+    partnerSanctions: any[],
+  ): Promise<any[]> {
+    const existingSanctions = await this.sanctionRepository.find({
+      where: { customerId },
+    });
+    const caseHasApprovedSanctions = existingSanctions.some(
+      (sanction) => sanction.status?.toLowerCase() === "approved",
+    );
+    const existingByPartner = new Map(
+      existingSanctions.map((sanction) => [
+        this.normalizePartnerCode(sanction.partner),
+        sanction,
+      ]),
+    );
+
+    const editablePartnerSanctions: any[] = [];
+
+    for (const rawPartnerSanction of partnerSanctions) {
+      const partnerSanction =
+        this.normalizePartnerSanctionInput(rawPartnerSanction);
+      const existingSanction = existingByPartner.get(partnerSanction.partner);
+      const isLocked =
+        existingSanction?.status?.toLowerCase() === "approved";
+
+      if (caseHasApprovedSanctions && !existingSanction) {
+        throw new Error(
+          `Partner ${partnerSanction.partner} was not assigned for this fresh sanction request.`,
+        );
+      }
+
+      if (isLocked && existingSanction) {
+        if (
+          this.hasLockedSanctionChanged(existingSanction, partnerSanction)
+        ) {
+          throw new Error(
+            `Partner ${partnerSanction.partner} has already given sanction and is locked. Resend only to a new partner section.`,
+          );
+        }
+
+        continue;
+      }
+
+      editablePartnerSanctions.push(partnerSanction);
+    }
+
+    return editablePartnerSanctions;
+  }
+
+  async resendToNewPartnerSections(
+    customerId: number,
+    rmId: number,
+    partnerCodes: string[],
+    remarks: string,
+  ) {
+    const customer = await this.customerRepository.findOne({
+      where: { id: customerId },
+    });
+    if (!customer) throw new Error("Customer not found");
+
+    const uniquePartnerCodes = Array.from(
+      new Set(
+        partnerCodes
+          .map((partnerCode) => this.normalizePartnerCode(partnerCode))
+          .filter(Boolean),
+      ),
+    );
+
+    if (uniquePartnerCodes.length === 0) {
+      throw new Error("Select at least one new partner section");
+    }
+
+    const existingSanctions = await this.sanctionRepository.find({
+      where: { customerId },
+    });
+    const existingByPartner = new Map(
+      existingSanctions.map((sanction) => [
+        this.normalizePartnerCode(sanction.partner),
+        sanction,
+      ]),
+    );
+
+    for (const partnerCode of uniquePartnerCodes) {
+      const partner = await this.partnerRepository.findOne({
+        where: { code: partnerCode },
+      });
+      if (!partner) throw new Error(`Partner not found: ${partnerCode}`);
+      if (partner.status !== "ACTIVE") {
+        throw new Error(`Partner is not active: ${partnerCode}`);
+      }
+
+      const existingSanction = existingByPartner.get(partnerCode);
+      if (existingSanction?.status?.toLowerCase() === "approved") {
+        throw new Error(
+          `Partner ${partnerCode} has already given sanction and cannot be resent.`,
+        );
+      }
+      if (existingSanction) {
+        throw new Error(
+          `Partner ${partnerCode} already has a sanction request on this case.`,
+        );
+      }
+    }
+
+    for (const partnerCode of uniquePartnerCodes) {
+      const newSanction = this.sanctionRepository.create({
+        customerId,
+        partner: partnerCode,
+        creditOfficerId: rmId,
+        sanctionAmount: 0,
+        tenure: 0,
+        interestRate: 0,
+        penalCharges: 0,
+        processingFees: 0,
+        legalCharges: 0,
+        conditions: "",
+        status: "pending",
+      });
+      await this.sanctionRepository.save(newSanction);
+    }
+
+    const workflow = await this.getOrCreateWorkflow(customerId);
+    const previousStatus = workflow.currentStatus;
+
+    workflow.currentStatus = "submitted";
+    workflow.currentApproverRoleName = "CREDIT_TEAM_L1";
+    workflow.remarks =
+      remarks ||
+      `Resent for fresh sanction: ${uniquePartnerCodes.join(", ")}`;
+    workflow.assignedUserId = undefined as any;
+    workflow.assignedStage = "credit_l1";
+
+    await this.workflowRepository.save(workflow);
+
+    const pushedToValues = new Set(
+      (customer.pushedTo || "")
+        .split(",")
+        .map((value) => value.trim())
+        .filter(Boolean),
+    );
+    uniquePartnerCodes.forEach((partnerCode) => pushedToValues.add(partnerCode));
+
+    await this.customerRepository.update(customerId, {
+      status: "submitted" as any,
+      pushedTo: Array.from(pushedToValues).join(","),
+      assignedUserId: undefined as any,
+      assignedStage: "credit_l1",
+    });
+
+    await this.logHistory({
+      customerId,
+      caseWorkflowId: workflow.id,
+      status: "submitted",
+      previousStatus,
+      changedBy: rmId,
+      remarks:
+        remarks ||
+        `Resent for fresh sanction: ${uniquePartnerCodes.join(", ")}`,
+    });
+
+    return workflow;
   }
 
   /**
@@ -598,9 +820,18 @@ if (approved) {
         Array.isArray(partnerSanctions) &&
         partnerSanctions.length > 0
       ) {
+        const editablePartnerSanctions =
+          await this.getEditablePartnerSanctions(customerId, partnerSanctions);
+
+        if (editablePartnerSanctions.length === 0) {
+          throw new Error(
+            "No new or pending partner sanction request found for Credit L1 approval",
+          );
+        }
+
         // Save sanctions for each partner in credit_sanctions table
-        for (const ps of partnerSanctions) {
-          const partner = ps.partner || "FFPL";
+        for (const ps of editablePartnerSanctions) {
+          const partner = ps.partner;
 
           // Find existing sanction for this customer+partner or create new
           let creditSanction = await this.sanctionRepository.findOne({
@@ -633,7 +864,7 @@ if (approved) {
         }
 
         // Insert into sanction_limit_history ONLY if financial values changed
-        const firstPartner = partnerSanctions[0];
+        const firstPartner = editablePartnerSanctions[0];
         await this.insertSanctionHistoryIfChanged(
           customerId,
           oldValues,
@@ -883,9 +1114,21 @@ await this.customerRepository.save(customer);
         sanctionData.partnerSanctions &&
         Array.isArray(sanctionData.partnerSanctions)
       ) {
+        const editablePartnerSanctions =
+          await this.getEditablePartnerSanctions(
+            customerId,
+            sanctionData.partnerSanctions,
+          );
+
+        if (editablePartnerSanctions.length === 0) {
+          throw new Error(
+            "No new or pending partner sanction request found for Credit L2 approval",
+          );
+        }
+
         // Save sanctions for each partner - Credit L2 can ONLY edit sanctionAmount
-        for (const partnerSanction of sanctionData.partnerSanctions) {
-          const partner = partnerSanction.partner || "FFPL";
+        for (const partnerSanction of editablePartnerSanctions) {
+          const partner = partnerSanction.partner;
 
           // Get or create credit sanction for this customer+partner
           let sanction = await this.sanctionRepository.findOne({
@@ -915,7 +1158,7 @@ await this.customerRepository.save(customer);
         }
 
         // Insert into sanction_limit_history ONLY if financial values changed
-        const firstPartner = sanctionData.partnerSanctions[0];
+        const firstPartner = editablePartnerSanctions[0];
         await this.insertSanctionHistoryIfChanged(
           customerId,
           oldValues,
@@ -1013,9 +1256,21 @@ await this.customerRepository.save(customer);
         sanctionData.partnerSanctions &&
         Array.isArray(sanctionData.partnerSanctions)
       ) {
+        const editablePartnerSanctions =
+          await this.getEditablePartnerSanctions(
+            customerId,
+            sanctionData.partnerSanctions,
+          );
+
+        if (editablePartnerSanctions.length === 0) {
+          throw new Error(
+            "No new or pending partner sanction request found for CEO approval",
+          );
+        }
+
         // Save sanctions for each partner
-        for (const partnerSanction of sanctionData.partnerSanctions) {
-          const partner = partnerSanction.partner || "FFPL";
+        for (const partnerSanction of editablePartnerSanctions) {
+          const partner = partnerSanction.partner;
 
           // Get or create credit sanction for this customer+partner
           let sanction = await this.sanctionRepository.findOne({
@@ -1047,7 +1302,7 @@ await this.customerRepository.save(customer);
         }
 
         // Insert into sanction_limit_history ONLY if financial values changed
-        const firstPartner = sanctionData.partnerSanctions[0];
+        const firstPartner = editablePartnerSanctions[0];
         await this.insertSanctionHistoryIfChanged(
           customerId,
           oldValues,
@@ -1146,9 +1401,21 @@ await this.customerRepository.save(customer);
       sanctionData.partnerSanctions &&
       Array.isArray(sanctionData.partnerSanctions)
     ) {
+      const editablePartnerSanctions =
+        await this.getEditablePartnerSanctions(
+          customerId,
+          sanctionData.partnerSanctions,
+        );
+
+      if (editablePartnerSanctions.length === 0) {
+        throw new Error(
+          "No new or pending partner sanction request found for RM submission",
+        );
+      }
+
       // Update sanctions for each partner
-      for (const partnerSanction of sanctionData.partnerSanctions) {
-        const partner = partnerSanction.partner || "FFPL";
+      for (const partnerSanction of editablePartnerSanctions) {
+        const partner = partnerSanction.partner;
 
         // Get existing credit sanction for this customer+partner
         const existingSanction = await this.sanctionRepository.findOne({
@@ -1165,7 +1432,7 @@ await this.customerRepository.save(customer);
             processingFees: partnerSanction.processingFees || 0,
             legalCharges: partnerSanction.legalCharges || 0,
             conditions: partnerSanction.conditions || "",
-            status: "approved",
+            status: "pending",
             creditOfficerId: rmId,
           });
         } else {
@@ -1181,18 +1448,18 @@ await this.customerRepository.save(customer);
             processingFees: partnerSanction.processingFees || 0,
             legalCharges: partnerSanction.legalCharges || 0,
             conditions: partnerSanction.conditions || "",
-            status: "approved",
+            status: "pending",
           });
           await this.sanctionRepository.save(newSanction);
         }
       }
 
-      // Record history for ALL partners
-      for (const partnerSanction of sanctionData.partnerSanctions) {
+      // Record history for newly submitted pending partners only.
+      for (const partnerSanction of editablePartnerSanctions) {
         await this.sanctionHistoryRepository.save(
           this.sanctionHistoryRepository.create({
             customerId,
-            partner: partnerSanction.partner || "FFPL",
+            partner: partnerSanction.partner,
             changedByUserId: rmId,
             changedByRole: "RM",
             remarks: remarks || "Final terms submitted by RM",
@@ -1208,18 +1475,55 @@ await this.customerRepository.save(customer);
       }
     } else if (sanctionData) {
       // Legacy single sanction format
-      await this.sanctionRepository.update({ customerId }, sanctionData);
-      // Record history
-      await this.sanctionHistoryRepository.save(
-        this.sanctionHistoryRepository.create({
-          customerId,
-          partner: sanctionData.lender || "FFPL",
-          changedByUserId: rmId,
-          changedByRole: "RM",
-          remarks: remarks || "Final terms submitted by RM",
-          ...sanctionData,
-        }),
+      const partner = this.normalizePartnerCode(
+        sanctionData.partner || sanctionData.lender,
       );
+      const existingSanction = await this.sanctionRepository.findOne({
+        where: { customerId, partner },
+      });
+
+      if (existingSanction?.status?.toLowerCase() === "approved") {
+        if (
+          this.hasLockedSanctionChanged(
+            existingSanction,
+            this.normalizePartnerSanctionInput({ ...sanctionData, partner }),
+          )
+        ) {
+          throw new Error(
+            `Partner ${partner} has already given sanction and is locked.`,
+          );
+        }
+      } else {
+        const normalizedSanction = this.normalizePartnerSanctionInput({
+          ...sanctionData,
+          partner,
+        });
+        await this.sanctionRepository.update(
+          { customerId, partner },
+          {
+            sanctionAmount: normalizedSanction.sanctionAmount,
+            tenure: normalizedSanction.tenure,
+            interestRate: normalizedSanction.interestRate,
+            penalCharges: normalizedSanction.penalCharges,
+            processingFees: normalizedSanction.processingFees,
+            legalCharges: normalizedSanction.legalCharges,
+            conditions: normalizedSanction.conditions,
+            status: "pending",
+            creditOfficerId: rmId,
+          },
+        );
+        // Record history
+        await this.sanctionHistoryRepository.save(
+          this.sanctionHistoryRepository.create({
+            customerId,
+            partner,
+            changedByUserId: rmId,
+            changedByRole: "RM",
+            remarks: remarks || "Final terms submitted by RM",
+            ...sanctionData,
+          }),
+        );
+      }
     }
 
     workflow.currentStatus = "md_terms_submitted";
@@ -1422,8 +1726,23 @@ await this.customerRepository.save(customer);
         sanctionData.partnerSanctions &&
         Array.isArray(sanctionData.partnerSanctions)
       ) {
-        for (const partnerSanction of sanctionData.partnerSanctions) {
-          const partner = partnerSanction.partner || "FFPL";
+        const editablePartnerSanctions =
+          await this.getEditablePartnerSanctions(
+            customerId,
+            sanctionData.partnerSanctions,
+          );
+
+        if (editablePartnerSanctions.length === 0) {
+          throw new Error(
+            "No new or pending partner sanction request found for MD approval",
+          );
+        }
+
+        const sanctionStatus =
+          status === "md_terms_submitted" ? "approved" : "pending";
+
+        for (const partnerSanction of editablePartnerSanctions) {
+          const partner = partnerSanction.partner;
 
           let sanction = await this.sanctionRepository.findOne({
             where: { customerId, partner },
@@ -1441,7 +1760,7 @@ await this.customerRepository.save(customer);
               processingFees: partnerSanction.processingFees || 0,
               legalCharges: partnerSanction.legalCharges || 0,
               conditions: partnerSanction.conditions || "",
-              status: "approved",
+              status: sanctionStatus,
             });
 
             await this.sanctionRepository.save(newSanction);
@@ -1454,13 +1773,13 @@ await this.customerRepository.save(customer);
               processingFees: partnerSanction.processingFees || 0,
               legalCharges: partnerSanction.legalCharges || 0,
               conditions: partnerSanction.conditions || "",
-              status: "approved",
+              status: sanctionStatus,
               creditOfficerId: userId,
             });
           }
         }
 
-        const firstPartner = sanctionData.partnerSanctions[0];
+        const firstPartner = editablePartnerSanctions[0];
 
         await this.insertSanctionHistoryIfChanged(
           customerId,
@@ -1471,13 +1790,28 @@ await this.customerRepository.save(customer);
           remarks,
         );
       } else {
-        const lender = sanctionData.lender || "FFPL";
+        const lender = this.normalizePartnerCode(
+          sanctionData.partner || sanctionData.lender,
+        );
+        const sanctionStatus =
+          status === "md_terms_submitted" ? "approved" : "pending";
 
         let sanction = await this.sanctionRepository.findOne({
           where: { customerId, partner: lender },
         });
 
-        if (!sanction) {
+        if (sanction?.status?.toLowerCase() === "approved") {
+          if (
+            this.hasLockedSanctionChanged(
+              sanction,
+              this.normalizePartnerSanctionInput({ ...sanctionData, partner: lender }),
+            )
+          ) {
+            throw new Error(
+              `Partner ${lender} has already given sanction and is locked.`,
+            );
+          }
+        } else if (!sanction) {
           const newSanction = this.sanctionRepository.create({
             customerId,
             partner: lender,
@@ -1488,7 +1822,7 @@ await this.customerRepository.save(customer);
             penalCharges: sanctionData.penalCharges || 0,
             processingFees: sanctionData.processingFees || 0,
             conditions: sanctionData.conditions || "",
-            status: "approved",
+            status: sanctionStatus,
           });
 
           await this.sanctionRepository.save(newSanction);
@@ -1500,7 +1834,7 @@ await this.customerRepository.save(customer);
             penalCharges: sanctionData.penalCharges || 0,
             processingFees: sanctionData.processingFees || 0,
             conditions: sanctionData.conditions || "",
-            status: "approved",
+            status: sanctionStatus,
             creditOfficerId: userId,
           });
         }

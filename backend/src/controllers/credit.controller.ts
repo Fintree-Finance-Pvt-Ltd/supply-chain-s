@@ -110,6 +110,8 @@ export class CreditController {
           conditions: s.conditions,
           penalCharges: s.penalCharges,
           processingFees: s.processingFees,
+          legalCharges: s.legalCharges,
+          status: s.status,
         })),
       };
 
@@ -140,6 +142,7 @@ export class CreditController {
         interestRate: s.interestRate,
         penalCharges: s.penalCharges,
         processingFees: s.processingFees,
+        legalCharges: s.legalCharges,
         conditions: s.conditions,
         creditRemarks: s.creditRemarks,
         status: s.status,

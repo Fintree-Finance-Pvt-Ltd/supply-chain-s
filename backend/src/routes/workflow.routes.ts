@@ -129,6 +129,45 @@ router.post('/customers/:customerId/submit', checkRole(['relationship_manager','
   }
 });
 
+/**
+ * POST /api/workflows/customers/:customerId/resend-partner-sanction
+ * RM resends an already sanctioned case to new partner sections only.
+ * Existing approved partner sanctions remain locked and cannot be resent.
+ */
+router.post('/customers/:customerId/resend-partner-sanction', checkRole(['relationship_manager']), async (req: Request, res: Response) => {
+  try {
+    const { customerId } = req.params;
+    const { remarks } = req.body;
+    const user = (req as any).user;
+
+    const partnerCodes = Array.isArray(req.body.partnerCodes)
+      ? req.body.partnerCodes
+      : Array.isArray(req.body.partners)
+        ? req.body.partners
+        : Array.isArray(req.body.partnerSanctions)
+          ? req.body.partnerSanctions.map((ps: any) => ps.partner)
+          : [];
+
+    const workflow = await customerOnboardingService.resendToNewPartnerSections(
+      parseInt(customerId),
+      user.id,
+      partnerCodes,
+      remarks || '',
+    );
+
+    res.json({
+      success: true,
+      message: 'Case resent to new partner section for fresh sanction',
+      data: workflow,
+    });
+  } catch (error: any) {
+    res.status(400).json({
+      success: false,
+      message: error.message,
+    });
+  }
+});
+
 router.post(
   "/customers/:customerId/return",
   checkRole(["credit_team_l1"]),
