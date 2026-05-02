@@ -11,6 +11,8 @@ import DocumentUploader from '../../components/DocumentUploader'
 import LoadingSpinner from '../../components/LoadingSpinner'
 import { FiFileText, FiCheck, FiEdit2, FiSave, FiX } from 'react-icons/fi'
 
+const POST_SANCTION_SECTIONS = ['kyc', 'sanctions']
+
 const PostSanction = () => {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -34,7 +36,7 @@ const PostSanction = () => {
 
   useEffect(() => {
     if (id) {
-      dispatch(fetchCaseById(id))
+      dispatch(fetchCaseById({ id, sections: POST_SANCTION_SECTIONS }))
     }
   }, [id, dispatch])
 
@@ -58,11 +60,12 @@ const PostSanction = () => {
       if (id && canAccessSanctionDetails()) {
         setIsLoadingSanctions(true)
         try {
-          const response = await api.get(`/sanctions/customer/${id}`)
-          if (response.data && Array.isArray(response.data)) {
-            setSanctions(response.data)
-            if (response.data.length > 0) {
-              setEditedSanction(response.data[0])
+          const response = await api.get(`/customers/${id}/sanctions`)
+          const creditSanctions = response.data?.data?.creditSanctions || []
+          if (Array.isArray(creditSanctions)) {
+            setSanctions(creditSanctions)
+            if (creditSanctions.length > 0) {
+              setEditedSanction(creditSanctions[0])
             }
           }
         } catch (error) {
@@ -151,10 +154,8 @@ const PostSanction = () => {
       toast.success('Sanction details updated and submitted to MD successfully')
       setIsEditingSanction(false)
       // Refresh sanctions data
-      const response = await api.get(`/sanctions/customer/${id}`)
-      if (response.data && Array.isArray(response.data)) {
-        setSanctions(response.data)
-      }
+      const response = await api.get(`/customers/${id}/sanctions`)
+      setSanctions(response.data?.data?.creditSanctions || [])
     } catch (error) {
       toast.error('Failed to submit: ' + (error.message || error))
     } finally {

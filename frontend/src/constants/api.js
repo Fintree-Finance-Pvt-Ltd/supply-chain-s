@@ -34,6 +34,13 @@ export const API_ENDPOINTS = {
   // Customers
   CUSTOMERS: '/customers',
   CUSTOMER_BY_ID: (id) => `/customers/${id}`,
+  CUSTOMER_DOCUMENTS: (id) => `/customers/${id}/documents`,
+  CUSTOMER_KYC: (id) => `/customers/${id}/kyc`,
+  CUSTOMER_COAPPLICANTS: (id) => `/customers/${id}/coapplicants`,
+  CUSTOMER_ADDRESSES: (id) => `/customers/${id}/addresses`,
+  CUSTOMER_HISTORY: (id) => `/customers/${id}/history`,
+  CUSTOMER_SANCTIONS: (id) => `/customers/${id}/sanctions`,
+  CUSTOMER_CONTACT_PERSONS: (id) => `/customers/${id}/contact-persons`,
   SUBMIT_CUSTOMER: (id) => `/customers/${id}/submit`,
 
   // Credit
@@ -48,7 +55,7 @@ export const API_ENDPOINTS = {
 
   // Documents
   DOCUMENTS_UPLOAD: '/documents/upload',
-  DOCUMENTS_BY_CUSTOMER: (customerId) => `/documents/customer/${customerId}`,
+  DOCUMENTS_BY_CUSTOMER: (customerId) => `/customers/${customerId}/documents`,
   DOCUMENT_VERIFY: (id) => `/documents/${id}/verify`,
   DOCUMENT_DELETE: (id) => `/documents/${id}`,
 

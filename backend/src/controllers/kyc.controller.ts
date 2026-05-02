@@ -109,6 +109,32 @@ export class KycController {
         }
     };
 
+    getCustomerKycSummary = async (req: Request, res: Response): Promise<void> => {
+        try {
+            const customerId = Number(req.params.id || req.params.customerId);
+
+            if (!Number.isInteger(customerId) || customerId <= 0) {
+                res.status(400).json({
+                    success: false,
+                    message: 'Invalid customer ID',
+                });
+                return;
+            }
+
+            const kycSummary = await this.kycService.getKycSummaryByCustomer(customerId);
+
+            res.json({
+                success: true,
+                data: kycSummary,
+            });
+        } catch (error: any) {
+            res.status(500).json({
+                success: false,
+                message: error.message || 'Failed to fetch KYC summary',
+            });
+        }
+    };
+
     deleteKyc = async (req: Request, res: Response): Promise<void> => {
         try {
             const { id } = req.params;

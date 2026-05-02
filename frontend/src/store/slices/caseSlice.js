@@ -46,9 +46,13 @@ export const fetchExecutiveDashboard = createAsyncThunk(
 
 export const fetchCaseById = createAsyncThunk(
   'cases/fetchCaseById',
-  async (id, { rejectWithValue }) => {
+  async (payload, { rejectWithValue }) => {
     try {
-      const response = await customerService.getCustomerById(id)
+      const id = typeof payload === 'object' ? payload.id : payload
+      const sections = typeof payload === 'object' ? (payload.sections || []) : []
+      const response = sections.length
+        ? await customerService.getCustomerWithSections(id, sections)
+        : await customerService.getCustomerById(id)
       return response.data
     } catch (error) {
       return rejectWithValue(error.response?.data?.message || 'Failed to fetch case')

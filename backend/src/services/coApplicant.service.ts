@@ -34,7 +34,18 @@ export class CoApplicantService {
     async getCoApplicantsByCustomer(customerId: number): Promise<CoApplicant[]> {
         return await this.coApplicantRepository.find({
             where: { customerId },
-            relations: ['kycDetails', 'documents'],
+            select: {
+                id: true,
+                customerId: true,
+                name: true,
+                mobile: true,
+                email: true,
+                pan: true,
+                gender: true,
+                createdAt: true,
+                updatedAt: true,
+            },
+            order: { createdAt: 'ASC' },
         });
     }
 

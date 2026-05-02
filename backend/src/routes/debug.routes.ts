@@ -15,7 +15,17 @@ router.get('/customer/:id', async (req: Request, res: Response) => {
         const customerRepo = AppDataSource.getRepository(Customer);
         const customer = await customerRepo.findOne({
             where: { id: Number(req.params.id) },
-            relations: ['documents', 'addresses', 'coApplicants', 'contactPersons']
+            select: {
+                id: true,
+                name: true,
+                mobile: true,
+                email: true,
+                companyName: true,
+                gstNumber: true,
+                status: true,
+                assignedStage: true,
+                createdAt: true,
+            },
         });
         
         if (!customer) {
@@ -66,9 +76,10 @@ router.post('/verify-token', (req: Request, res: Response) => {
  */
 router.post('/generate-test-token', authMiddleware, (req: Request, res: Response) => {
     try {
+        const user = req.user as { email?: string } | undefined;
         const testPayload: JWTPayload = {
             userId: req.userId!,
-            email: req.user?.email || 'test@test.com',
+            email: user?.email || 'test@test.com',
             role: req.userRole || 'ADMIN'
         };
         

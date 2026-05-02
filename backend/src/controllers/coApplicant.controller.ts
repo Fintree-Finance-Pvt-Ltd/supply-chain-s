@@ -41,8 +41,17 @@ export class CoApplicantController {
 
     getCoApplicantsByCustomer = async (req: Request, res: Response): Promise<void> => {
         try {
-            const { customerId } = req.params;
-            const coApplicants = await this.coApplicantService.getCoApplicantsByCustomer(Number(customerId));
+            const customerId = Number(req.params.customerId || req.params.id);
+
+            if (!Number.isInteger(customerId) || customerId <= 0) {
+                res.status(400).json({
+                    success: false,
+                    message: 'Invalid customer ID',
+                });
+                return;
+            }
+
+            const coApplicants = await this.coApplicantService.getCoApplicantsByCustomer(customerId);
             res.json({
                 success: true,
                 data: coApplicants,

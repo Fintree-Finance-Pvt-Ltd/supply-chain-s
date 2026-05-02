@@ -12,6 +12,16 @@
   import { formatDate } from "../../utils/format";
   import { FiCheck, FiX, FiEye, FiFileText, FiDownload } from "react-icons/fi";
 
+  const DETAIL_SECTIONS = [
+    "documents",
+    "kyc",
+    "coApplicants",
+    "addresses",
+    "contactPersons",
+    "history",
+    "sanctions",
+  ];
+
   const ApprovalScreen = () => {
     const { id } = useParams(); // This is now customerId
     const navigate = useNavigate();
@@ -102,7 +112,7 @@
           setIsLoading(true);
 
           // Fetch customer details and sanctions separately (like credit L2)
-          const custResponse = await customerService.getCustomerById(id);
+          const custResponse = await customerService.getCustomerWithSections(id, DETAIL_SECTIONS);
           console.log("Customer response:", custResponse);
           setCustomer(custResponse.data);
 

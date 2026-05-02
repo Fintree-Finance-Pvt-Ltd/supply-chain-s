@@ -11,13 +11,21 @@ import LoadingSpinner from '../../components/LoadingSpinner'
 import { formatDate } from '../../utils/format'
 import { FiCheck, FiX, FiFileText, FiDownload, FiLock, FiEye } from 'react-icons/fi'
 import DocumentUploader from '../../components/DocumentUploader'
-import { useDispatch } from 'react-redux'
-import { fetchCaseById } from '../../store/slices/caseSlice'
+import { documentService } from '../../services/documentService'
+
+const DETAIL_SECTIONS = [
+  'documents',
+  'kyc',
+  'coApplicants',
+  'addresses',
+  'contactPersons',
+  'history',
+  'sanctions',
+]
 
 const OperationsCaseScreen = () => {
   const { id } = useParams() // customerId
   const navigate = useNavigate()
-  const dispatch = useDispatch()
   const { user } = useSelector((state) => state.auth)
 
   const [customer, setCustomer] = useState(null)
@@ -42,7 +50,7 @@ const OperationsCaseScreen = () => {
     const loadData = async () => {
       try {
         setIsLoading(true)
-        const response = await customerService.getCustomerById(id)
+        const response = await customerService.getCustomerWithSections(id, DETAIL_SECTIONS)
         if (response.data) {
           setCustomer(response.data)
           // Pre-fill bank data
@@ -77,7 +85,7 @@ const OperationsCaseScreen = () => {
     try {
       await workflowService.verifyDocument(docId, status, remark)
       toast.success('Document status updated')
-      const response = await customerService.getCustomerById(id)
+      const response = await customerService.getCustomerWithSections(id, DETAIL_SECTIONS)
       setCustomer(response.data)
     } catch (error) {
       toast.error('Verification failed')
@@ -113,7 +121,7 @@ const OperationsCaseScreen = () => {
       }
 
       // Refresh customer data
-      const response = await customerService.getCustomerById(id)
+      const response = await customerService.getCustomerWithSections(id, DETAIL_SECTIONS)
       setCustomer(response.data)
     } catch (error) {
       toast.error('Upload failed: ' + (error.response?.data?.message || error.message))

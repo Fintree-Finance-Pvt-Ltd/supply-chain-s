@@ -28,6 +28,7 @@ import useOtpFlow from "../../../hooks/useOtpFlow";
 import { validateMobile, validateEmail } from "../../../utils/validation";
 import { useLocation } from "react-router-dom";
 
+const ONBOARDING_SECTIONS = ["kyc", "coApplicants", "addresses", "contactPersons", "history"];
 
 
 const OnboardingContainer = () => {
@@ -124,10 +125,25 @@ const isFreshCustomer = location.state?.isFreshCustomer;
   // ----- Load case + statuses
   useEffect(() => {
     if (!customerId) return;
-    dispatch(fetchCaseById(customerId));
+    dispatch(fetchCaseById({ id: customerId, sections: ONBOARDING_SECTIONS }));
     loadVerificationStatuses(customerId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [customerId]);
+
+  useEffect(() => {
+    if (activeTab !== "documents" || !customerId) return;
+
+    const loadDocuments = async () => {
+      try {
+        const docs = await documentService.getDocumentsByCustomer(customerId);
+        setDocuments(docs.data || []);
+      } catch (error) {
+        console.error("Failed to fetch customer documents:", error);
+      }
+    };
+
+    loadDocuments();
+  }, [activeTab, customerId, setDocuments]);
 
   const loadVerificationStatuses = async (id) => {
     try {
@@ -174,7 +190,9 @@ if (isFreshCustomer && currentCase?.status === "draft"  && !currentCase?.applica
       remarks: currentCase.remarks || "",
     }));
 
-    setDocuments(currentCase.documents || []);
+    if (currentCase.documents) {
+      setDocuments(currentCase.documents);
+    }
 
     // hydrate coApplicants
     if (currentCase.coApplicants?.length) {

@@ -42,11 +42,12 @@ export const documentService = {
     }
   },
 
-  getDocumentsByCustomer: async (customerId) => {
+  getDocumentsByCustomer: async (customerId, params = { page: 1, limit: 20 }) => {
     try {
-      const response = await api.get(API_ENDPOINTS.DOCUMENTS_BY_CUSTOMER(customerId))
+      const response = await api.get(API_ENDPOINTS.DOCUMENTS_BY_CUSTOMER(customerId), { params })
       return {
-        data: response.data.success ? response.data.data : []
+        data: response.data.success ? response.data.data : [],
+        meta: response.data.meta,
       }
     } catch (error) {
       console.error('Error fetching documents:', error)

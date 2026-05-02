@@ -24,6 +24,16 @@ import {
 } from "react-icons/fi";
 import { toast } from "react-toastify";
 
+const DETAIL_SECTIONS = [
+  "documents",
+  "kyc",
+  "coApplicants",
+  "addresses",
+  "contactPersons",
+  "history",
+  "sanctions",
+];
+
 const RMCaseDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -71,7 +81,7 @@ const RMCaseDetail = () => {
 
   useEffect(() => {
     if (id) {
-      dispatch(fetchCaseById(id));
+      dispatch(fetchCaseById({ id, sections: DETAIL_SECTIONS }));
     }
   }, [id, dispatch]);
 
@@ -170,7 +180,7 @@ const RMCaseDetail = () => {
         partnerSanctions: sanctionsArray,
       });
       toast.success("Details saved successfully");
-      dispatch(fetchCaseById(id));
+      dispatch(fetchCaseById({ id, sections: DETAIL_SECTIONS }));
     } catch (error) {
       toast.error("Failed to save bank details");
     } finally {
@@ -219,7 +229,7 @@ const RMCaseDetail = () => {
       // For other document types, use the existing service
       await documentService.uploadDocument(id, file, type);
       toast.success("Document uploaded successfully");
-      dispatch(fetchCaseById(id));
+      dispatch(fetchCaseById({ id, sections: DETAIL_SECTIONS }));
     } catch (error) {
       toast.error(
         "Upload failed: " + (error.response?.data?.message || error.message),
@@ -238,7 +248,7 @@ const RMCaseDetail = () => {
       toast.success(
         `${type.toUpperCase()} triggered and simulated successfully`,
       );
-      dispatch(fetchCaseById(id));
+      dispatch(fetchCaseById({ id, sections: DETAIL_SECTIONS }));
     } catch (error) {
       toast.error("Action failed");
     } finally {
@@ -270,7 +280,7 @@ const RMCaseDetail = () => {
         partnerSanctions: sanctionsArray,
       });
       toast.success("Case submitted to MD successfully");
-      dispatch(fetchCaseById(id));
+      dispatch(fetchCaseById({ id, sections: DETAIL_SECTIONS }));
       navigate("/rm/dashboard");
     } catch (error) {
       toast.error("Submission failed");

@@ -6,6 +6,8 @@ import ApprovalTimeline from '../../components/ApprovalTimeline'
 import { formatDate } from '../../utils/format'
 import { FiFileText, FiDownload, FiCheckCircle, FiInfo } from 'react-icons/fi'
 
+const AUDIT_SECTIONS = ['documents', 'history', 'sanctions', 'kyc']
+
 const CaseAuditDetail = () => {
     const { id } = useParams()
     const navigate = useNavigate()
@@ -16,7 +18,7 @@ const CaseAuditDetail = () => {
         const loadData = async () => {
             try {
                 setIsLoading(true)
-                const response = await customerService.getCustomerById(id)
+                const response = await customerService.getCustomerWithSections(id, AUDIT_SECTIONS)
                 setCustomer(response.data)
             } catch (error) {
                 console.error('Error loading audit data:', error)

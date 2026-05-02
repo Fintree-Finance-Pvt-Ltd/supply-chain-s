@@ -1,5 +1,5 @@
 import { AppDataSource } from '../config/database';
-import { KycDetail, CoApplicant, ContactPerson, CustomerAddress } from '../entities';
+import { KycDetail, CoApplicant, ContactPerson, CustomerAddress, Applicant, Customer } from '../entities';
 import { Repository } from 'typeorm';
 
 export class KycService {
@@ -7,12 +7,16 @@ export class KycService {
     private coApplicantRepository: Repository<CoApplicant>;
     private contactPersonRepository: Repository<ContactPerson>;
     private addressRepository: Repository<CustomerAddress>;
+    private applicantRepository: Repository<Applicant>;
+    private customerRepository: Repository<Customer>;
 
     constructor() {
         this.kycRepository = AppDataSource.getRepository(KycDetail);
         this.coApplicantRepository = AppDataSource.getRepository(CoApplicant);
         this.contactPersonRepository = AppDataSource.getRepository(ContactPerson);
         this.addressRepository = AppDataSource.getRepository(CustomerAddress);
+        this.applicantRepository = AppDataSource.getRepository(Applicant);
+        this.customerRepository = AppDataSource.getRepository(Customer);
     }
 
     // ... existing kyc methods ...
@@ -162,8 +166,68 @@ export class KycService {
     async getKycByCustomer(customerId: number): Promise<KycDetail[]> {
         return await this.kycRepository.find({
             where: { customerId },
+            select: {
+                id: true,
+                customerId: true,
+                applicantType: true,
+                applicantIndex: true,
+                coApplicantId: true,
+                kycType: true,
+                kycNumber: true,
+                verified: true,
+                verifiedAt: true,
+                verifiedBy: true,
+                remarks: true,
+                createdAt: true,
+                updatedAt: true,
+            },
             order: { applicantIndex: 'ASC', createdAt: 'ASC' },
         });
+    }
+
+    async getKycSummaryByCustomer(customerId: number) {
+        const [customerProfile, applicant, kycDetails] = await Promise.all([
+            this.customerRepository.findOne({
+                where: { id: customerId },
+                select: {
+                    id: true,
+                    name: true,
+                    mobile: true,
+                    email: true,
+                    pan: true,
+                    companyType: true,
+                    companyName: true,
+                    companyMobile: true,
+                    companyEmail: true,
+                    companyPan: true,
+                    gstNumber: true,
+                    customerName: true,
+                    customerCode: true,
+                    remarks: true,
+                    kycVerified: true,
+                },
+            }),
+            this.applicantRepository.findOne({
+                where: { customerId },
+                select: {
+                    id: true,
+                    customerId: true,
+                    name: true,
+                    mobile: true,
+                    email: true,
+                    pan: true,
+                    createdAt: true,
+                    updatedAt: true,
+                },
+            }),
+            this.getKycByCustomer(customerId),
+        ]);
+
+        return {
+            customerProfile,
+            applicant,
+            kycDetails,
+        };
     }
 
     async getKycByType(

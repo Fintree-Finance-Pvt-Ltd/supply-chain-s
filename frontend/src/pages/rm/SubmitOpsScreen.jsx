@@ -5,6 +5,8 @@ import { workflowService } from '../../services/workflowService'
 import { customerService } from '../../services/customerService'
 import LoadingSpinner from '../../components/LoadingSpinner'
 
+const SUBMIT_SECTIONS = ['kyc', 'sanctions']
+
 const SubmitOpsScreen = () => {
     const { id } = useParams()
     const navigate = useNavigate()
@@ -17,7 +19,7 @@ const SubmitOpsScreen = () => {
         const loadCustomer = async () => {
             try {
                 setIsLoading(true)
-                const response = await customerService.getCustomerById(id)
+                const response = await customerService.getCustomerWithSections(id, SUBMIT_SECTIONS)
                 setCustomer(response.data)
             } catch (error) {
                 console.error('Error loading customer:', error)
@@ -63,7 +65,7 @@ const SubmitOpsScreen = () => {
                     <h2 className="text-xl font-semibold text-gray-900">Case Details</h2>
                     <div className="mt-4 grid grid-cols-2 gap-4 text-sm">
                         <p className="text-gray-600">Customer Name:</p>
-                        <p className="font-medium text-gray-900">{customer.customerName}</p>
+                        <p className="font-medium text-gray-900">{customer.customerName || customer.name}</p>
                         <p className="text-gray-600">Customer Code:</p>
                         <p className="font-medium text-gray-900">{customer.customerCode}</p>
                         <p className="text-gray-600">LAN ID:</p>

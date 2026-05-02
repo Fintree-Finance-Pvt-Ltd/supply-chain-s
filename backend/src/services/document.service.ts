@@ -1,6 +1,46 @@
 import { AppDataSource } from '../config/database';
 import { Document, Customer } from '../entities';
 import { Repository } from 'typeorm';
+import { normalizePagination, PaginationOptions } from '../utils/pagination';
+
+export interface DocumentListItem {
+  id: number;
+  customerId: number;
+  applicantId: number | null;
+  coApplicantId: number | null;
+  applicantType: string;
+  applicantIndex: number;
+  documentType: string;
+  fileName: string;
+  filePath: string;
+  mimeType: string | null;
+  fileSize: number | null;
+  uploadedBy: number;
+  uploadedByUser: {
+    id: number;
+    name: string;
+    email: string;
+    mobile: string | null;
+    defaultRole: string | null;
+  } | null;
+  verified: boolean;
+  status: string;
+  verifiedBy: number | null;
+  verifiedAt: Date | null;
+  remarks: string | null;
+  rmRemarks: string | null;
+  issueDate: Date | null;
+  expiryDate: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface PaginatedDocuments {
+  data: DocumentListItem[];
+  total: number;
+  page: number;
+  limit: number;
+}
 
 export class DocumentService {
   private documentRepository: Repository<Document>;
@@ -31,6 +71,7 @@ export class DocumentService {
     // Verify customer exists
     const customer = await this.customerRepository.findOne({
       where: { id: data.customerId },
+      select: { id: true },
     });
 
     if (!customer) {
@@ -46,18 +87,97 @@ export class DocumentService {
     return (await this.documentRepository.save(document)) as unknown as Document;
   }
 
-  async getDocumentsByCustomer(customerId: number): Promise<Document[]> {
-    return await this.documentRepository.find({
-      where: { customerId },
-      relations: ['uploadedByUser'],
-      order: { createdAt: 'DESC' },
-    });
+  async getDocumentsByCustomer(
+    customerId: number,
+    pagination?: PaginationOptions,
+  ): Promise<PaginatedDocuments> {
+    const { page, limit, skip } = normalizePagination(pagination);
+    const queryBuilder = this.documentRepository
+      .createQueryBuilder('document')
+      .leftJoin('document.uploadedByUser', 'uploadedByUser')
+      .select([
+        'document.id',
+        'document.customerId',
+        'document.applicantId',
+        'document.coApplicantId',
+        'document.documentType',
+        'document.fileName',
+        'document.filePath',
+        'document.mimeType',
+        'document.fileSize',
+        'document.uploadedBy',
+        'document.verified',
+        'document.status',
+        'document.verifiedBy',
+        'document.verifiedAt',
+        'document.remarks',
+        'document.rmRemarks',
+        'document.issueDate',
+        'document.expiryDate',
+        'document.createdAt',
+        'document.updatedAt',
+        'uploadedByUser.id',
+        'uploadedByUser.name',
+        'uploadedByUser.email',
+        'uploadedByUser.mobile',
+        'uploadedByUser.defaultRole',
+      ])
+      .where('document.customerId = :customerId', { customerId })
+      .orderBy('document.createdAt', 'DESC')
+      .skip(skip)
+      .take(limit);
+
+    const [documents, total] = await queryBuilder.getManyAndCount();
+
+    return {
+      data: documents.map((document) => ({
+        id: document.id,
+        customerId: document.customerId,
+        applicantId: document.applicantId,
+        coApplicantId: document.coApplicantId,
+        applicantType: document.coApplicantId ? 'co-applicant' : 'applicant',
+        applicantIndex: document.coApplicantId ? 1 : 0,
+        documentType: document.documentType,
+        fileName: document.fileName,
+        filePath: document.filePath,
+        mimeType: document.mimeType || null,
+        fileSize: document.fileSize || null,
+        uploadedBy: document.uploadedBy,
+        uploadedByUser: document.uploadedByUser?.id
+          ? {
+              id: document.uploadedByUser.id,
+              name: document.uploadedByUser.name,
+              email: document.uploadedByUser.email,
+              mobile: document.uploadedByUser.mobile || null,
+              defaultRole: document.uploadedByUser.defaultRole || null,
+            }
+          : null,
+        verified: document.verified,
+        status: document.status,
+        verifiedBy: document.verifiedBy,
+        verifiedAt: document.verifiedAt || null,
+        remarks: document.remarks || null,
+        rmRemarks: document.rmRemarks || null,
+        issueDate: document.issueDate || null,
+        expiryDate: document.expiryDate || null,
+        createdAt: document.createdAt,
+        updatedAt: document.updatedAt,
+      })),
+      total,
+      page,
+      limit,
+    };
   }
 
   async getDocumentById(id: number): Promise<Document | null> {
     return await this.documentRepository.findOne({
       where: { id },
-      relations: ['customer', 'uploadedByUser'],
+      select: {
+        id: true,
+        fileName: true,
+        filePath: true,
+        mimeType: true,
+      },
     });
   }
 

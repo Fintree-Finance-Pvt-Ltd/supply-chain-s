@@ -3,7 +3,6 @@ import { LMSDataSource } from "../config/lmsDatabase";
 import {
   Customer,
   CaseStatusHistory,
-  User,
   CustomerAddress,
   OtpSession,
   Loan,
@@ -14,7 +13,7 @@ import {
   RefreshToken,
 } from "../entities";
 import { CASE_STATUS, CaseStatus } from "../config/constants";
-import { LEGAL_TCP_SOCKET_OPTIONS, Repository } from "typeorm";
+import { In, Repository } from "typeorm";
 import { hashPassword, comparePassword } from "../utils/password";
 import { generateOtp } from "../integrations/otp/generators";
 import { IdentifierType, OtpSessionStatus } from "../entities/OtpSession";
@@ -67,6 +66,63 @@ export interface CustomerLoginResponse {
   message?: string;
 }
 
+export interface PaginationOptions {
+  page?: number;
+  limit?: number;
+}
+
+export interface PaginatedResult<T> {
+  data: T[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+export interface UserSummary {
+  id: number;
+  name: string;
+  email: string;
+  mobile: string | null;
+  defaultRole: string | null;
+}
+
+export interface CustomerListItem {
+  id: number;
+  name: string;
+  mobile: string;
+  email: string | null;
+  companyName: string | null;
+  companyMobile: string | null;
+  companyEmail: string | null;
+  gstNumber: string | null;
+  status: string;
+  customerCode: string | null;
+  rmId: number;
+  assignedUserId: number | null;
+  assignedStage: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+  rm: UserSummary | null;
+}
+
+export interface CustomerBasicDetail {
+  id: number;
+  name: string;
+  mobile: string;
+  email: string | null;
+  companyName: string | null;
+  gstNumber: string | null;
+  status: string;
+  assignedStage: string | null;
+  createdAt: Date;
+}
+
+const DEFAULT_PAGE = 1;
+const DEFAULT_LIMIT = 25;
+const MAX_LIMIT = 100;
+const MAX_DETAIL_ROWS = 100;
+const MAX_HISTORY_ROWS = 50;
+
 export class CustomerService {
   private customerRepository: Repository<Customer>;
   private statusHistoryRepository: Repository<CaseStatusHistory>;
@@ -105,6 +161,51 @@ export class CustomerService {
     });
   }
 
+  private normalizePagination(options?: PaginationOptions): Required<PaginationOptions> {
+    const rawPage = Number(options?.page);
+    const rawLimit = Number(options?.limit);
+    const page = Number.isInteger(rawPage) && rawPage > 0 ? rawPage : DEFAULT_PAGE;
+    const limit =
+      Number.isInteger(rawLimit) && rawLimit > 0
+        ? Math.min(rawLimit, MAX_LIMIT)
+        : DEFAULT_LIMIT;
+
+    return { page, limit };
+  }
+
+  private mapUserSummary(user?: Partial<UserSummary> | null): UserSummary | null {
+    if (!user?.id) return null;
+
+    return {
+      id: user.id,
+      name: user.name || "",
+      email: user.email || "",
+      mobile: user.mobile || null,
+      defaultRole: user.defaultRole || null,
+    };
+  }
+
+  private mapCustomerListItem(customer: Customer): CustomerListItem {
+    return {
+      id: customer.id,
+      name: customer.name,
+      mobile: customer.mobile,
+      email: customer.email || null,
+      companyName: customer.companyName || null,
+      companyMobile: customer.companyMobile || null,
+      companyEmail: customer.companyEmail || null,
+      gstNumber: customer.gstNumber || null,
+      status: customer.status,
+      customerCode: customer.customerCode || null,
+      rmId: customer.rmId,
+      assignedUserId: customer.assignedUserId || null,
+      assignedStage: customer.assignedStage || null,
+      createdAt: customer.createdAt,
+      updatedAt: customer.updatedAt,
+      rm: this.mapUserSummary(customer.rm),
+    };
+  }
+
   /**
    * Send OTP via SMS using ALOT provider
    */
@@ -112,9 +213,9 @@ export class CustomerService {
     try {
       const message = `OTP for mobile number verification is ${otp}. Do not share this OTP with anyone. Thanks & Regards Fintree Finance Private Limited.`;
       await this.smsProvider.sendSms(msisdn, message);
-      console.log(`[SMS OTP] OTP sent successfully to ${msisdn}`);
+      console.info("[SMS OTP] OTP sent successfully", { msisdn });
     } catch (error: any) {
-      console.error("[SMS OTP] Error sending SMS:", error.message);
+      console.error("[SMS OTP] Error sending SMS", error);
       throw new Error("Unable to send OTP");
     }
   }
@@ -183,37 +284,74 @@ export class CustomerService {
     return await this.customerRepository.save(customer);
   }
 
-  async getCustomerById(id: number): Promise<Customer | null> {
-    return await this.customerRepository.findOne({
-      where: { id },
-      relations: [
-        "rm",
-        "documents",
-        "documents.uploadedByUser",
-        "kycDetails",
-        "creditSanctions",
-        "postSanctions",
-        "operationsChecks",
-        "coApplicants",
-        "coApplicants.kycDetails",
-        "contactPersons",
-        "addresses",
-        "statusHistory",
-        "statusHistory.changedByUser",
-        "applicant", // <-- include applicant relation
-        "sanctionLimitHistory", // Include sanction limit history for credit team
-      ],
-    });
+  async getCustomerById(id: number): Promise<CustomerBasicDetail | null> {
+    const customer = await this.customerRepository
+      .createQueryBuilder("customer")
+      .select([
+        "customer.id",
+        "customer.name",
+        "customer.mobile",
+        "customer.email",
+        "customer.companyName",
+        "customer.gstNumber",
+        "customer.status",
+        "customer.assignedStage",
+        "customer.createdAt",
+      ])
+      .where("customer.id = :id", { id })
+      .getOne();
+
+    if (!customer) return null;
+
+    return {
+      id: customer.id,
+      name: customer.name,
+      mobile: customer.mobile,
+      email: customer.email || null,
+      companyName: customer.companyName || null,
+      gstNumber: customer.gstNumber || null,
+      status: customer.status,
+      assignedStage: customer.assignedStage || null,
+      createdAt: customer.createdAt,
+    };
   }
 
-  async getCustomers(filters: {
-    status?: string;
-    rmId?: number;
-  }): Promise<Customer[]> {
-    const queryBuilder = this.customerRepository.createQueryBuilder("customer");
+  async getCustomers(
+    filters: {
+      status?: string;
+      rmId?: number;
+    },
+    pagination?: PaginationOptions,
+  ): Promise<PaginatedResult<CustomerListItem>> {
+    const { page, limit } = this.normalizePagination(pagination);
+    const queryBuilder = this.customerRepository
+      .createQueryBuilder("customer")
+      .leftJoin("customer.rm", "rm")
+      .select([
+        "customer.id",
+        "customer.name",
+        "customer.mobile",
+        "customer.email",
+        "customer.companyName",
+        "customer.companyMobile",
+        "customer.companyEmail",
+        "customer.gstNumber",
+        "customer.status",
+        "customer.customerCode",
+        "customer.rmId",
+        "customer.assignedUserId",
+        "customer.assignedStage",
+        "customer.createdAt",
+        "customer.updatedAt",
+        "rm.id",
+        "rm.name",
+        "rm.email",
+        "rm.mobile",
+        "rm.defaultRole",
+      ]);
 
     if (filters.status) {
-      queryBuilder.where("customer.status = :status", {
+      queryBuilder.andWhere("customer.status = :status", {
         status: filters.status,
       });
     }
@@ -222,11 +360,18 @@ export class CustomerService {
       queryBuilder.andWhere("customer.rmId = :rmId", { rmId: filters.rmId });
     }
 
-    queryBuilder
-      .leftJoinAndSelect("customer.rm", "rm")
-      .orderBy("customer.createdAt", "DESC");
+    const [customers, total] = await queryBuilder
+      .orderBy("customer.createdAt", "DESC")
+      .skip((page - 1) * limit)
+      .take(limit)
+      .getManyAndCount();
 
-    return await queryBuilder.getMany();
+    return {
+      data: customers.map((customer) => this.mapCustomerListItem(customer)),
+      total,
+      page,
+      limit,
+    };
   }
 
   async updateStatus(
@@ -292,16 +437,48 @@ export class CustomerService {
       if (!lmsCustomer) {
         // Fallback to local DB
 
-        console.log("fallback to get from customer in supply chain");
+        console.info("[CustomerBasicInfo] LMS customer not found, using local fallback", {
+          partnerId,
+        });
         const customer = await this.customerRepository.findOne({
           where: { id: partnerId },
-          relations: ["addresses"],
+          select: {
+            id: true,
+            companyName: true,
+            email: true,
+            companyEmail: true,
+            mobile: true,
+            companyMobile: true,
+            pan: true,
+            companyPan: true,
+            gstNumber: true,
+            bankAccountNo: true,
+            bankName: true,
+            bankBranch: true,
+            bankIfscCode: true,
+            bankType: true,
+          },
         });
 
         if (!customer) return null;
 
+        const addressRows = await AppDataSource.getRepository(CustomerAddress).find({
+          where: { customerId: Number(partnerId) },
+          select: {
+            id: true,
+            customerId: true,
+            type: true,
+            fullAddress: true,
+            pincode: true,
+            state: true,
+            city: true,
+          },
+          order: { createdAt: "ASC" },
+          take: MAX_DETAIL_ROWS,
+        });
+
         const addresses =
-          customer.addresses?.map((addr: CustomerAddress) => ({
+          addressRows.map((addr: CustomerAddress) => ({
             type: addr.type,
             fullAddress: addr.fullAddress,
             pincode: addr.pincode,
@@ -340,20 +517,42 @@ export class CustomerService {
         bankType: lmsCustomer.bank_account_type || "",
       };
     } catch (error) {
-      console.error("Error fetching customer basic info from LMS:", error);
+      console.error("Error fetching customer basic info from LMS", error);
       return null;
     }
   }
 
   // Get all customers with basic info
-  async getAllCustomersBasicInfo(filters?: {
-    status?: string;
-    rmId?: number;
-  }): Promise<CustomerBasicInfo[]> {
-    const queryBuilder = this.customerRepository.createQueryBuilder("customer");
+  async getAllCustomersBasicInfo(
+    filters?: {
+      status?: string;
+      rmId?: number;
+    },
+    pagination?: PaginationOptions,
+  ): Promise<PaginatedResult<CustomerBasicInfo>> {
+    const { page, limit } = this.normalizePagination(pagination);
+    const queryBuilder = this.customerRepository
+      .createQueryBuilder("customer")
+      .select([
+        "customer.id",
+        "customer.companyName",
+        "customer.email",
+        "customer.companyEmail",
+        "customer.mobile",
+        "customer.companyMobile",
+        "customer.pan",
+        "customer.companyPan",
+        "customer.gstNumber",
+        "customer.bankAccountNo",
+        "customer.bankName",
+        "customer.bankBranch",
+        "customer.bankIfscCode",
+        "customer.bankType",
+        "customer.createdAt",
+      ]);
 
     if (filters?.status) {
-      queryBuilder.where("customer.status = :status", {
+      queryBuilder.andWhere("customer.status = :status", {
         status: filters.status,
       });
     }
@@ -362,12 +561,38 @@ export class CustomerService {
       queryBuilder.andWhere("customer.rmId = :rmId", { rmId: filters.rmId });
     }
 
-    queryBuilder.leftJoinAndSelect("customer.addresses", "addresses");
-    queryBuilder.orderBy("customer.createdAt", "DESC");
+    const [customers, total] = await queryBuilder
+      .orderBy("customer.createdAt", "DESC")
+      .skip((page - 1) * limit)
+      .take(limit)
+      .getManyAndCount();
 
-    const customers = await queryBuilder.getMany();
-    console.log(customers);
-    return customers.map((customer) => ({
+    const customerIds = customers.map((customer) => customer.id);
+    const addressRows = customerIds.length
+      ? await AppDataSource.getRepository(CustomerAddress).find({
+          where: { customerId: In(customerIds) },
+          select: {
+            id: true,
+            customerId: true,
+            type: true,
+            fullAddress: true,
+            pincode: true,
+            state: true,
+            city: true,
+            createdAt: true,
+          },
+          order: { createdAt: "ASC" },
+        })
+      : [];
+
+    const addressesByCustomerId = new Map<number, CustomerAddress[]>();
+    for (const address of addressRows) {
+      const entries = addressesByCustomerId.get(address.customerId) || [];
+      entries.push(address);
+      addressesByCustomerId.set(address.customerId, entries);
+    }
+
+    const data = customers.map((customer) => ({
       id: customer.id,
       companyName: customer.companyName || "",
       email: customer.email || customer.companyEmail || "",
@@ -375,7 +600,7 @@ export class CustomerService {
       pan: customer.pan || customer.companyPan || "",
       gstNumber: customer.gstNumber || "",
       addresses:
-        customer.addresses?.map((addr: CustomerAddress) => ({
+        (addressesByCustomerId.get(customer.id) || []).map((addr: CustomerAddress) => ({
           type: addr.type,
           fullAddress: addr.fullAddress,
           pincode: addr.pincode,
@@ -388,6 +613,16 @@ export class CustomerService {
       bankIfscCode: customer.bankIfscCode || "",
       bankType: customer.bankType || "",
     }));
+
+    console.info("[CustomerBasicInfo] Fetched customers page", {
+      page,
+      limit,
+      total,
+      returned: data.length,
+      filters,
+    });
+
+    return { data, total, page, limit };
   }
 
   // =====================================================
@@ -416,7 +651,10 @@ export class CustomerService {
         };
       }
 
-      console.log(lmsCustomer)
+      console.info("[CustomerLogin] LMS customer found", {
+        customerId: lmsCustomer.id,
+        partnerLoanId: lmsCustomer.partner_loan_id,
+      });
       // Step 4: Validate password
       const isPasswordValid = await comparePassword(
         password,
@@ -442,7 +680,7 @@ export class CustomerService {
         partnerLoanId: partnerLoanId,
       };
     } catch (error: any) {
-      console.error("Login error:", error);
+      console.error("Login error", error);
       return { success: false, message: error.message || "Login failed" };
     }
   }
@@ -541,7 +779,11 @@ export class CustomerService {
   ): Promise<CustomerLoginResponse> {
     // Check if customer exists in LMS supply_chain_loans by applicant_mobile
     const lmsCustomer = await this.findCustomerByMobile(mobile);
-    console.log("lmsCustomer:", lmsCustomer);
+    console.info("[CustomerOtp] LMS customer lookup completed", {
+      found: Boolean(lmsCustomer),
+      customerId: lmsCustomer?.id,
+      partnerLoanId: lmsCustomer?.partner_loan_id,
+    });
     if (!lmsCustomer) {
       return {
         success: false,
@@ -562,7 +804,9 @@ export class CustomerService {
   `,
       [lmsCustomer.id, mobile],
     );
- console.log("result",result)
+    console.info("[CustomerOtp] OTP session lookup completed", {
+      rows: Array.isArray(result) ? result.length : 0,
+    });
     const otpSession = result[0];
 
     if (!otpSession) {
@@ -607,7 +851,10 @@ export class CustomerService {
 
     // Get partnerLoanId from LMS
     const partnerLoanId = lmsCustomer.partner_loan_id || "";
-    console.log(lmsCustomer);
+    console.info("[CustomerOtp] OTP verified for LMS customer", {
+      customerId: lmsCustomer.id,
+      partnerLoanId,
+    });
     // Generate JWT token
     const token = generateCustomerToken(lmsCustomer.id, partnerLoanId);
 
@@ -664,7 +911,7 @@ async setPassword(
       message: "Password set successfully",
     };
   } catch (error: any) {
-    console.error("Set password error:", error);
+    console.error("Set password error", error);
     return {
       success: false,
       message: "Unable to set password",
@@ -744,7 +991,7 @@ async setPassword(
       // Try to find in internal DB for password validation
       let customer = await this.customerRepository.findOne({
         where: { mobile },
-        relations: ["addresses"],
+        select: { id: true, mobile: true },
       });
 
       // If customer doesn't exist in internal DB, they can't login with password
@@ -776,7 +1023,7 @@ async setPassword(
         },
       };
     } catch (error: any) {
-      console.error("Login error:", error);
+      console.error("Login error", error);
       return { success: false, message: error.message || "Login failed" };
     }
   }
@@ -808,7 +1055,7 @@ async setPassword(
     // Find customer in internal DB for OTP session
     const customer = await this.customerRepository.findOne({
       where: { mobile },
-      relations: ["addresses"],
+      select: { id: true, mobile: true },
     });
 
     if (!customer) {
@@ -987,7 +1234,7 @@ async setPassword(
         isLmsData: true,
       };
     } catch (error) {
-      console.error("Dashboard error:", error);
+      console.error("Dashboard error", error);
 
       return {
         totalSanctioned: 0,
@@ -1051,7 +1298,7 @@ async setPassword(
         };
       }
     } catch (error) {
-      console.error("Error fetching drawdowns from LMS:", error);
+      console.error("Error fetching drawdowns from LMS", error);
     }
 
     return { data: [], total: 0, page, limit };
@@ -1167,7 +1414,7 @@ async setPassword(
         };
       }
     } catch (error) {
-      console.error("Error fetching loan details from LMS:", error);
+      console.error("Error fetching loan details from LMS", error);
     }
 
     // Fallback to local DB
@@ -1203,7 +1450,7 @@ async setPassword(
         }));
       }
     } catch (error) {
-      console.error("Error fetching loan schedule from LMS:", error);
+      console.error("Error fetching loan schedule from LMS", error);
     }
 
     // Fallback to local DB
@@ -1283,7 +1530,7 @@ async setPassword(
         };
       }
     } catch (error) {
-      console.error("Error fetching loan statement from LMS:", error);
+      console.error("Error fetching loan statement from LMS", error);
     }
 
     // Fallback to local DB
@@ -1363,7 +1610,7 @@ async setPassword(
           data: [],
         };
       }
-    console.log(lan)
+      console.info("[CustomerTransactions] Fetching transactions by LAN", { lan });
       const results = await LMSDataSource.query(
         `
         SELECT 
@@ -1389,13 +1636,16 @@ async setPassword(
             collection_utr: row.collection_utr || null,
           }))
         : [];
-      console.log("transactions by lan", transactions);
+      console.info("[CustomerTransactions] Transactions fetched by LAN", {
+        lan,
+        rows: Array.isArray(transactions) ? transactions.length : 0,
+      });
       return {
         success: true,
         data: transactions,
       };
     } catch (error: any) {
-      console.error("Error fetching transactions by LAN:", error);
+      console.error("Error fetching transactions by LAN", error);
       return {
         success: false,
         data: [],
@@ -1433,7 +1683,7 @@ async setPassword(
         };
       }
     } catch (error) {
-      console.error("Error fetching transaction receipt from LMS:", error);
+      console.error("Error fetching transaction receipt from LMS", error);
     }
 
     // Fallback to local DB
@@ -1577,7 +1827,7 @@ async setPassword(
         },
       };
     } catch (error: any) {
-      console.error("Error fetching transaction detail:", error);
+      console.error("Error fetching transaction detail", error);
       return {
         success: false,
         message: error.message || "Failed to fetch transaction detail",
@@ -1677,7 +1927,7 @@ async setPassword(
         };
       }
     } catch (error) {
-      console.error("Error fetching bank details from LMS:", error);
+      console.error("Error fetching bank details from LMS", error);
     }
 
     // Fallback to local DB
@@ -1870,7 +2120,7 @@ async setPassword(
    */
   async getCustomerDashboard(partnerLoanId: string): Promise<any> {
     try {
-      console.log(partnerLoanId);
+      console.info("[CustomerDashboard] Fetching LMS dashboard", { partnerLoanId });
 
       // 1️⃣ Sanction Summary
       const [sanction] = await LMSDataSource.query(

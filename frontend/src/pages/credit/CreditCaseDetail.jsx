@@ -16,6 +16,16 @@ import StatusBadge from '../../components/StatusBadge'
 import ApprovalTimeline from '../../components/ApprovalTimeline'
 import CustomerFullDetails from '../../components/CustomerFullDetails'
 import { submitCase } from '../../store/slices/caseSlice'
+
+const DETAIL_SECTIONS = [
+  'documents',
+  'kyc',
+  'coApplicants',
+  'addresses',
+  'contactPersons',
+  'history',
+  'sanctions',
+]
  
 const CreditCaseDetail = () => {
   const { id } = useParams()
@@ -76,7 +86,7 @@ const CreditCaseDetail = () => {
  
   useEffect(() => {
     if (id) {
-      dispatch(fetchCaseById(id))
+      dispatch(fetchCaseById({ id, sections: DETAIL_SECTIONS }))
     }
     return () => {
       dispatch(clearCurrentCase())
@@ -457,7 +467,7 @@ const CreditCaseDetail = () => {
     try {
       await documentService.uploadDocument(id, file, type)
       toast.success('Document uploaded successfully')
-      dispatch(fetchCaseById(id))
+      dispatch(fetchCaseById({ id, sections: DETAIL_SECTIONS }))
     } catch (error) {
       toast.error('Upload failed: ' + (error.response?.data?.message || error.message))
     }
@@ -467,7 +477,7 @@ const CreditCaseDetail = () => {
     try {
       await documentService.updateDocumentMetadata(docId, { documentType: newType })
       toast.success('Document type updated')
-      dispatch(fetchCaseById(id))
+      dispatch(fetchCaseById({ id, sections: DETAIL_SECTIONS }))
     } catch (error) {
       toast.error('Update failed: ' + (error.response?.data?.message || error.message))
     }
@@ -496,7 +506,7 @@ const handleVerifyDocument = async (docId, status) => {
 
     toast.success('Document status updated');
 
-    await dispatch(fetchCaseById(id)); // re-fetch data
+    await dispatch(fetchCaseById({ id, sections: DETAIL_SECTIONS })); // re-fetch data
 
     //  Restore scroll position AFTER re-render
     setTimeout(() => {
@@ -1010,8 +1020,3 @@ const formatINR = (num) => {
 }
  
 export default CreditCaseDetail
- 
- 
- 
- 
- 

@@ -39,16 +39,25 @@ export class CustomerController {
 
   getCustomers = async (req: Request, res: Response): Promise<void> => {
     try {
-      const { status, rmId } = req.query;
+      const { status, rmId, page, limit } = req.query;
 
       const customers = await this.customerService.getCustomers({
         status: status as string,
         rmId: rmId ? parseInt(rmId as string) : undefined,
+      }, {
+        page: page ? parseInt(page as string, 10) : undefined,
+        limit: limit ? parseInt(limit as string, 10) : undefined,
       });
 
       res.json({
         success: true,
-        data: customers,
+        data: customers.data,
+        meta: {
+          page: customers.page,
+          limit: customers.limit,
+          total: customers.total,
+          totalPages: Math.ceil(customers.total / customers.limit),
+        },
       });
     } catch (error: any) {
       res.status(500).json({
@@ -61,7 +70,17 @@ export class CustomerController {
   getCustomerById = async (req: Request, res: Response): Promise<void> => {
     try {
       const { id } = req.params;
-      const customer = await this.customerService.getCustomerById(Number(id));
+      const customerId = Number(id);
+
+      if (!Number.isInteger(customerId) || customerId <= 0) {
+        res.status(400).json({
+          success: false,
+          message: 'Invalid customer ID',
+        });
+        return;
+      }
+
+      const customer = await this.customerService.getCustomerById(customerId);
 
       if (!customer) {
         res.status(404).json({
@@ -143,13 +162,17 @@ export class CustomerController {
             assignedStage: workflowStage,
           });
           
-          console.log(`[TaskDistribution] Case ${id} assigned to user ${assignmentResult.assignedUserId} (${assignmentResult.assignedUserName})`);
+          console.info('[TaskDistribution] Case assigned', {
+            caseId: id,
+            assignedUserId: assignmentResult.assignedUserId,
+            assignedUserName: assignmentResult.assignedUserName,
+          });
         } else {
-          console.warn(`[TaskDistribution] No eligible user found for case ${id}`);
+          console.warn('[TaskDistribution] No eligible user found', { caseId: id });
         }
       } catch (assignmentError) {
         // Log error but don't fail the case submission
-        console.error('[TaskDistribution] Error assigning case:', assignmentError);
+        console.error('[TaskDistribution] Error assigning case', assignmentError);
       }
 
       res.json({
@@ -175,17 +198,26 @@ export class CustomerController {
    */
   getAllCustomersBasic = async (req: Request, res: Response): Promise<void> => {
     try {
-      const { status, rmId } = req.query;
+      const { status, rmId, page, limit } = req.query;
 
       const customers = await this.customerService.getAllCustomersBasicInfo({
         status: status as string,
         rmId: rmId ? parseInt(rmId as string) : undefined,
+      }, {
+        page: page ? parseInt(page as string, 10) : undefined,
+        limit: limit ? parseInt(limit as string, 10) : undefined,
       });
 
       res.json({
         success: true,
-        data: customers,
-        count: customers.length,
+        data: customers.data,
+        count: customers.data.length,
+        meta: {
+          page: customers.page,
+          limit: customers.limit,
+          total: customers.total,
+          totalPages: Math.ceil(customers.total / customers.limit),
+        },
       });
     } catch (error: any) {
       res.status(500).json({
@@ -475,7 +507,7 @@ export class CustomerController {
   getDashboard = async (req: Request, res: Response): Promise<void> => {
     try {
       const partnerLoanId = (req as any).partnerLoanId;
-      console.log("partnerLoanId---->", partnerLoanId);
+      console.info('[CustomerDashboard] Fetching dashboard', { partnerLoanId });
       if (!partnerLoanId) {
         res.status(401).json({
           success: false,
@@ -754,7 +786,10 @@ async getLoanSchedule(req: Request, res: Response) {
         `SELECT lan FROM supply_chain_sanctions WHERE lender = ?`,
         [lender]
       );
-      console.log(lan)
+      console.info('[CustomerTransactions] LMS LAN lookup completed', {
+        lender,
+        rows: Array.isArray(lan) ? lan.length : 0,
+      });
       const result = await this.customerService.getTransactionsByLan(lan[0]?.lan);
 
       if (!result) {

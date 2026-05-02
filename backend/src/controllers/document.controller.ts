@@ -143,12 +143,32 @@ export class DocumentController {
 
   getDocumentsByCustomer = async (req: Request, res: Response): Promise<void> => {
     try {
-      const { customerId } = req.params;
-      const documents = await this.documentService.getDocumentsByCustomer(Number(customerId));
+      const customerId = Number(req.params.customerId || req.params.id);
+      const page = req.query.page ? Number(req.query.page) : undefined;
+      const limit = req.query.limit ? Number(req.query.limit) : undefined;
+
+      if (!Number.isInteger(customerId) || customerId <= 0) {
+        res.status(400).json({
+          success: false,
+          message: 'Invalid customer ID',
+        });
+        return;
+      }
+
+      const documents = await this.documentService.getDocumentsByCustomer(customerId, {
+        page,
+        limit,
+      });
 
       res.json({
         success: true,
-        data: documents,
+        data: documents.data,
+        meta: {
+          page: documents.page,
+          limit: documents.limit,
+          total: documents.total,
+          totalPages: Math.ceil(documents.total / documents.limit),
+        },
       });
     } catch (error: any) {
       res.status(500).json({
