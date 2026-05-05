@@ -715,45 +715,31 @@ await this.logHistory({
 });
 
 
+if (newStatus === "submitted" ) {
+  const customer = await this.customerRepository.findOne({
+    where: { id: customerId },
+    select: ["assignedUserId", "customerName", "companyName"],
+  });
 
-if (newStatus === "submitted") {
-  // ✅ 1. Send to assigned CREDIT_TEAM_L1
-  if (workflow.assignedUserId) {
-    const assignedUser = await this.userRepository.findOne({
+  if (customer?.assignedUserId) {
+    const rmUser = await this.userRepository.findOne({
       where: {
-        id: workflow.assignedUserId,
-        defaultRole: "CREDIT_TEAM_L1",
+        id: customer.assignedUserId,
+        // defaultRole: "RELATIONSHIP_MANAGER",
       },
       select: ["email"],
     });
 
-    if (assignedUser?.email) {
+    if (rmUser?.email) {
       await sendMail({
-        to: assignedUser.email,
-        subject: "New Case Assigned - Credit L1",
+        to: rmUser.email,
+        subject: "Case submitted by RM - Credit L1 Review Pending",
         text: `Customer ID: ${customerId} is assigned to you for review.`,
       });
     }
   }
-
-  // ✅ 2. Send to ALL MD users
-  const mdUsers = await this.userRepository.find({
-    where: {
-      defaultRole: "MD",
-    },
-    select: ["email"],
-  });
-
-  for (const md of mdUsers) {
-    if (md.email) {
-      await sendMail({
-        to: md.email,
-        subject: "New Case Submitted",
-        text: `Customer ID: ${customerId} has been submitted and assigned to Credit L1.`,
-      });
-    }
-  }
 }
+
 
 // Existing logic
 await this.awardOpsApprovalRewards(
