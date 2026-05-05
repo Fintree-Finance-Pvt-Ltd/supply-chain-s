@@ -604,7 +604,7 @@ router.post('/customers/:customerId/rm-submit-md', checkRole(['relationship_mana
 router.post('/customers/:customerId/md-approve', checkRole(['md']), async (req: Request, res: Response) => {
   try {
     const { customerId } = req.params;
-    const { approved, remarks, sanctionAmount, tenure, interestRate, conditions, penalCharges, processingFees, partnerSanctions } = req.body;
+    const { approved, remarks, sanctionAmount, tenure, interestRate, conditions, penalCharges, processingFees, serviceFee, partnerSanctions } = req.body;
     const user = (req as any).user;
 
     let sanctionData;
@@ -615,7 +615,7 @@ router.post('/customers/:customerId/md-approve', checkRole(['md']), async (req: 
       sanctionData = { partnerSanctions };
     } else if (sanctionAmount) {
       // Legacy single sanction format
-      sanctionData = { sanctionAmount, tenure, interestRate, conditions, penalCharges, processingFees };
+      sanctionData = { sanctionAmount, tenure, interestRate, conditions, penalCharges, processingFees, serviceFee };
     }
 
     const workflow = await customerOnboardingService.mdApprove(
@@ -782,6 +782,48 @@ router.post('/customers/:customerId/ops-l1', checkRole(['operations_team_l1', 'o
   }
 });
 
+
+
+router.get('/invoices/customers/:customerId/lans/:lanId/rates', async (req, res) => {
+  try {
+    const { customerId, lanId } = req.params;
+
+    const lans = await invoiceDiscountingService.getLANsByCustomer(parseInt(customerId));
+    const loanAccount = lans.find(la => la.id === parseInt(lanId));
+
+    if (!loanAccount) {
+      return res.status(404).json({ success: false, message: 'LAN not found' });
+    }
+
+    const CreditSanction = AppDataSource.getRepository('CreditSanction');
+    const sanction = await CreditSanction.findOne({
+      where: {
+        customerId: parseInt(customerId),
+        partner: loanAccount.lender || loanAccount.partnerId,
+        status: 'approved'
+      },
+      order: { createdAt: 'DESC' }
+    });
+
+    // ✅ ADD CACHE DISABLE HEADERS
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
+    res.set('Surrogate-Control', 'no-store');
+
+    res.json({
+      success: true,
+      data: {
+        roi: sanction?.interestRate || 0,
+        penalCharges: sanction?.penalCharges || 0,
+        serviceFee: sanction?.serviceFee || 0
+      }
+    });
+
+  } catch (error: any) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+});
 /**
  * POST /api/workflows/customers/:customerId/ops-head
  * Operations Head finalizes and completes customer onboarding

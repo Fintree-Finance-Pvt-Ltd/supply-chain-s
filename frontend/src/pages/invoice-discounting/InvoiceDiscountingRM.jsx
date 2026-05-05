@@ -6,6 +6,8 @@ import LoadingSpinner from "../../components/LoadingSpinner";
 import StatusBadge from "../../components/StatusBadge";
 import { documentService } from "../../services/documentService";
 import { FiUpload, FiEye } from "react-icons/fi";
+import api from "../../services/api"; 
+
 import {
   FiSave,
   FiSend,
@@ -165,28 +167,49 @@ const handleViewCustomerInvoices = async (invoice) => {
     }
   };
 
-  const handleLANChange = async (lanId) => {
-    setSelectedLAN(lanId);
-    setSelectedSupplier(null);
-    setSupplierBankDetails(null);
 
-    if (lanId && selectedCustomer) {
+const handleLANChange = async (lanId) => {
+  setSelectedLAN(lanId);
+  setSelectedSupplier(null);
+  setSupplierBankDetails(null);
+
+  if (lanId && selectedCustomer) {
+    try {
+      setLoading(true);
+      const response = await workflowService.getSuppliersByCustomer(
+        selectedCustomer.id
+      );
+      const supplierData = response?.data?.data || response?.data || [];
+      setSuppliers(Array.isArray(supplierData) ? supplierData : []);
+
+      // ✅ FIXED ROI/ServiceFee fetch
+      const ratesUrl = `/workflows/invoices/customers/${selectedCustomer.id}/lans/${lanId}/rates`;
+      console.log('🔄 Fetching:', ratesUrl);
+      
       try {
-        setLoading(true);
-        const response = await workflowService.getSuppliersByCustomer(
-          selectedCustomer.id,
-        );
-        // Handle response format - could be { data: [...] } or { data: { data: [...] } }
-        const supplierData = response?.data?.data || response?.data || [];
-        setSuppliers(Array.isArray(supplierData) ? supplierData : []);
-      } catch (error) {
-        console.error("Error loading suppliers:", error);
-        setSuppliers([]);
-      } finally {
-        setLoading(false);
+        const ratesResponse = await api.get(ratesUrl);
+        console.log('✅ Response:', ratesResponse.data);
+        
+        if (ratesResponse.data?.success) {
+          setFormData(prev => ({
+            ...prev,
+            roiPercentage: ratesResponse.data.data.roi || '',
+              penalCharges: ratesResponse.data.data.penalCharges || '',
+            serviceFee: ratesResponse.data.data.serviceFee || ''
+          }));
+        }
+      } catch (ratesError) {
+        console.error('❌ Rates Error:', ratesError.response?.data || ratesError.message);
       }
+
+    } catch (error) {
+      console.error('Suppliers Error:', error);
+      setSuppliers([]);
+    } finally {
+      setLoading(false);
     }
-  };
+  }
+};
 
   const handleSupplierChange = async (supplierId) => {
     const supplierIdNum = parseInt(supplierId);

@@ -79,6 +79,7 @@ export const workflowService = {
     getCustomersForRM: () => api.get(API_ENDPOINTS.WORKFLOW_INVOICE_GET_CUSTOMERS),
     getCustomersByRM: () => api.get(API_ENDPOINTS.WORKFLOW_INVOICE_GET_CUSTOMERS),
     getLANsByCustomer: (customerId) => api.get(API_ENDPOINTS.WORKFLOW_INVOICE_GET_LANS(customerId)),
+    getInvoiceRates: (customerId, lanId) => api.get(API_ENDPOINTS.WORKFLOW_INVOICE_GET_RATES(customerId, lanId)),
     getSuppliersByCustomer: (customerId) => api.get(API_ENDPOINTS.WORKFLOW_INVOICE_GET_SUPPLIERS(customerId)),
     getSupplierBankDetails: (supplierId) => api.get(API_ENDPOINTS.WORKFLOW_INVOICE_GET_SUPPLIER_BANK(supplierId)),
 
