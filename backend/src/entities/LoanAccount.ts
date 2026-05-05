@@ -53,6 +53,9 @@ export class LoanAccount {
   @Column({ type: 'varchar', length: 20, default: 'active' })
   status: string; // active, closed, defaulted
 
+  @Column({ type: 'boolean', default: false })
+  isOnboarded: boolean;
+
   @CreateDateColumn()
   createdAt: Date;
 

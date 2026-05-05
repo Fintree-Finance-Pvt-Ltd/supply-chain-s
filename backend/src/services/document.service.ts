@@ -124,8 +124,8 @@ export class DocumentService {
       ])
       .where('document.customerId = :customerId', { customerId })
       .orderBy('document.createdAt', 'DESC')
-      .skip(skip)
-      .take(limit);
+      // .skip(skip)
+      // .take(limit);
 
     const [documents, total] = await queryBuilder.getManyAndCount();
 

@@ -524,6 +524,20 @@ export default function InvoiceDiscountingOPS1() {
             <div style={{ fontWeight: "700", color: "#be123c", fontSize: "15px" }}>
               {selectedInvoice?.penalCharges}%
             </div>
+
+            
+          </div>
+
+
+            <div style={{ background: "#f1fff3", padding: "12px", borderRadius: "12px" }}>
+            <label style={{ fontSize: "11px", color: "#074d31", fontWeight: "700", textTransform: "uppercase", display: "block", marginBottom: "2px" }}>
+             Service Fee
+            </label>
+            <div style={{ fontWeight: "700", color: "#074d33", fontSize: "15px" }}>
+              {selectedInvoice?.serviceFee}%
+            </div>
+
+            
           </div>
         </div>
 
@@ -735,220 +749,181 @@ export default function InvoiceDiscountingOPS1() {
 
       {/* Verification Modal */}
       {showModal && (
-        <div
+  <div
+    style={{
+      position: "fixed",
+      inset: 0,
+      background: "rgba(15, 23, 42, 0.7)",
+      backdropFilter: "blur(12px)",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      zIndex: 1000,
+      padding: "20px",
+    }}
+  >
+    <div
+      style={{
+        background: "#ffffff",
+        borderRadius: "28px",
+        width: "100%",
+        maxWidth: "540px",
+        maxHeight: "90vh",
+        overflow: "hidden",
+        boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.3)",
+        display: "flex",
+        flexDirection: "column",
+        border: "1px solid rgba(255, 255, 255, 0.2)",
+      }}
+    >
+      {/* Header Section */}
+      <div
+        style={{
+          padding: "32px 40px",
+          background: actionType === "approve" 
+            ? "linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)" 
+            : "linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%)",
+          borderBottom: "1px solid rgba(0,0,0,0.05)",
+          display: "flex",
+          alignItems: "center",
+          gap: "16px",
+        }}
+      >
+        <div style={{
+          width: "48px",
+          height: "48px",
+          borderRadius: "14px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          background: actionType === "approve" ? "#10b981" : "#ef4444",
+          color: "#fff",
+          fontSize: "20px"
+        }}>
+          {actionType === "approve" ? <FiCheck /> : <FiX />}
+        </div>
+        <div>
+          <h3 style={{ margin: 0, fontSize: "20px", fontWeight: "800", color: "#0f172a" }}>
+            {actionType === "approve" ? "Verify & Approve" : "Reject Application"}
+          </h3>
+          <p style={{ margin: "2px 0 0", fontSize: "13px", color: "#64748b", fontWeight: "500" }}>
+            Please review the details before proceeding
+          </p>
+        </div>
+      </div>
+
+      <div style={{ padding: "32px 40px", overflowY: "auto" }}>
+        {/* Info Cards */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "12px", marginBottom: "32px" }}>
+          {[
+            { label: "Invoice ID", value: selectedInvoice?.invoiceNumber },
+            { label: "Customer", value: selectedInvoice?.customer?.name || "N/A" },
+            { label: "Supplier", value: selectedInvoice?.supplier?.supplierName|| "N/A" },
+            { label: "Release Amount", value: `₹${selectedInvoice?.disbursementAmount?.toLocaleString()}`, highlight: true },
+          ].map((item, idx) => (
+            <div key={idx} style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              padding: "14px 18px",
+              background: "#f8fafc",
+              borderRadius: "14px",
+              border: "1px solid #f1f5f9"
+            }}>
+              <span style={{ fontSize: "12px", color: "#94a3b8", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.025em" }}>
+                {item.label}
+              </span>
+              <span style={{ 
+                fontSize: item.highlight ? "16px" : "14px", 
+                fontWeight: "700", 
+                color: item.highlight ? "#6366f1" : "#1e293b" 
+              }}>
+                {item.value}
+              </span>
+            </div>
+          ))}
+        </div>
+
+        {/* Remarks Input */}
+        <div style={{ marginBottom: "8px" }}>
+          <label style={{ display: "block", marginBottom: "10px", fontWeight: "700", fontSize: "13px", color: "#475569", marginLeft: "4px" }}>
+            Internal Remarks
+          </label>
+          <textarea
+            value={remarks}
+            onChange={(e) => setRemarks(e.target.value)}
+            placeholder="Provide a brief reason for this action..."
+            style={{
+              width: "100%",
+              padding: "16px",
+              border: "2px solid #f1f5f9",
+              borderRadius: "16px",
+              minHeight: "110px",
+              fontSize: "14px",
+              fontFamily: "inherit",
+              outline: "none",
+              backgroundColor: "#fdfdfd",
+              transition: "all 0.2s ease",
+              resize: "none"
+            }}
+            onFocus={(e) => (e.target.style.borderColor = "#6366f1")}
+            onBlur={(e) => (e.target.style.borderColor = "#f1f5f9")}
+          />
+        </div>
+      </div>
+
+      {/* Footer Actions */}
+      <div style={{ 
+        padding: "24px 40px 40px", 
+        display: "flex", 
+        gap: "12px", 
+        justifyContent: "flex-end",
+        background: "#fff" 
+      }}>
+        <button
+          onClick={() => setShowModal(false)}
           style={{
-            position: "fixed",
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            background: "rgba(15, 23, 42, 0.6)",
-            backdropFilter: "blur(8px)",
+            padding: "14px 24px",
+            background: "#fff",
+            color: "#64748b",
+            border: "1px solid #e2e8f0",
+            borderRadius: "14px",
+            cursor: "pointer",
+            fontWeight: "700",
+            fontSize: "14px",
+            transition: "all 0.2s"
+          }}
+          onMouseEnter={(e) => (e.target.style.background = "#f8fafc")}
+          onMouseLeave={(e) => (e.target.style.background = "#fff")}
+        >
+          Cancel
+        </button>
+        <button
+          onClick={submitVerification}
+          disabled={loading}
+          style={{
+            padding: "14px 32px",
+            background: actionType === "approve" ? "#10b981" : "#ef4444",
+            color: "#fff",
+            border: "none",
+            borderRadius: "14px",
+            cursor: "pointer",
+            fontWeight: "700",
+            fontSize: "14px",
+            boxShadow: actionType === "approve" 
+              ? "0 10px 20px -6px rgba(16, 185, 129, 0.4)" 
+              : "0 10px 20px -6px rgba(239, 68, 68, 0.4)",
             display: "flex",
             alignItems: "center",
-            justifyContent: "center",
-            zIndex: 1000,
+            gap: "8px"
           }}
         >
-          <div
-            style={{
-              background: "#fff",
-              padding: "40px",
-              borderRadius: "24px",
-              width: "580px",
-              maxHeight: "85vh",
-              overflow: "auto",
-              boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25)",
-              border: "1px solid rgba(255,255,255,0.3)",
-            }}
-          >
-            <h3
-              style={{
-                marginBottom: "28px",
-                fontSize: "22px",
-                fontWeight: "800",
-                color: actionType === "approve" ? "#059669" : "#dc2626",
-                display: "flex",
-                alignItems: "center",
-                gap: "12px",
-              }}
-            >
-              {actionType === "approve"
-                ? "✅ Verify & Approve"
-                : "❌ Reject Application"}
-            </h3>
-
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "1fr 1fr",
-                gap: "20px",
-                background: "#f8fafc",
-                padding: "24px",
-                borderRadius: "16px",
-                marginBottom: "28px",
-                border: "1px solid #e2e8f0",
-              }}
-            >
-              <div style={{ fontSize: "14px" }}>
-                <div
-                  style={{
-                    color: "#94a3b8",
-                    fontWeight: "600",
-                    textTransform: "uppercase",
-                    fontSize: "11px",
-                    marginBottom: "4px",
-                  }}
-                >
-                  Invoice ID
-                </div>
-                <div style={{ fontWeight: "700", color: "#1e293b" }}>
-                  {selectedInvoice?.invoiceNumber}
-                </div>
-              </div>
-              <div style={{ fontSize: "14px" }}>
-                <div
-                  style={{
-                    color: "#94a3b8",
-                    fontWeight: "600",
-                    textTransform: "uppercase",
-                    fontSize: "11px",
-                    marginBottom: "4px",
-                  }}
-                >
-                  Customer
-                </div>
-                <div style={{ fontWeight: "700", color: "#1e293b" }}>
-                  {selectedInvoice?.customerName}
-                </div>
-              </div>
-              <div style={{ fontSize: "14px" }}>
-                <div
-                  style={{
-                    color: "#94a3b8",
-                    fontWeight: "600",
-                    textTransform: "uppercase",
-                    fontSize: "11px",
-                    marginBottom: "4px",
-                  }}
-                >
-                  Supplier
-                </div>
-                <div style={{ fontWeight: "700", color: "#1e293b" }}>
-                  {selectedInvoice?.supplierName}
-                </div>
-              </div>
-              <div style={{ fontSize: "14px" }}>
-                <div
-                  style={{
-                    color: "#94a3b8",
-                    fontWeight: "600",
-                    textTransform: "uppercase",
-                    fontSize: "11px",
-                    marginBottom: "4px",
-                  }}
-                >
-                  Disbursement
-                </div>
-                <div
-                  style={{
-                    fontWeight: "800",
-                    color: "#6366f1",
-                    fontSize: "16px",
-                  }}
-                >
-                  ₹{selectedInvoice?.disbursementAmount?.toLocaleString()}
-                </div>
-              </div>
-            </div>
-
-            <div style={{ marginBottom: "28px" }}>
-              <label
-                style={{
-                  display: "block",
-                  marginBottom: "10px",
-                  fontWeight: "700",
-                  fontSize: "14px",
-                  color: "#475569",
-                }}
-              >
-                Internal Verification Remarks
-              </label>
-              <textarea
-                value={remarks}
-                onChange={(e) => setRemarks(e.target.value)}
-                placeholder="Details for the audit log..."
-                style={{
-                  width: "100%",
-                  padding: "16px",
-                  border: "2px solid #f1f5f9",
-                  borderRadius: "14px",
-                  minHeight: "130px",
-                  fontSize: "14px",
-                  fontFamily: "inherit",
-                  outline: "none",
-                  transition: "border-color 0.2s",
-                  backgroundColor: "#fdfdfd",
-                }}
-                onFocus={(e) => (e.target.style.borderColor = "#6366f1")}
-                onBlur={(e) => (e.target.style.borderColor = "#f1f5f9")}
-              />
-            </div>
-
-            <div
-              style={{
-                display: "flex",
-                gap: "14px",
-                justifyContent: "flex-end",
-              }}
-            >
-              <button
-                onClick={() => setShowModal(false)}
-                style={{
-                  padding: "12px 24px",
-                  background: "#f1f5f9",
-                  color: "#64748b",
-                  border: "none",
-                  borderRadius: "12px",
-                  cursor: "pointer",
-                  fontWeight: "700",
-                  fontSize: "14px",
-                }}
-              >
-                Go Back
-              </button>
-              <button
-                onClick={submitVerification}
-                disabled={loading}
-                style={{
-                  padding: "12px 30px",
-                  background:
-                    actionType === "approve"
-                      ? "linear-gradient(135deg, #10b981 0%, #059669 100%)"
-                      : "linear-gradient(135deg, #ef4444 0%, #dc2626 100%)",
-                  color: "#fff",
-                  border: "none",
-                  borderRadius: "12px",
-                  cursor: "pointer",
-                  fontWeight: "700",
-                  fontSize: "14px",
-                  boxShadow:
-                    actionType === "approve"
-                      ? "0 10px 15px -3px rgba(16, 185, 129, 0.3)"
-                      : "0 10px 15px -3px rgba(239, 68, 68, 0.3)",
-                  transition: "transform 0.1s",
-                }}
-                onMouseDown={(e) => (e.target.style.transform = "scale(0.98)")}
-                onMouseUp={(e) => (e.target.style.transform = "scale(1)")}
-              >
-                {actionType === "approve"
-                  ? "Confirm Approval"
-                  : "Confirm Rejection"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+          {loading ? "Processing..." : (actionType === "approve" ? "Release Approval" : "Confirm Rejection")}
+        </button>
+      </div>
+    </div>
+  </div>
+)}
 
       {/* Disbursement Entry Modal */}
       {showDisbursementModal && (

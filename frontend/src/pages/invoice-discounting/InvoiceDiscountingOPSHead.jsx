@@ -168,8 +168,11 @@ export default function InvoiceDiscountingOPSHead() {
             
             <div style={{ marginBottom: '20px', background: '#f9f9f9', padding: '15px', borderRadius: '4px' }}>
               <div style={{ marginBottom: '10px' }}><strong>Invoice Number:</strong> {selectedInvoice?.invoiceNumber}</div>
-              <div style={{ marginBottom: '10px' }}><strong>Customer:</strong> {selectedInvoice?.customerName}</div>
-              <div style={{ marginBottom: '10px' }}><strong>Supplier:</strong> {selectedInvoice?.supplierName}</div>
+             <div style={{ marginBottom: '10px' }}>
+          <strong>Customer:</strong> {selectedInvoice?.customer?.name || selectedInvoice?.customer?.companyName || selectedInvoice?.customerName || 'N/A'}</div>
+        <div style={{ marginBottom: '10px' }}>
+          <strong>Supplier:</strong> {selectedInvoice?.supplier?.supplierName || selectedInvoice?.supplierName || 'N/A'}
+        </div>
               <div style={{ marginBottom: '10px' }}><strong>Invoice Amount:</strong> ₹{selectedInvoice?.invoiceAmount?.toLocaleString()}</div>
               <div style={{ marginBottom: '10px' }}><strong>Disbursement Amount:</strong> ₹{selectedInvoice?.disbursementAmount?.toLocaleString()}</div>
               {selectedInvoice?.disbursementUtr && (
