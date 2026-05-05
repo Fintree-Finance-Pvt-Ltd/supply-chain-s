@@ -2575,7 +2575,7 @@ workflow.remarks = remarks;
 
       // Get loan accounts (LANs) for this customer - these represent the sanctions
       const loanAccounts = await this.loanAccountRepository.find({
-        where: { customerId, status: "active" },
+        where: { customerId, status: "active",isOnboarded:false },
         relations: ["partner"],
       });
 
@@ -2677,6 +2677,8 @@ workflow.remarks = remarks;
         console.log(
           `[LMS Supply Chain] LMS API response status: ${response.status}`,
         );
+        await this.loanAccountRepository.update({ customerId, status: "active",isOnboarded:false }, { isOnboarded: true });
+        
       } catch (error: any) {
         if (error.response) {
           throw new Error(
