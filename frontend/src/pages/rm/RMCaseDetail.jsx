@@ -153,7 +153,7 @@ const RMCaseDetail = () => {
           });
           setPartners(uniquePartners);
 
-          // Initialize partnerSanctions with data from API
+// Initialize partnerSanctions with data from API
           const initialSanctions = {};
           sanctions.forEach((s) => {
             if (s.partner) {
@@ -163,6 +163,8 @@ const RMCaseDetail = () => {
                 interestRate: s.interestRate || s.roi || "",
                 penalCharges: s.penalCharges || "",
                 processingFees: s.processingFees || "",
+                legalCharges: s.legalCharges || "",
+                serviceFee: s.serviceFee || "",
                 conditions: s.conditions || "",
                 status: s.status || "pending",
               };
@@ -192,9 +194,10 @@ const RMCaseDetail = () => {
     }
   }, [currentCase]);
 
-  const handleSaveBankDetails = async () => {
+const handleSaveBankDetails = async () => {
     setIsUpdating(true);
     try {
+      // Build partner sanctions array
       await workflowService.updateBankDetails(id, {
         ...bankDetails,
         partnerSanctions: buildUnlockedSanctionsArray(),
@@ -502,6 +505,8 @@ const RMCaseDetail = () => {
       interestRate: action.interestRate,
       penalCharges: action.penalCharges,
       processingFees: action.processingFees,
+      legalCharges: action.legalCharges,
+      serviceFee: action.serviceFee,
     }),
   );
 
@@ -759,6 +764,51 @@ const RMCaseDetail = () => {
                         }
                       />
                     </div>
+                    <div className="p-3 bg-indigo-50 rounded-lg">
+  <label className="block text-[10px] text-indigo-600 uppercase font-bold mb-1">
+    Legal Charges
+  </label>
+  <input
+    type="number"
+    step="0.01"
+    value={partnerSanctions[partner.code]?.legalCharges || ""}
+    onWheel={(e) => e.target.blur()}
+    onChange={(e) =>
+      setPartnerSanctions({
+        ...partnerSanctions,
+        [partner.code]: {
+          ...partnerSanctions[partner.code],
+          legalCharges: e.target.value,
+        },
+      })
+    }
+    className="w-full bg-transparent border-none p-0 text-lg font-bold focus:ring-0"
+    readOnly={isReadOnly || isStage2}
+  />
+</div>
+
+<div className="p-3 bg-indigo-50 rounded-lg">
+  <label className="block text-[10px] text-indigo-600 uppercase font-bold mb-1">
+    Service Fees
+  </label>
+  <input
+    type="number"
+    step="0.01"
+    value={partnerSanctions[partner.code]?.serviceFee || ""}
+    onWheel={(e) => e.target.blur()}
+    onChange={(e) =>
+      setPartnerSanctions({
+        ...partnerSanctions,
+        [partner.code]: {
+          ...partnerSanctions[partner.code],
+          serviceFee: e.target.value,
+        },
+      })
+    }
+    className="w-full bg-transparent border-none p-0 text-lg font-bold focus:ring-0"
+    readOnly={isReadOnly || isStage2}
+  />
+</div>
                   </div>
                 </div>
               ))

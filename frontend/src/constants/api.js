@@ -117,6 +117,7 @@ export const API_ENDPOINTS = {
   // Invoice Discounting - RM endpoints
   WORKFLOW_INVOICE_GET_CUSTOMERS: '/workflows/invoices/customers',
   WORKFLOW_INVOICE_GET_LANS: (customerId) => `/workflows/invoices/customers/${customerId}/lans`,
+   WORKFLOW_INVOICE_GET_RATES: (customerId, lanId) => `/workflows/invoices/customers/${customerId}/lans/${lanId}/rates`,
   WORKFLOW_INVOICE_GET_SUPPLIERS: (customerId) => `/workflows/invoices/customers/${customerId}/suppliers`,
   WORKFLOW_INVOICE_GET_SUPPLIER_BANK: (supplierId) => `/workflows/invoices/suppliers/${supplierId}/bank-details`,
 

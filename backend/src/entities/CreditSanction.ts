@@ -47,7 +47,9 @@ export class CreditSanction {
   processingFees: number; // percentage
 
   @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
-legalCharges: number; // flat amount (₹)
+legalCharges: number; 
+  @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
+serviceFee: number;// flat amount (₹)
 
   @Column({ type: 'int' })
   creditOfficerId: number;
