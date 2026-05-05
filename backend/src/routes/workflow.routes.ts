@@ -557,43 +557,13 @@ router.post('/customers/:customerId/ceo-approve', checkRole(['ceo']), async (req
 
 /**
  * POST /api/workflows/customers/:customerId/rm-submit-md
- * RM submits final terms to MD after CEO approval
+ * Disabled: MD approval is now final and returns the case to RM for operations submission.
  */
 router.post('/customers/:customerId/rm-submit-md', checkRole(['relationship_manager']), async (req: Request, res: Response) => {
-  try {
-    const { customerId } = req.params;
-    const { remarks, partnerSanctions, sanctionAmount, tenure, interestRate, conditions, penalCharges, processingFees } = req.body;
-    const user = (req as any).user;
-
-    let sanctionData;
-    
-    // Support both single sanction and partner-specific sanctions
-    if (partnerSanctions && Array.isArray(partnerSanctions) && partnerSanctions.length > 0) {
-      // RM is providing partner-specific sanctions
-      sanctionData = { partnerSanctions };
-    } else if (sanctionAmount) {
-      // Legacy single sanction format
-      sanctionData = { sanctionAmount, tenure, interestRate, conditions, penalCharges, processingFees };
-    }
-
-    const workflow = await customerOnboardingService.rmSubmitToMD(
-      parseInt(customerId),
-      user.id,
-      remarks || '',
-      sanctionData
-    );
-
-    res.json({
-      success: true,
-      message: 'Case submitted to MD with final sanction terms',
-      data: workflow,
-    });
-  } catch (error: any) {
-    res.status(400).json({
-      success: false,
-      message: error.message,
-    });
-  }
+  res.status(410).json({
+    success: false,
+    message: 'RM-to-MD final terms submission is disabled. MD approval is final and moves the case to RM for operations submission.',
+  });
 });
 
 /**

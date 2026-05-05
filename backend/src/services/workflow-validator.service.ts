@@ -36,8 +36,7 @@ export class WorkflowValidatorService {
     'ceo_approved',
     'returned_to_rm' // ✅ NEW
   ],
-    'ceo_approved': ['md_pending_terms', 'md_approved'],
-    'md_pending_terms': ['md_approved'],
+    'ceo_approved': ['md_approved'],
     'md_approved': ['ops_l1_review'],
     'ops_l1_review': ['ops_l1_approved'],
     'ops_l1_approved': ['ops_head_approved'],
@@ -153,7 +152,6 @@ export class WorkflowValidatorService {
       'ceo_approved': 'MD',
         'returned_to_rm': 'RELATIONSHIP_MANAGER', // ✅ NEW
 
-      'md_pending_terms': 'RELATIONSHIP_MANAGER',
       'md_approved': 'RELATIONSHIP_MANAGER',
       'ops_l1_review': 'OPERATIONS_TEAM_L1',
       'ops_l1_approved': 'OPERATIONS_HEAD',

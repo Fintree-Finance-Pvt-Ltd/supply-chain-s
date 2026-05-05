@@ -387,8 +387,8 @@ const CreditCaseDetail = () => {
     if (role === 'credit_team_l2' && (status === 'credit_l1_approved' || status === 'credit_l2_review')) return true;
     // CEO can edit in credit_l2_approved or ceo_review status
     if (role === 'ceo' && (status === 'credit_l2_approved' || status === 'ceo_review')) return true;
-    // MD can edit in various statuses
-    if (role === 'md' && (status === 'ceo_approved' || status === 'md_pending_terms' || status === 'md_review')) return true;
+    // MD can edit during final approval.
+    if (role === 'md' && (status === 'ceo_approved' || status === 'md_review')) return true;
     // Allow editing for credit_l2 in any status (for modification purposes)
     if (role === 'credit_team_l2') return true;
     return false;
@@ -405,9 +405,7 @@ const CreditCaseDetail = () => {
     if (!currentCase) return false;
     const status = currentCase.status;
     // Only MD can edit ROI
-    if (role === 'md' && (status === 'ceo_approved' || status === 'md_pending_terms' || status === 'md_review')) return true;
-    // Allow MD to edit ROI always
-    if (role === 'md') return true;
+    if (role === 'md' && (status === 'ceo_approved' || status === 'md_review')) return true;
     return false;
   };
  
@@ -422,9 +420,7 @@ const CreditCaseDetail = () => {
     if (!currentCase) return false;
     const status = currentCase.status;
     // Only MD can edit tenor
-    if (role === 'md' && (status === 'ceo_approved' || status === 'md_pending_terms' || status === 'md_review')) return true;
-    // Allow MD to edit tenor always
-    if (role === 'md') return true;
+    if (role === 'md' && (status === 'ceo_approved' || status === 'md_review')) return true;
     return false;
   };
  
@@ -441,8 +437,8 @@ const CreditCaseDetail = () => {
     if (userRoles.includes('ceo')) return true;
     // For RM - can edit in draft status
     if (userRoles.includes('relationship_manager') && (status === 'draft' || status === 'submitted')) return true;
-    // For MD - can edit in md_pending_terms status
-    if (userRoles.includes('md') && (status === 'ceo_approved' || status === 'md_pending_terms' || status === 'md_review')) return true;
+    // For MD - can edit during final approval.
+    if (userRoles.includes('md') && (status === 'ceo_approved' || status === 'md_review')) return true;
    
     return false
   }
@@ -460,7 +456,7 @@ const CreditCaseDetail = () => {
     // CEO role
     if (userRoles.includes('ceo') && (status === 'credit_l2_approved' || status === 'ceo_review')) return true
     // MD role
-    if (userRoles.includes('md') && (status === 'ceo_approved' || status === 'md_pending_terms' || status === 'md_review')) return true
+    if (userRoles.includes('md') && (status === 'ceo_approved' || status === 'md_review')) return true
     // Operations roles
     if (userRoles.includes('operations_team_l1') && (status === 'md_approved' || status === 'ops_l1_review')) return true
     if (userRoles.includes('operations_head') && (status === 'ops_l1_approved' || status === 'ops_l2_review')) return true

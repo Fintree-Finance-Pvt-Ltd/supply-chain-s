@@ -5,11 +5,10 @@ import { toast } from 'react-toastify'
 import { fetchCaseById, updateCase } from '../../store/slices/caseSlice'
 import { documentService } from '../../services/documentService'
 import { operationsService } from '../../services/operationsService'
-import { workflowService } from '../../services/workflowService'
 import api from '../../services/api'
 import DocumentUploader from '../../components/DocumentUploader'
 import LoadingSpinner from '../../components/LoadingSpinner'
-import { FiFileText, FiCheck, FiEdit2, FiSave, FiX } from 'react-icons/fi'
+import { FiFileText, FiCheck, FiSave, FiX } from 'react-icons/fi'
 
 const POST_SANCTION_SECTIONS = ['kyc', 'sanctions']
 
@@ -121,11 +120,6 @@ const PostSanction = () => {
     toast.info('eNACH integration will be implemented here')
   }
 
-  const handleEditSanction = () => {
-    setIsEditingSanction(true)
-    setEditedSanction(sanctions[0] || {})
-  }
-
   const handleCancelEdit = () => {
     setIsEditingSanction(false)
     setEditedSanction(sanctions[0] || {})
@@ -141,23 +135,10 @@ const PostSanction = () => {
   const handleSaveSanction = async () => {
     setIsSubmitting(true)
     try {
-      // Submit to MD with edited sanction details
-      await workflowService.submitRMToMD(id, 'RM review completed - final terms submitted', {
-        sanctionAmount: editedSanction.sanctionAmount,
-        tenure: editedSanction.tenure,
-        interestRate: editedSanction.interestRate,
-        penalCharges: editedSanction.penalCharges,
-        processingFees: editedSanction.processingFees,
-        conditions: editedSanction.conditions,
-      })
-      
-      toast.success('Sanction details updated and submitted to MD successfully')
+      toast.info('Final sanction terms are locked after MD approval')
       setIsEditingSanction(false)
-      // Refresh sanctions data
-      const response = await api.get(`/customers/${id}/sanctions`)
-      setSanctions(response.data?.data?.creditSanctions || [])
     } catch (error) {
-      toast.error('Failed to submit: ' + (error.message || error))
+      toast.error('Failed to save: ' + (error.message || error))
     } finally {
       setIsSubmitting(false)
     }
@@ -222,15 +203,6 @@ const PostSanction = () => {
             <div className="card">
               <div className="flex justify-between items-center mb-4">
                 <h2 className="text-xl font-semibold text-gray-900">Sanction Details</h2>
-                {!isEditingSanction && (
-                  <button
-                    onClick={handleEditSanction}
-                    className="btn-secondary flex items-center space-x-1 text-sm"
-                  >
-                    <FiEdit2 className="h-4 w-4" />
-                    <span>Edit</span>
-                  </button>
-                )}
               </div>
               {isLoadingSanctions ? (
                 <LoadingSpinner />
@@ -291,7 +263,7 @@ const PostSanction = () => {
                       className="btn-primary flex items-center space-x-1"
                     >
                       <FiSave className="h-4 w-4" />
-                      <span>{isSubmitting ? 'Saving...' : 'Save & Submit to MD'}</span>
+                      <span>{isSubmitting ? 'Saving...' : 'Save'}</span>
                     </button>
                     <button
                       onClick={handleCancelEdit}

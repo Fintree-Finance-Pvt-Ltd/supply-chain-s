@@ -1382,6 +1382,11 @@ await this.customerRepository.save(customer);
     remarks: string,
     sanctionData?: any,
   ) {
+    throw new Error(
+      "RM-to-MD final terms flow is disabled. MD approval is final.",
+    );
+
+    /*
     const workflow = await this.getOrCreateWorkflow(customerId);
 
     // RM can modify final terms only when status is md_pending_terms (after MD reviewed and sent back to RM)
@@ -1547,6 +1552,7 @@ await this.customerRepository.save(customer);
     });
 
     return workflow;
+    */
   }
 
   // async mdApprove(customerId: number, userId: number, remarks: string, approved: boolean, sanctionData?: any) {
@@ -1705,8 +1711,8 @@ await this.customerRepository.save(customer);
     const workflow = await this.getOrCreateWorkflow(customerId);
     const status = workflow.currentStatus.toLowerCase();
 
-    if (status !== "ceo_approved" && status !== "md_terms_submitted") {
-      throw new Error("Case not pending at MD for review or final terms");
+    if (status !== "ceo_approved") {
+      throw new Error("Case not pending at MD for final approval");
     }
 
     const previousStatus = workflow.currentStatus;
@@ -1738,8 +1744,7 @@ await this.customerRepository.save(customer);
           );
         }
 
-        const sanctionStatus =
-          status === "md_terms_submitted" ? "approved" : "pending";
+        const sanctionStatus = "approved";
 
         for (const partnerSanction of editablePartnerSanctions) {
           const partner = partnerSanction.partner;
@@ -1793,8 +1798,7 @@ await this.customerRepository.save(customer);
         const lender = this.normalizePartnerCode(
           sanctionData.partner || sanctionData.lender,
         );
-        const sanctionStatus =
-          status === "md_terms_submitted" ? "approved" : "pending";
+        const sanctionStatus = "approved";
 
         let sanction = await this.sanctionRepository.findOne({
           where: { customerId, partner: lender },
@@ -1858,11 +1862,7 @@ await this.customerRepository.save(customer);
 // WORKFLOW STATUS CHANGE
 // ---------------------------------------
 
-if (status === "ceo_approved") {
-  workflow.currentStatus = approved ? "md_pending_terms" : "rejected";
-} else {
-  workflow.currentStatus = approved ? "md_approved" : "rejected";
-}
+workflow.currentStatus = approved ? "md_approved" : "rejected";
 
 workflow.currentApproverRoleName = "RM";
 
@@ -2335,10 +2335,7 @@ workflow.remarks = remarks;
 
   async getExecutivePending(role: string, userId?: number) {
     const r = role.toUpperCase();
-    let statusFilter: any =
-      r === "MD"
-        ? In(["ceo_approved", "md_terms_submitted"])
-        : "credit_l2_approved";
+    let statusFilter: any = r === "MD" ? "ceo_approved" : "credit_l2_approved";
 
     // Pending cases
     const pendingWorkflows = await this.workflowRepository.find({

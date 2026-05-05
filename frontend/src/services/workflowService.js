@@ -19,7 +19,6 @@ export const workflowService = {
       sanctionAmount: sanctionData?.sanctionAmount 
       // CEO can only modify sanctionAmount, not tenure or interestRate
     }),
-    submitRMToMD: (id, remarks, sanctionData) => api.post(`/workflows/customers/${id}/rm-submit-md`, { remarks, ...sanctionData }),
     approveMD: (id, approved, remarks, sanctionData) => api.post(API_ENDPOINTS.WORKFLOW_CUSTOMER_MD(id), { approved, remarks, ...sanctionData }),
     submitToOperations: (id, remarks) => api.post(API_ENDPOINTS.WORKFLOW_CUSTOMER_OPS_SUBMIT(id), { remarks }),
     approveOpsL1: (id, approved, remarks) => api.post(API_ENDPOINTS.WORKFLOW_CUSTOMER_OPS_L1(id), { approved, remarks }),

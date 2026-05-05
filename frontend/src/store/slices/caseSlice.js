@@ -15,6 +15,18 @@ export const fetchCases = createAsyncThunk(
   }
 )
 
+export const fetchRMDashboard = createAsyncThunk(
+  'cases/fetchRMDashboard',
+  async (_, { rejectWithValue }) => {
+    try {
+      const response = await workflowService.getRMDashboard()
+      return response.data.data
+    } catch (error) {
+      return rejectWithValue(error.response?.data?.message || 'Failed to fetch RM dashboard')
+    }
+  }
+)
+
 export const fetchWorkflowDashboard = createAsyncThunk(
   'cases/fetchWorkflowDashboard',
   async ({ role, level }, { rejectWithValue }) => {
@@ -130,6 +142,20 @@ const caseSlice = createSlice({
         state.cases = action.payload
       })
       .addCase(fetchCases.rejected, (state, action) => {
+        state.isLoading = false
+        state.error = action.payload
+      })
+      // RM Dashboard
+      .addCase(fetchRMDashboard.pending, (state) => {
+        state.isLoading = true
+        state.error = null
+      })
+      .addCase(fetchRMDashboard.fulfilled, (state, action) => {
+        state.isLoading = false
+        state.dashboardData = action.payload
+        state.cases = action.payload?.customers || []
+      })
+      .addCase(fetchRMDashboard.rejected, (state, action) => {
         state.isLoading = false
         state.error = action.payload
       })

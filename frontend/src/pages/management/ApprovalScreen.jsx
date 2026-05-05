@@ -453,8 +453,7 @@
       customer.status === "completed" ||
       customer.status.includes("ops") ||
       (role === "ceo" && customer.status !== "credit_l2_approved") ||
-      (role === "md" &&
-        !["ceo_approved", "md_terms_submitted"].includes(customer.status));
+      (role === "md" && customer.status !== "ceo_approved");
 
     const visibleDocuments = customer.documents || [];
     // Management (CEO/MD) can approve even without viewing documents as per new request

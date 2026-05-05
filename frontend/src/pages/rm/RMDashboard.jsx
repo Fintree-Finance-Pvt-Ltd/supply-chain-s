@@ -136,7 +136,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useDispatch, useSelector } from 'react-redux'
-import { fetchCases } from '../../store/slices/caseSlice'
+import { fetchCases, fetchRMDashboard } from '../../store/slices/caseSlice'
 import DataTable from '../../components/DataTable'
 import StatusBadge from '../../components/StatusBadge'
 import LoadingSpinner from '../../components/LoadingSpinner'
@@ -153,7 +153,7 @@ const RMDashboard = () => {
 
   useEffect(() => {
     if (user && user.id) {
-      dispatch(fetchCases({ rmId: user.id }))
+      dispatch(fetchRMDashboard())
     } else {
       dispatch(fetchCases())
     }
@@ -163,14 +163,13 @@ const RMDashboard = () => {
     { id: 'all', label: 'All Cases' },
     { id: CASE_STATUS.DRAFT, label: 'Draft' },
     { id: CASE_STATUS.SUBMITTED, label: 'Submitted' },
-    { id: 'md_pending_terms', label: 'Pending Terms' },
     { id: CASE_STATUS.MD_APPROVED, label: 'Ready for Ops' },
     { id: CASE_STATUS.OPS_L1_REVIEW, label: 'Ops Review' },
     { id: CASE_STATUS.COMPLETED, label: 'Completed' },
     { id: CASE_STATUS.REJECTED, label: 'Rejected' },
   ]
 
-  const pendingTermsCases = cases.filter(c => c.status === 'md_pending_terms')
+  const readyForOpsCases = cases.filter(c => c.status === CASE_STATUS.MD_APPROVED)
   const filteredCases = activeTab === 'all' ? cases : cases.filter(c => 
     // c.status === activeTab
     activeTab === 'draft'
@@ -180,7 +179,7 @@ const RMDashboard = () => {
 
   const statCards = [
     { label: 'Total Cases', value: cases.length, icon: FiFileText, color: 'slate' },
-    { label: 'Pending Terms', value: pendingTermsCases.length, icon: FiAlertTriangle, color: 'amber', highlight: true },
+    { label: 'Ready for Ops', value: readyForOpsCases.length, icon: FiAlertTriangle, color: 'amber', highlight: true },
     { label: 'In Progress', value: cases.filter(c => [CASE_STATUS.SUBMITTED, CASE_STATUS.OPS_L1_REVIEW].includes(c.status)).length, icon: FiClock, color: 'blue' },
     { label: 'Completed', value: cases.filter(c => c.status === CASE_STATUS.COMPLETED).length, icon: FiCheckCircle, color: 'emerald' },
   ]
@@ -290,7 +289,7 @@ const RMDashboard = () => {
           {statCards.map((card) => (
             <div
               key={card.label}
-              onClick={() => card.label === 'Pending Terms' && setActiveTab('md_pending_terms')}
+              onClick={() => card.label === 'Ready for Ops' && setActiveTab(CASE_STATUS.MD_APPROVED)}
               className={`relative rounded-xl p-5 border transition-all duration-200 `
             }
             >
@@ -321,7 +320,7 @@ const RMDashboard = () => {
             <nav className="flex space-x-1 -mb-px">
               {tabs.map((tab) => {
                 const count = tab.id === 'all' ? cases.length : cases.filter(c => c.status === tab.id).length
-                const isPending = tab.id === 'md_pending_terms'
+                const isPending = tab.id === CASE_STATUS.MD_APPROVED
                 const isActive = activeTab === tab.id
                 return (
                   <button
@@ -362,7 +361,7 @@ const RMDashboard = () => {
                 columns={columns}
                 onRowClick={handleRowClick}
                 rowClassName={(row) =>
-                  row.status === 'md_pending_terms'
+                  row.status === CASE_STATUS.MD_APPROVED
                     ? 'pending-row border-l-4 border-l-amber-400 hover:bg-amber-50'
                     : 'hover:bg-gray-50'
                 }

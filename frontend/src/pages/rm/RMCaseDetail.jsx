@@ -276,29 +276,6 @@ const RMCaseDetail = () => {
     }
   };
 
-  const handleSubmitToMD = async () => {
-    setIsSubmitting(true);
-    try {
-      const sanctionsArray = buildUnlockedSanctionsArray();
-
-      if (sanctionsArray.length === 0) {
-        toast.error("No fresh partner sanction request is available to submit");
-        return;
-      }
-
-      await workflowService.submitRMToMD(id, "Final terms confirmed by RM", {
-        partnerSanctions: sanctionsArray,
-      });
-      toast.success("Case submitted to MD successfully");
-      dispatch(fetchCaseById({ id, sections: DETAIL_SECTIONS }));
-      navigate("/rm/dashboard");
-    } catch (error) {
-      toast.error("Submission failed");
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
   const handleResendToPartner = async () => {
     if (!newPartnerCode) {
       toast.info("Select a new partner section");
@@ -529,7 +506,6 @@ const RMCaseDetail = () => {
   );
 
   const isReadOnly = [
-    "md_terms_submitted",
     "ops_l1_review",
     "ops_l1_approved",
     "ops_l2_verified",
@@ -538,7 +514,6 @@ const RMCaseDetail = () => {
     "disbursed",
   ].includes(currentCase.status);
 
-  const isStage1 = currentCase.status === "md_pending_terms";
   const isStage2 = currentCase.status === "md_approved";
   const existingPartnerCodes = new Set(
     Object.keys(partnerSanctions).map((partnerCode) =>
@@ -549,11 +524,8 @@ const RMCaseDetail = () => {
     (partner) => !existingPartnerCodes.has((partner.code || "").toUpperCase()),
   );
 
-  const statusLabel = isStage1
-    ? "MD APPROVED - PENDING FINAL TERMS"
-    : currentCase.status === "md_terms_submitted"
-      ? "PENDING MD FINAL APPROVAL"
-      : currentCase.status === "md_approved"
+  const statusLabel =
+    currentCase.status === "md_approved"
         ? "MD FINAL APPROVED - PENDING DOCUMENTS"
         : currentCase.status.replace(/_/g, " ").toUpperCase();
 
@@ -571,9 +543,7 @@ const RMCaseDetail = () => {
             Post-Sanction Review
           </h1>
           <p className="text-gray-500">
-            {isStage1
-              ? "Prepare final sanction details based on negotiation."
-              : "Complete digital journey and bank details."}
+            Complete digital journey and bank details.
           </p>
         </div>
         <div className="flex space-x-2">
@@ -829,37 +799,6 @@ const RMCaseDetail = () => {
                 >
                   <FiRefreshCw />
                   <span>Resend</span>
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Stage 1 Actions */}
-          {isStage1 && (
-            <div className="card bg-primary-50 border-primary-200">
-              <h2 className="text-xl font-bold text-primary-900 mb-2">
-                Next Step: Submit to MD
-              </h2>
-              <p className="text-sm text-primary-700 mb-4">
-                Please verify the final sanction terms above. Once submitted,
-                the Managing Director will review and provide final approval.
-              </p>
-              <div className="flex space-x-3">
-                <button
-                  onClick={handleSaveBankDetails}
-                  disabled={isUpdating}
-                  className="btn-secondary flex-1 flex items-center justify-center space-x-2"
-                >
-                  <FiCheck />
-                  <span>Save Progress</span>
-                </button>
-                <button
-                  onClick={handleSubmitToMD}
-                  disabled={isSubmitting}
-                  className="btn-primary flex-1 flex items-center justify-center space-x-2 py-3"
-                >
-                  <FiSend />
-                  <span>Submit to MD</span>
                 </button>
               </div>
             </div>
