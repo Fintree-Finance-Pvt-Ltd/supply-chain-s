@@ -170,27 +170,84 @@ const isFreshCustomer = location.state?.isFreshCustomer;
     }
   };
 
+
+
+
+  useEffect(() => {
+  // reset old state before loading new case
+
+  setFormData({
+    companyType: "",
+    companyName: "",
+    companyMobile: "",
+    companyEmail: "",
+    companyPan: "",
+    companyGst: "",
+
+    applicantName: "",
+    applicantMobile: "",
+    applicantEmail: "",
+    applicantPan: "",
+    applicantAadhaarNumber: "",
+    applicantAddress: "",
+
+    remarks: "",
+  });
+
+  setApplicantKyc({});
+  setCoApplicants([]);
+  setCoApplicantKyc({});
+  setContactPersons([]);
+  setAddresses([]);
+  setDocuments([]);
+  setErrors({});
+  setVerificationStatuses([]);
+
+}, [customerId]);
+
   // ----- hydrate UI from currentCase
   useEffect(() => {
-    if (!currentCase || !customerId ) return;
+  if (!currentCase || !customerId) return;
+
+// prevent previous case hydration
+if (Number(currentCase.id) !== Number(customerId)) {
+  return;
+}
 
 if (isFreshCustomer && currentCase?.status === "draft"  && !currentCase?.applicant) return; // skip draft restore only for newly created customer
-    setFormData((prev) => ({
-      ...prev,
-      companyType: currentCase.companyType || "",
-      companyName: currentCase.companyName || "",
-      companyMobile: currentCase.companyMobile || "",
-      companyEmail: currentCase.companyEmail || "",
-      companyPan: currentCase.companyPan || "",
-      companyGst: currentCase.gstNumber || "",
-      applicantName: currentCase.applicant?.name || "",
-      applicantMobile: currentCase.applicant?.mobile || "",
-      applicantEmail: currentCase.applicant?.email || "",
-      applicantPan: currentCase.applicant?.pan || "",
-      applicantAadhaarNumber: currentCase.applicant?.aadhaarNumber || "",
-      applicantAddress: currentCase.applicant?.aadhaarAddress || "",
-      remarks: currentCase.remarks || "",
-    }));
+    // setFormData((prev) => ({
+    //   ...prev,
+    //   companyType: currentCase.companyType || "",
+    //   companyName: currentCase.companyName || "",
+    //   companyMobile: currentCase.companyMobile || "",
+    //   companyEmail: currentCase.companyEmail || "",
+    //   companyPan: currentCase.companyPan || "",
+    //   companyGst: currentCase.gstNumber || "",
+    //   applicantName: currentCase.applicant?.name || "",
+    //   applicantMobile: currentCase.applicant?.mobile || "",
+    //   applicantEmail: currentCase.applicant?.email || "",
+    //   applicantPan: currentCase.applicant?.pan || "",
+    //   remarks: currentCase.remarks || "",
+    // }));
+
+    setFormData({
+  companyType: currentCase.companyType || "",
+  companyName: currentCase.companyName || "",
+  companyMobile: currentCase.companyMobile || "",
+  companyEmail: currentCase.companyEmail || "",
+  companyPan: currentCase.companyPan || "",
+  companyGst: currentCase.gstNumber || "",
+  applicantName: currentCase.applicant?.name || "",
+  applicantMobile: currentCase.applicant?.mobile || "",
+  applicantEmail: currentCase.applicant?.email || "",
+  applicantPan: currentCase.applicant?.pan || "",
+  applicantAadhaarNumber:
+    currentCase.applicant?.aadhaarNumber || "",
+  applicantAddress:
+    currentCase.applicant?.address || "",
+
+  remarks: currentCase.remarks || "",
+});
 
     if (currentCase.documents) {
       setDocuments(currentCase.documents);
@@ -1508,6 +1565,26 @@ const handleCompanyPanUpload = async (file) => {
 
       if (!getApplicantVerified("pan"))
         newErrors.applicantPan = "Applicant PAN verification mandatory";
+
+
+
+       // Applicant Aadhaar Number Mandatory
+if (!formData.applicantAadhaarNumber?.trim()) {
+  newErrors.applicantAadhaarNumber =
+    "Applicant Aadhaar Number is required";
+} else if (
+  formData.applicantAadhaarNumber.replace(/\D/g, "").length !== 12
+) {
+  newErrors.applicantAadhaarNumber =
+    "Applicant Aadhaar Number must be 12 digits";
+}
+
+//  Applicant Address Mandatory
+if (!formData.applicantAddress?.trim()) {
+  newErrors.applicantAddress =
+    "Applicant Address is required";
+}
+
 
 
       // female co-app rule (keep if your business wants)

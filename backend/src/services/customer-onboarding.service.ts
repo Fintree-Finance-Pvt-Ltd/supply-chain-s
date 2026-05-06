@@ -180,6 +180,7 @@ CustomerOnboardingService {
       "processingFees",
       "legalCharges",
       "serviceFee",
+      "cashCollateral",
       "conditions",
     ];
 
@@ -261,6 +262,7 @@ CustomerOnboardingService {
       processingFees: Number(partnerSanction.processingFees || 0),
       legalCharges: Number(partnerSanction.legalCharges || 0),
       serviceFee: Number(partnerSanction.serviceFee || 0),
+      cashCollateral: Number(partnerSanction.cashCollateral || 0),
       conditions: partnerSanction.conditions || "",
     };
   }
@@ -277,6 +279,7 @@ CustomerOnboardingService {
       "processingFees",
       "legalCharges",
       "serviceFee",
+      "cashCollateral",
     ];
 
     for (const field of numericFields) {
@@ -420,6 +423,7 @@ CustomerOnboardingService {
         processingFees: 0,
         legalCharges: 0,
         serviceFee: 0,
+        cashCollateral: 0,
         conditions: "",
         status: "pending",
       });
@@ -894,6 +898,7 @@ Fintree Finance Pvt. Ltd.
               interestRate: ps.interestRate || 0,
               legalCharges: ps.legalCharges || 0,
               serviceFee: ps.serviceFee || 0,
+              cashCollateral: ps.cashCollateral || 0,
               conditions: ps.conditions || null,
               penalCharges: ps.penalCharges || 0,
               processingFees: ps.processingFees || 0,
@@ -2084,6 +2089,7 @@ Fintree Finance Pvt. Ltd.
               processingFees: partnerSanction.processingFees || 0,
               legalCharges: partnerSanction.legalCharges || 0,
               serviceFee: partnerSanction.serviceFee || 0,
+              cashCollateral: partnerSanction.cashCollateral || 0,
               conditions: partnerSanction.conditions || "",
               status: sanctionStatus,
             });
@@ -2098,6 +2104,7 @@ Fintree Finance Pvt. Ltd.
               processingFees: partnerSanction.processingFees || 0,
               legalCharges: partnerSanction.legalCharges || 0,
               serviceFee: partnerSanction.serviceFee || 0,
+              cashCollateral: partnerSanction.cashCollateral || 0,
               conditions: partnerSanction.conditions || "",
               status: sanctionStatus,
               creditOfficerId: userId,
