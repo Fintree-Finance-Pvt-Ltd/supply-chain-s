@@ -187,6 +187,8 @@ if (isFreshCustomer && currentCase?.status === "draft"  && !currentCase?.applica
       applicantMobile: currentCase.applicant?.mobile || "",
       applicantEmail: currentCase.applicant?.email || "",
       applicantPan: currentCase.applicant?.pan || "",
+      applicantAadhaarNumber: currentCase.applicant?.aadhaarNumber || "",
+      applicantAddress: currentCase.applicant?.aadhaarAddress || "",
       remarks: currentCase.remarks || "",
     }));
 
@@ -1568,6 +1570,9 @@ if (strict) {
     companyPan: formData.companyPan,
     gstNumber: formData.companyGst,
     pan: formData.applicantPan,
+
+    aadhaarNumber: formData.applicantAadhaarNumber || "",
+    applicantAddress: formData.applicantAddress || "",
     remarks: formData.remarks,
   });
 

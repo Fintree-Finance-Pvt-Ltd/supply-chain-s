@@ -14,6 +14,8 @@ export default function useOnboardingState() {
     applicantMobile: "",
     applicantEmail: "",
     applicantPan: "",
+    applicantAadhaarNumber: "",
+    applicantAddress: "",
     remarks: "",
   });
 

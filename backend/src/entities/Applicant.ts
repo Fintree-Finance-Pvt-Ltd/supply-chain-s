@@ -41,6 +41,11 @@ export class Applicant {
   @UpdateDateColumn()
   updatedAt: Date;
 
+   @Column({ type: 'varchar', length: 100, nullable: true })
+  aadhaarNumber: string;
+
+   @Column({ type: 'text', nullable: true })
+  aadhaarAddress: string;
   // ✅ 1 Applicant <-> 1 Customer
   @OneToOne(() => Customer, (customer) => customer.applicant, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'customerId' })

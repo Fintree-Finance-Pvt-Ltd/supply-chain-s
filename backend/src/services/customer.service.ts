@@ -11,6 +11,7 @@ import {
   Drawdown,
   Notification,
   RefreshToken,
+  Applicant,
 } from "../entities";
 import { CASE_STATUS, CaseStatus } from "../config/constants";
 import { In, Repository } from "typeorm";
@@ -276,9 +277,48 @@ export class CustomerService {
     }
 
     // Clean up empty strings
-    const cleanedData = { ...data };
+    const cleanedData: any = { ...data };
     if (cleanedData.gstNumber === "") cleanedData.gstNumber = undefined;
     if (cleanedData.customerCode === "") cleanedData.customerCode = undefined;
+
+    // ✅ Draft save: persist non-empty aadhaarNumber/aadhaarAddress into applicants table
+    const applicantAadhaarRaw = cleanedData.aadhaarNumber;
+    const applicantAadhaar =
+      typeof applicantAadhaarRaw === "string" ? applicantAadhaarRaw.trim() : "";
+
+    const applicantAadhaarAddressRaw = cleanedData.aadhaarAddress;
+    const applicantAadhaarAddress =
+      typeof applicantAadhaarAddressRaw === "string"
+        ? applicantAadhaarAddressRaw.trim()
+        : "";
+
+    const shouldSaveAadhaarNumber =
+      Boolean(applicantAadhaar) && /^\d{12}$/.test(applicantAadhaar);
+    const shouldSaveAadhaarAddress = Boolean(applicantAadhaarAddress);
+
+    if (shouldSaveAadhaarNumber || shouldSaveAadhaarAddress) {
+      const applicantRepo = AppDataSource.getRepository(Applicant);
+      const applicant = await applicantRepo.findOne({ where: { customerId: id } });
+
+      if (applicant) {
+        if (shouldSaveAadhaarNumber) applicant.aadhaarNumber = applicantAadhaar;
+        if (shouldSaveAadhaarAddress)
+          applicant.aadhaarAddress = applicantAadhaarAddress;
+
+        await applicantRepo.save(applicant);
+      } else {
+        await applicantRepo.save(
+          applicantRepo.create({
+            customerId: id,
+            ...(shouldSaveAadhaarNumber ? { aadhaarNumber: applicantAadhaar } : {}),
+            ...(shouldSaveAadhaarAddress
+              ? { aadhaarAddress: applicantAadhaarAddress }
+              : {}),
+          } as any),
+        );
+      }
+    }
+
 
     Object.assign(customer, cleanedData);
     return await this.customerRepository.save(customer);

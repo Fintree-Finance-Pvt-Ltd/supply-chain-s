@@ -23,12 +23,9 @@ import axios from "axios";
 import { getRepository } from "typeorm";
 import { User } from "../entities/User";
 import { sendMail } from "../utils/emailService";
-import { Role, UserRole } from "../entities";
+import { Applicant, Role, UserRole } from "../entities";
 const customerRepository = AppDataSource.getRepository(Customer);
 const userRepository = AppDataSource.getRepository(User);
-// const roleRepository = AppDataSource.getRepository(Role);
-// const userRoleRepository = AppDataSource.getRepository(UserRole);
-
 
 /**
  * LMS Supply Chain API Payload interfaces
@@ -80,6 +77,7 @@ CustomerOnboardingService {
   private sanctionHistoryRepository =
     AppDataSource.getRepository(SanctionLimitHistory);
   private loanAccountRepository = AppDataSource.getRepository(LoanAccount);
+    private ApplicantRepository = AppDataSource.getRepository(Applicant);
   private coApplicantRepository = AppDataSource.getRepository(CoApplicant);
   private partnerRepository = AppDataSource.getRepository(Partner);
   private kycDetailRepository = AppDataSource.getRepository(KycDetail);
@@ -3014,11 +3012,14 @@ Fintree Finance Pvt. Ltd.
 
   // ✅ Hardcoded email (you can add multiple if needed)
   const recipients = [
-    "opshead@fintreefinance.com", 
-    "harish.l@fintreefinance.com",
-    "pratik.sonawane@fintreefinance.com",
+    // "sajag.jain@fintreefinance.com",
+    // "vinod.singh@fintreefinance.com",
+    // "lalit.shah@fintreefinance.com" 
+    //  "harish.l@fintreefinance.com",
+    // "pratik.sonawane@fintreefinance.com",
     "vishal.y@fintreefinance.com",
-    "aachal.d@fintreefinance.com"// change to actual email
+    "aachal.d@fintreefinance.com"
+    // change to actual email
     // "second@email.com"
   ];
 
@@ -3029,7 +3030,7 @@ Fintree Finance Pvt. Ltd.
       text: `
 Dear Sir/Madam,
 
-This is to inform you that the customer ${customerName} has been successfully onboarded after completion of all approval stages.
+This is to inform you that the customer ${customerName} has been successfully onboarded.
 
 Customer Name : ${customerName}
 Case ID       : ${customerId}
@@ -3338,9 +3339,15 @@ Fintree Finance Pvt. Ltd.
         where: { customerId, applicantType: "applicant" },
       });
 
+       const applicant = await this.ApplicantRepository.findOne({
+        where: { customerId},
+        select:["aadhaarNumber"]
+      });
+
       const applicantPan =
         applicantKycDetails.find((k) => k.kycType === "PAN")?.kycNumber || "";
       const applicantAadhaar =
+        applicant?.aadhaarNumber ||
         applicantKycDetails.find((k) => k.kycType === "AADHAAR")?.kycNumber ||
         "";
 
@@ -3437,17 +3444,17 @@ Fintree Finance Pvt. Ltd.
       const payload: LMSSupplyChainPayload = {
         partner_loan_id: String(customerId),
         applicant: {
-          name: customer.name || "",
+          name: customer.name,
           pan: applicantPan ?? customer.pan,
-          aadhaar: applicantAadhaar ?? "9968xxxxxx",
-          mobile: customer.mobile || "",
+          aadhaar: applicantAadhaar,
+          mobile: customer.mobile,
           address: applicantAddressStr,
         },
         co_applicant: coApplicantData,
         company: {
-          name: customer.companyName || customer.companyName || "",
-          pan: customer.companyPan || "",
-          gst: customer.gstNumber || "",
+          name: customer.companyName || customer.companyName,
+          pan: customer.companyPan,
+          gst: customer.gstNumber,
           address: companyAddressStr,
         },
         sanctions: sanctions,
