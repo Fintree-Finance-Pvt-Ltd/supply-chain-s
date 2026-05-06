@@ -3019,13 +3019,13 @@ Fintree Finance Pvt. Ltd.
 
   // ✅ Hardcoded email (you can add multiple if needed)
   const recipients = [
-    // "sajag.jain@fintreefinance.com",
-    // "vinod.singh@fintreefinance.com",
-    // "lalit.shah@fintreefinance.com" 
+    "sajag.jain@fintreefinance.com",
+    "vinod.singh@fintreefinance.com",
+    "lalit.shah@fintreefinance.com" 
     //  "harish.l@fintreefinance.com",
     // "pratik.sonawane@fintreefinance.com",
-    "vishal.y@fintreefinance.com",
-    "aachal.d@fintreefinance.com"
+    // "vishal.y@fintreefinance.com",
+    // "aachal.d@fintreefinance.com"
     // change to actual email
     // "second@email.com"
   ];
@@ -3352,6 +3352,7 @@ Fintree Finance Pvt. Ltd.
       });
 
       const applicantPan =
+        applicant?.pan ||
         applicantKycDetails.find((k) => k.kycType === "PAN")?.kycNumber || "";
       const applicantAadhaar =
         applicant?.aadhaarNumber ||
@@ -3378,6 +3379,7 @@ Fintree Finance Pvt. Ltd.
         });
 
         const coApplicantPan =
+          coApplicant?.pan ||
           coApplicantKycDetails.find((k) => k.kycType === "PAN")?.kycNumber ||
           "";
         const coApplicantAadhaar =
