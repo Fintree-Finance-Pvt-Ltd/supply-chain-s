@@ -2152,9 +2152,8 @@ async setPassword(
       const [active] = await LMSDataSource.query(
         `
       SELECT COUNT(*) activeLoans
-      FROM supply_chain_daily_demand
+      FROM supply_chain_sanctions
       WHERE partner_loan_id = ?
-      AND status IN ('Due','Late')
       `,
         [partnerLoanId],
       );
