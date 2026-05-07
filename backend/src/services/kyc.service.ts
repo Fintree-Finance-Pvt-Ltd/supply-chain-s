@@ -216,6 +216,8 @@ export class KycService {
                     mobile: true,
                     email: true,
                     pan: true,
+                    aadhaarNumber: true,
+                    aadhaarAddress: true,
                     createdAt: true,
                     updatedAt: true,
                 },

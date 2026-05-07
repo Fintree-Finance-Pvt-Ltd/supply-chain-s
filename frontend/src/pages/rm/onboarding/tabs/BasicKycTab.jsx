@@ -561,9 +561,9 @@ const BasicKycTab = ({
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <button
-type="button"
-                  onClick={() => onVerify("applicantAadhaar", formData.aadhaarNumber)}
+<button
+                  type="button"
+                  onClick={() => onVerify("applicantAadhaar", formData.applicantAadhaarNumber)}
                   disabled={
                     loadingStates["applicantAadhaar_main"] ||
                     !applicantVerified.pan ||
