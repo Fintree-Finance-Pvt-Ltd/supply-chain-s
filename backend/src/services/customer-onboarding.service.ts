@@ -3348,7 +3348,7 @@ Fintree Finance Pvt. Ltd.
 
        const applicant = await this.ApplicantRepository.findOne({
         where: { customerId},
-        select:["aadhaarNumber"]
+        select:["aadhaarNumber","pan"]
       });
 
       const applicantPan =
@@ -3370,6 +3370,7 @@ Fintree Finance Pvt. Ltd.
       // Get co-applicant if exists
       const coApplicant = await this.coApplicantRepository.findOne({
         where: { customerId },
+        select: [ "pan"],
       });
 
       let coApplicantData: LMSSupplyChainPayload["co_applicant"] | undefined;
