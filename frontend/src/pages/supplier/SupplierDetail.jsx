@@ -21,7 +21,9 @@ const SupplierDetail = () => {
   const [isUploading, setIsUploading] = useState(false)
   const [isEditingBank, setIsEditingBank] = useState(false)
   const [isSavingBank, setIsSavingBank] = useState(false)
+  const [isSubmittingToOpsHead, setIsSubmittingToOpsHead] = useState(false)
   const [isDeletingCheque, setIsDeletingCheque] = useState(false)
+  const [bankValidationErrors, setBankValidationErrors] = useState({})
   const [bankForm, setBankForm] = useState({
     bankAccountNumber: '',
     ifscCode: '',
@@ -58,12 +60,78 @@ const SupplierDetail = () => {
           micrCode: data.supplier.bankDetail.micrCode || '',
           chequeNumber: data.supplier.bankDetail.chequeNumber || ''
         })
+      } else {
+        setBankForm({
+          bankAccountNumber: '',
+          ifscCode: '',
+          bankName: '',
+          accountHolderName: '',
+          micrCode: '',
+          chequeNumber: ''
+        })
       }
     } catch (e) {
       console.error(e)
       toast.error('Failed to fetch supplier details')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const updateBankFormField = (field, value) => {
+    const nextValue = field === 'ifscCode' ? value.toUpperCase() : value
+    setBankForm((prev) => ({ ...prev, [field]: nextValue }))
+    setBankValidationErrors((prev) => {
+      if (!prev[field]) return prev
+      const nextErrors = { ...prev }
+      delete nextErrors[field]
+      return nextErrors
+    })
+  }
+
+  const getNormalizedBankForm = () => ({
+    bankAccountNumber: bankForm.bankAccountNumber.replace(/\s+/g, ''),
+    ifscCode: bankForm.ifscCode.replace(/\s+/g, '').toUpperCase(),
+    bankName: bankForm.bankName.trim(),
+    accountHolderName: bankForm.accountHolderName.trim(),
+    micrCode: bankForm.micrCode.replace(/\s+/g, ''),
+    chequeNumber: bankForm.chequeNumber.trim()
+  })
+
+  const validateBankDetails = () => {
+    const values = getNormalizedBankForm()
+    const errors = {}
+
+    if (!values.bankAccountNumber) {
+      errors.bankAccountNumber = 'Account number is required'
+    } else if (!/^\d{6,18}$/.test(values.bankAccountNumber)) {
+      errors.bankAccountNumber = 'Enter a valid account number'
+    }
+
+    if (!values.ifscCode) {
+      errors.ifscCode = 'IFSC code is required'
+    } else if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(values.ifscCode)) {
+      errors.ifscCode = 'Enter a valid IFSC code'
+    }
+
+    if (!values.bankName) {
+      errors.bankName = 'Bank name is required'
+    }
+
+    if (!values.accountHolderName) {
+      errors.accountHolderName = 'Account holder name is required'
+    }
+
+    if (values.micrCode && !/^\d{9}$/.test(values.micrCode)) {
+      errors.micrCode = 'MICR code must be 9 digits'
+    }
+
+    setBankValidationErrors(errors)
+
+    return {
+      isValid: Object.keys(errors).length === 0,
+      values,
+      firstError: Object.values(errors)[0]
     }
   }
 
@@ -123,10 +191,18 @@ const SupplierDetail = () => {
   }
 
   const saveBankDetails = async () => {
+    const validation = validateBankDetails()
+    if (!validation.isValid) {
+      setIsEditingBank(true)
+      toast.error(validation.firstError || 'Please fill bank details')
+      return
+    }
+
     try {
       setIsSavingBank(true)
-      const res = await supplierService.updateBankDetails(Number(id), bankForm)
+      const res = await supplierService.updateBankDetails(Number(id), validation.values)
       setBank(res.data?.data)
+      setBankForm(validation.values)
       setIsEditingBank(false)
       toast.success('Bank details saved successfully')
       fetchSupplierDetails()
@@ -190,13 +266,27 @@ const SupplierDetail = () => {
 
   // Ops L1 submit to Ops Head
   const handleSubmitToOpsHead = async () => {
+    const validation = validateBankDetails()
+    if (!validation.isValid) {
+      setIsEditingBank(true)
+      toast.error(validation.firstError || 'Please fill bank details before submitting')
+      return
+    }
+
     try {
+      setIsSubmittingToOpsHead(true)
+      const bankRes = await supplierService.updateBankDetails(Number(id), validation.values)
+      setBank(bankRes.data?.data)
+      setBankForm(validation.values)
+      setIsEditingBank(false)
       await supplierService.submitToOpsHead(Number(id), remarks || 'Submitting to Operations Head')
       toast.success('Supplier submitted to Operations Head')
       fetchSupplierDetails()
     } catch (e) {
       console.error(e)
       toast.error(e?.response?.data?.message || 'Submit failed')
+    } finally {
+      setIsSubmittingToOpsHead(false)
     }
   }
 
@@ -232,6 +322,10 @@ const SupplierDetail = () => {
   if (loading) return <div className="p-6">Loading...</div>
 
   if (!supplier) return <div className="p-6">Supplier not found</div>
+
+  const isOpsL1Draft = user?.role === ROLES.OPERATIONS_TEAM_L1 && normalizeStatus(supplier.status) === 'DRAFT'
+  const showBankDetailsPanel = bank || chequeDocument || isEditingBank || isOpsL1Draft
+  const showBankForm = isOpsL1Draft && (isEditingBank || !bank)
 
   return (
     <div className="p-6">
@@ -280,11 +374,11 @@ const SupplierDetail = () => {
         {/* Actions & Bank Details */}
         <div className="space-y-6">
           {/* Bank Details */}
-          {(bank || chequeDocument || isEditingBank) && (
+          {showBankDetailsPanel && (
             <div className="bg-white shadow rounded-lg p-6">
               <div className="flex justify-between items-center mb-3">
                 <h3 className="font-semibold">Bank Details</h3>
-                {isEditingBank && (
+                {showBankForm && bank && (
                   <button
                     onClick={() => setIsEditingBank(false)}
                     className="text-sm text-blue-600 hover:underline"
@@ -292,7 +386,7 @@ const SupplierDetail = () => {
                     View Mode
                   </button>
                 )}
-                {!isEditingBank && (bank || chequeDocument) && (
+                {!showBankForm && isOpsL1Draft && (bank || chequeDocument) && (
                   <button
                     onClick={() => setIsEditingBank(true)}
                     className="text-sm text-blue-600 hover:underline"
@@ -302,48 +396,65 @@ const SupplierDetail = () => {
                 )}
               </div>
               
-              {isEditingBank ? (
+              {showBankForm ? (
                 /* Editable Form */
                 <div className="space-y-3">
+                  {!bank && (
+                    <p className="text-sm text-gray-500">
+                      Enter bank details manually if cheque upload or OCR is unavailable.
+                    </p>
+                  )}
                   <div>
-                    <label className="text-sm text-gray-500 block">Account Number</label>
+                    <label className="text-sm text-gray-500 block">Account Number *</label>
                     <input
                       type="text"
                       value={bankForm.bankAccountNumber}
-                      onChange={(e) => setBankForm({ ...bankForm, bankAccountNumber: e.target.value })}
-                      className="w-full border p-2 rounded"
+                      onChange={(e) => updateBankFormField('bankAccountNumber', e.target.value)}
+                      className={`w-full border p-2 rounded ${bankValidationErrors.bankAccountNumber ? 'border-red-500' : ''}`}
                       placeholder="Enter account number"
                     />
+                    {bankValidationErrors.bankAccountNumber && (
+                      <p className="mt-1 text-xs text-red-500">{bankValidationErrors.bankAccountNumber}</p>
+                    )}
                   </div>
                   <div>
-                    <label className="text-sm text-gray-500 block">IFSC Code</label>
+                    <label className="text-sm text-gray-500 block">IFSC Code *</label>
                     <input
                       type="text"
                       value={bankForm.ifscCode}
-                      onChange={(e) => setBankForm({ ...bankForm, ifscCode: e.target.value })}
-                      className="w-full border p-2 rounded"
+                      onChange={(e) => updateBankFormField('ifscCode', e.target.value)}
+                      className={`w-full border p-2 rounded ${bankValidationErrors.ifscCode ? 'border-red-500' : ''}`}
                       placeholder="Enter IFSC code"
                     />
+                    {bankValidationErrors.ifscCode && (
+                      <p className="mt-1 text-xs text-red-500">{bankValidationErrors.ifscCode}</p>
+                    )}
                   </div>
                   <div>
-                    <label className="text-sm text-gray-500 block">Bank Name</label>
+                    <label className="text-sm text-gray-500 block">Bank Name *</label>
                     <input
                       type="text"
                       value={bankForm.bankName}
-                      onChange={(e) => setBankForm({ ...bankForm, bankName: e.target.value })}
-                      className="w-full border p-2 rounded"
+                      onChange={(e) => updateBankFormField('bankName', e.target.value)}
+                      className={`w-full border p-2 rounded ${bankValidationErrors.bankName ? 'border-red-500' : ''}`}
                       placeholder="Enter bank name"
                     />
+                    {bankValidationErrors.bankName && (
+                      <p className="mt-1 text-xs text-red-500">{bankValidationErrors.bankName}</p>
+                    )}
                   </div>
                   <div>
-                    <label className="text-sm text-gray-500 block">Account Holder Name</label>
+                    <label className="text-sm text-gray-500 block">Account Holder Name *</label>
                     <input
                       type="text"
                       value={bankForm.accountHolderName}
-                      onChange={(e) => setBankForm({ ...bankForm, accountHolderName: e.target.value })}
-                      className="w-full border p-2 rounded"
+                      onChange={(e) => updateBankFormField('accountHolderName', e.target.value)}
+                      className={`w-full border p-2 rounded ${bankValidationErrors.accountHolderName ? 'border-red-500' : ''}`}
                       placeholder="Enter holder name"
                     />
+                    {bankValidationErrors.accountHolderName && (
+                      <p className="mt-1 text-xs text-red-500">{bankValidationErrors.accountHolderName}</p>
+                    )}
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
@@ -351,17 +462,20 @@ const SupplierDetail = () => {
                       <input
                         type="text"
                         value={bankForm.micrCode}
-                        onChange={(e) => setBankForm({ ...bankForm, micrCode: e.target.value })}
-                        className="w-full border p-2 rounded"
+                        onChange={(e) => updateBankFormField('micrCode', e.target.value)}
+                        className={`w-full border p-2 rounded ${bankValidationErrors.micrCode ? 'border-red-500' : ''}`}
                         placeholder="MICR"
                       />
+                      {bankValidationErrors.micrCode && (
+                        <p className="mt-1 text-xs text-red-500">{bankValidationErrors.micrCode}</p>
+                      )}
                     </div>
                     <div>
                       <label className="text-sm text-gray-500 block">Cheque Number</label>
                       <input
                         type="text"
                         value={bankForm.chequeNumber}
-                        onChange={(e) => setBankForm({ ...bankForm, chequeNumber: e.target.value })}
+                        onChange={(e) => updateBankFormField('chequeNumber', e.target.value)}
                         className="w-full border p-2 rounded"
                         placeholder="Cheque No"
                       />
@@ -370,8 +484,8 @@ const SupplierDetail = () => {
                   
                   <button
                     onClick={saveBankDetails}
-                    disabled={isSavingBank}
-                    className={`mt-4 bg-green-600 text-white px-4 py-2 rounded ${isSavingBank ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    disabled={isSavingBank || isSubmittingToOpsHead}
+                    className={`mt-4 bg-green-600 text-white px-4 py-2 rounded ${isSavingBank || isSubmittingToOpsHead ? 'opacity-50 cursor-not-allowed' : ''}`}
                   >
                     {isSavingBank ? 'Saving...' : 'Save Bank Details'}
                   </button>
@@ -524,10 +638,16 @@ const SupplierDetail = () => {
               />
               <button
                 onClick={handleSubmitToOpsHead}
-                className="bg-primary-600 text-white px-4 py-2 rounded"
+                disabled={isSubmittingToOpsHead || isSavingBank}
+                className={`bg-primary-600 text-white px-4 py-2 rounded ${isSubmittingToOpsHead || isSavingBank ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
-                Submit to Ops Head
+                {isSubmittingToOpsHead ? 'Submitting...' : 'Submit to Ops Head'}
               </button>
+              {!bank && (
+                <p className="text-xs text-red-500 mt-2">
+                  Bank details are required before submitting to Ops Head.
+                </p>
+              )}
             </div>
           )}
 

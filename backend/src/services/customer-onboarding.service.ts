@@ -19,7 +19,6 @@ import { AuditService } from "./audit.service";
 import { RewardService } from "./reward.service";
 import axios from "axios";
 
-
 import { getRepository } from "typeorm";
 import { User } from "../entities/User";
 import { sendMail } from "../utils/emailService";
@@ -63,12 +62,10 @@ interface LMSSupplyChainPayload {
   }>;
 }
 
-export class 
-CustomerOnboardingService {
+export class CustomerOnboardingService {
   private userRepository = AppDataSource.getRepository(User);
   private roleRepository = AppDataSource.getRepository(Role);
   private userRoleRepository = AppDataSource.getRepository(UserRole);
-
 
   private customerRepository = AppDataSource.getRepository(Customer);
   private workflowRepository = AppDataSource.getRepository(CaseWorkflow);
@@ -77,7 +74,7 @@ CustomerOnboardingService {
   private sanctionHistoryRepository =
     AppDataSource.getRepository(SanctionLimitHistory);
   private loanAccountRepository = AppDataSource.getRepository(LoanAccount);
-    private ApplicantRepository = AppDataSource.getRepository(Applicant);
+  private ApplicantRepository = AppDataSource.getRepository(Applicant);
   private coApplicantRepository = AppDataSource.getRepository(CoApplicant);
   private partnerRepository = AppDataSource.getRepository(Partner);
   private kycDetailRepository = AppDataSource.getRepository(KycDetail);
@@ -329,8 +326,7 @@ CustomerOnboardingService {
       const partnerSanction =
         this.normalizePartnerSanctionInput(rawPartnerSanction);
       const existingSanction = existingByPartner.get(partnerSanction.partner);
-      const isLocked =
-        existingSanction?.status?.toLowerCase() === "approved";
+      const isLocked = existingSanction?.status?.toLowerCase() === "approved";
 
       if (caseHasApprovedSanctions && !existingSanction) {
         throw new Error(
@@ -339,9 +335,7 @@ CustomerOnboardingService {
       }
 
       if (isLocked && existingSanction) {
-        if (
-          this.hasLockedSanctionChanged(existingSanction, partnerSanction)
-        ) {
+        if (this.hasLockedSanctionChanged(existingSanction, partnerSanction)) {
           throw new Error(
             `Partner ${partnerSanction.partner} has already given sanction and is locked. Resend only to a new partner section.`,
           );
@@ -436,8 +430,7 @@ CustomerOnboardingService {
     workflow.currentStatus = "submitted";
     workflow.currentApproverRoleName = "CREDIT_TEAM_L1";
     workflow.remarks =
-      remarks ||
-      `Resent for fresh sanction: ${uniquePartnerCodes.join(", ")}`;
+      remarks || `Resent for fresh sanction: ${uniquePartnerCodes.join(", ")}`;
     workflow.assignedUserId = undefined as any;
     workflow.assignedStage = "credit_l1";
 
@@ -449,7 +442,9 @@ CustomerOnboardingService {
         .map((value) => value.trim())
         .filter(Boolean),
     );
-    uniquePartnerCodes.forEach((partnerCode) => pushedToValues.add(partnerCode));
+    uniquePartnerCodes.forEach((partnerCode) =>
+      pushedToValues.add(partnerCode),
+    );
 
     await this.customerRepository.update(customerId, {
       status: "submitted" as any,
@@ -601,8 +596,10 @@ CustomerOnboardingService {
     if (!customer) throw new Error("Customer not found");
 
     const workflow = await this.getOrCreateWorkflow(customerId);
-    if (workflow.currentStatus !== "draft" &&
-      workflow.currentStatus !== "returned_to_rm")
+    if (
+      workflow.currentStatus !== "draft" &&
+      workflow.currentStatus !== "returned_to_rm"
+    )
       throw new Error("Submission allowed only from draft or returned cases");
 
     // throw new Error("Can only submit from draft status");
@@ -646,14 +643,13 @@ CustomerOnboardingService {
 
       // If case already had a Credit user earlier → reuse same user
       if (!assignedUserId && newStatus === "submitted") {
-        const assignmentResult =
-          await taskDistributionService.assignCase(
-            customerId.toString(),
-            "CUSTOMER_ONBOARDING",
-            newStatus,
-            // "submitted",
-            workflowStage,
-          );
+        const assignmentResult = await taskDistributionService.assignCase(
+          customerId.toString(),
+          "CUSTOMER_ONBOARDING",
+          newStatus,
+          // "submitted",
+          workflowStage,
+        );
 
         assignedUserId = assignmentResult.assignedUserId ?? undefined;
       }
@@ -707,49 +703,47 @@ CustomerOnboardingService {
     if (pushedTo) updateData.pushedTo = pushedTo;
 
     await this.customerRepository.update(customerId, updateData);
-await this.logHistory({
-  customerId,
-  caseWorkflowId: workflow.id,
-  status: newStatus,
-  previousStatus,
-  changedBy: userId,
-  remarks: remarks + (pushedTo ? ` (Submitted to: ${pushedTo})` : ""),
-});
-
-
-if (newStatus === "submitted" ) {
-  const customer = await this.customerRepository.findOne({
-    where: { id: customerId },
-    select: ["assignedUserId", "customerName", "companyName"],
-  });
-
-  if (customer?.assignedUserId) {
-    const rmUser = await this.userRepository.findOne({
-      where: {
-        id: customer.assignedUserId,
-        // defaultRole: "RELATIONSHIP_MANAGER",
-      },
-      select: ["email"],
+    await this.logHistory({
+      customerId,
+      caseWorkflowId: workflow.id,
+      status: newStatus,
+      previousStatus,
+      changedBy: userId,
+      remarks: remarks + (pushedTo ? ` (Submitted to: ${pushedTo})` : ""),
     });
 
-    if (rmUser?.email) {
-      await sendMail({
-        to: rmUser.email,
-        subject: "Case submitted by RM - Credit L1 Review Pending",
-        text: `Customer ID: ${customerId} is assigned to you for review.`,
+    if (newStatus === "submitted") {
+      const customer = await this.customerRepository.findOne({
+        where: { id: customerId },
+        select: ["assignedUserId", "customerName", "companyName"],
       });
+
+      if (customer?.assignedUserId) {
+        const rmUser = await this.userRepository.findOne({
+          where: {
+            id: customer.assignedUserId,
+            // defaultRole: "RELATIONSHIP_MANAGER",
+          },
+          select: ["email"],
+        });
+
+        if (rmUser?.email) {
+          await sendMail({
+            to: rmUser.email,
+            subject: "Case submitted by RM - Credit L1 Review Pending",
+            text: `Customer ID: ${customerId} is assigned to you for review.`,
+          });
+        }
+      }
     }
-  }
-}
 
-
-// Existing logic
-await this.awardOpsApprovalRewards(
-  customerId,
-  userId,
-  previousStatus,
-  newStatus,
-);
+    // Existing logic
+    await this.awardOpsApprovalRewards(
+      customerId,
+      userId,
+      previousStatus,
+      newStatus,
+    );
 
     return workflow;
   }
@@ -764,7 +758,6 @@ await this.awardOpsApprovalRewards(
     const customer = await this.customerRepository.findOne({
       where: { id: customerId },
       // select: ["id", "companyName"],
-
     });
     if (!customer) throw new Error("Customer not found");
 
@@ -788,12 +781,11 @@ await this.awardOpsApprovalRewards(
     }
     await this.workflowRepository.save(workflow);
 
-
-
-//coorect one with role based email notification to credit team L2
+    //coorect one with role based email notification to credit team L2
 
     if (approved) {
-      const customerName = customer?.companyName || customer?.customerName || `ID ${customerId}`;
+      const customerName =
+        customer?.companyName || customer?.customerName || `ID ${customerId}`;
 
       // Step 1: Get roleId from roles table
       const role = await this.roleRepository.findOne({
@@ -854,7 +846,6 @@ Fintree Finance Pvt. Ltd.
       }
     }
 
-    
     if (approved && sanctionData) {
       const { partnerSanctions } = sanctionData;
 
@@ -870,8 +861,10 @@ Fintree Finance Pvt. Ltd.
         Array.isArray(partnerSanctions) &&
         partnerSanctions.length > 0
       ) {
-        const editablePartnerSanctions =
-          await this.getEditablePartnerSanctions(customerId, partnerSanctions);
+        const editablePartnerSanctions = await this.getEditablePartnerSanctions(
+          customerId,
+          partnerSanctions,
+        );
 
         if (editablePartnerSanctions.length === 0) {
           throw new Error(
@@ -982,13 +975,7 @@ Fintree Finance Pvt. Ltd.
     return workflow;
   }
 
-
-
-  async returnToRM(
-    customerId: number,
-    userId: number,
-    remarks: string
-  ) {
+  async returnToRM(customerId: number, userId: number, remarks: string) {
     const workflow = await this.getOrCreateWorkflow(customerId);
 
     if (workflow.currentStatus !== "submitted") {
@@ -1153,10 +1140,10 @@ Fintree Finance Pvt. Ltd.
 
     const previousStatus = workflow.currentStatus;
 
-
     //correct one with role based email notification to CEO
     if (approved) {
-      const customerName = customer?.companyName || customer?.customerName || `ID ${customerId}`;
+      const customerName =
+        customer?.companyName || customer?.customerName || `ID ${customerId}`;
 
       // Step 1: Get roleId from roles table
       const role = await this.roleRepository.findOne({
@@ -1217,9 +1204,6 @@ Fintree Finance Pvt. Ltd.
       }
     }
 
-
-
-
     // if (approved) {
     //   const creditUsers = await this.userRepository.find({
     //     where: {
@@ -1250,11 +1234,10 @@ Fintree Finance Pvt. Ltd.
         sanctionData.partnerSanctions &&
         Array.isArray(sanctionData.partnerSanctions)
       ) {
-        const editablePartnerSanctions =
-          await this.getEditablePartnerSanctions(
-            customerId,
-            sanctionData.partnerSanctions,
-          );
+        const editablePartnerSanctions = await this.getEditablePartnerSanctions(
+          customerId,
+          sanctionData.partnerSanctions,
+        );
 
         if (editablePartnerSanctions.length === 0) {
           throw new Error(
@@ -1373,7 +1356,7 @@ Fintree Finance Pvt. Ltd.
     approved: boolean,
     sanctionData?: any,
   ) {
-     const customer = await this.customerRepository.findOne({
+    const customer = await this.customerRepository.findOne({
       where: { id: customerId },
     });
     if (!customer) throw new Error("Customer not found");
@@ -1402,10 +1385,9 @@ Fintree Finance Pvt. Ltd.
     //   }
     // }
 
-
-
     if (approved) {
-      const customerName = customer?.companyName || customer?.customerName || `ID ${customerId}`;
+      const customerName =
+        customer?.companyName || customer?.customerName || `ID ${customerId}`;
 
       // Step 1: Get roleId from roles table
       const role = await this.roleRepository.findOne({
@@ -1479,11 +1461,10 @@ Fintree Finance Pvt. Ltd.
         sanctionData.partnerSanctions &&
         Array.isArray(sanctionData.partnerSanctions)
       ) {
-        const editablePartnerSanctions =
-          await this.getEditablePartnerSanctions(
-            customerId,
-            sanctionData.partnerSanctions,
-          );
+        const editablePartnerSanctions = await this.getEditablePartnerSanctions(
+          customerId,
+          sanctionData.partnerSanctions,
+        );
 
         if (editablePartnerSanctions.length === 0) {
           throw new Error(
@@ -2044,7 +2025,7 @@ Fintree Finance Pvt. Ltd.
     /* ---------------------------------------
      SAVE / UPDATE SANCTIONS
   --------------------------------------- */
-   
+
     if (approved && sanctionData) {
       const existingSanction = await this.sanctionRepository.findOne({
         where: { customerId },
@@ -2056,11 +2037,10 @@ Fintree Finance Pvt. Ltd.
         sanctionData.partnerSanctions &&
         Array.isArray(sanctionData.partnerSanctions)
       ) {
-        const editablePartnerSanctions =
-          await this.getEditablePartnerSanctions(
-            customerId,
-            sanctionData.partnerSanctions,
-          );
+        const editablePartnerSanctions = await this.getEditablePartnerSanctions(
+          customerId,
+          sanctionData.partnerSanctions,
+        );
 
         if (editablePartnerSanctions.length === 0) {
           throw new Error(
@@ -2136,7 +2116,10 @@ Fintree Finance Pvt. Ltd.
           if (
             this.hasLockedSanctionChanged(
               sanction,
-              this.normalizePartnerSanctionInput({ ...sanctionData, partner: lender }),
+              this.normalizePartnerSanctionInput({
+                ...sanctionData,
+                partner: lender,
+              }),
             )
           ) {
             throw new Error(
@@ -2186,56 +2169,54 @@ Fintree Finance Pvt. Ltd.
       }
     }
 
-  // ---------------------------------------
-// WORKFLOW STATUS CHANGE
-// ---------------------------------------
+    // ---------------------------------------
+    // WORKFLOW STATUS CHANGE
+    // ---------------------------------------
 
-workflow.currentStatus = approved ? "md_approved" : "rejected";
+    workflow.currentStatus = approved ? "md_approved" : "rejected";
 
-workflow.currentApproverRoleName = "RM";
+    workflow.currentApproverRoleName = "RM";
 
-if (!approved) {
-  workflow.isRejected = true;
-}
-
-workflow.remarks = remarks;
-
-
-// // ✅ ✅ ADD EMAIL LOGIC HERE (IMPORTANT)
-if (approved && workflow.currentStatus === "md_pending_terms") {
-  const customer = await this.customerRepository.findOne({
-    where: { id: customerId },
-    select: ["rmId"],
-  });
-
-  if (customer?.rmId) {
-    const rmUser = await this.userRepository.findOne({
-      where: {
-        id: customer.rmId,
-        defaultRole: "RELATIONSHIP_MANAGER",
-      },
-      select: ["email"],
-    });
-
-    if (rmUser?.email) {
-      await sendMail({
-        to: rmUser.email,
-        subject: "Case Returned by MD for Final Terms",
-        text: `Customer ID: ${customerId} has been reviewed by MD and is now pending final terms submission from you.`,
-      });
+    if (!approved) {
+      workflow.isRejected = true;
     }
-  }
-}
+
+    workflow.remarks = remarks;
+
+    // // ✅ ✅ ADD EMAIL LOGIC HERE (IMPORTANT)
+    if (approved && workflow.currentStatus === "md_pending_terms") {
+      const customer = await this.customerRepository.findOne({
+        where: { id: customerId },
+        select: ["rmId"],
+      });
+
+      if (customer?.rmId) {
+        const rmUser = await this.userRepository.findOne({
+          where: {
+            id: customer.rmId,
+            defaultRole: "RELATIONSHIP_MANAGER",
+          },
+          select: ["email"],
+        });
+
+        if (rmUser?.email) {
+          await sendMail({
+            to: rmUser.email,
+            subject: "Case Returned by MD for Final Terms",
+            text: `Customer ID: ${customerId} has been reviewed by MD and is now pending final terms submission from you.`,
+          });
+        }
+      }
+    }
     /* ---------------------------------------
      CREATE LOAN ACCOUNTS ONLY AFTER FINAL MD APPROVAL
   --------------------------------------- */
 
     if (approved && workflow.currentStatus === "md_approved") {
-
       // // Step 1: Get RM id from customer table
       const customer = await this.customerRepository.findOne({
         where: { id: customerId },
-        select: ["id", "rmId","customerName","companyName"],
+        select: ["id", "rmId", "customerName", "companyName"],
       });
 
       // // Step 2: Fetch RM email from users table
@@ -2251,7 +2232,7 @@ if (approved && workflow.currentStatus === "md_pending_terms") {
             to: rmUser.email,
             subject: "Case Approved by MD",
             // text: `Customer case ${customerId} has been approved by MD and pending your review.`,
-             text: `
+            text: `
 Dear Team,
 
 The credit case for customer ${customer?.customerName || customer?.companyName || `ID ${customerId}`} has been approved by MD and is now pending your review and approval at the RM stage.
@@ -2269,71 +2250,68 @@ Fintree Finance Pvt. Ltd.
           });
         }
       }
-      
 
-//           if (approved) {
-//       const customerName = customer?.companyName || customer?.customerName || `ID ${customerId}`;
+      //           if (approved) {
+      //       const customerName = customer?.companyName || customer?.customerName || `ID ${customerId}`;
 
-//       // Step 1: Get roleId from roles table
-//       const role = await this.roleRepository.findOne({
-//         where: { name: "relationship_manager" }, // change if column name differs
-//         select: ["id"], // primary key column
-//       });
+      //       // Step 1: Get roleId from roles table
+      //       const role = await this.roleRepository.findOne({
+      //         where: { name: "relationship_manager" }, // change if column name differs
+      //         select: ["id"], // primary key column
+      //       });
 
-//       if (!role) {
-//         throw new Error("relationship_manager role not found");
-//       }
+      //       if (!role) {
+      //         throw new Error("relationship_manager role not found");
+      //       }
 
-//       // Step 2: Get all userIds mapped to this roleId from user_roles table
-//       const userRoles = await this.userRoleRepository.find({
-//         where: { roleId: role.id }, // IMPORTANT: use role.id unless schema differs
-//         select: ["userId"],
-//       });
+      //       // Step 2: Get all userIds mapped to this roleId from user_roles table
+      //       const userRoles = await this.userRoleRepository.find({
+      //         where: { roleId: role.id }, // IMPORTANT: use role.id unless schema differs
+      //         select: ["userId"],
+      //       });
 
-//       if (!userRoles.length) {
-//         console.log("No users assigned to relationship_manager role");
-//         return;
-//       }
+      //       if (!userRoles.length) {
+      //         console.log("No users assigned to relationship_manager role");
+      //         return;
+      //       }
 
-//       // Step 3: Extract userIds
-//       const userIds = userRoles.map((ur) => ur.userId);
+      //       // Step 3: Extract userIds
+      //       const userIds = userRoles.map((ur) => ur.userId);
 
-//       // Step 4: Fetch emails from users table
-//       const creditUsers = await this.userRepository.find({
-//         where: {
-//           id: In(userIds),
-//         },
-//         select: ["id", "email"],
-//       });
+      //       // Step 4: Fetch emails from users table
+      //       const creditUsers = await this.userRepository.find({
+      //         where: {
+      //           id: In(userIds),
+      //         },
+      //         select: ["id", "email"],
+      //       });
 
-//       // Step 5: Send email to each user
-//       for (const user of creditUsers) {
-//         if (user.email) {
-//           await sendMail({
-//             to: user.email,
-//             subject: "Case Pending for RM Approval",
-//             // text: `Customer case ${customerName} approved by Credit L1 and pending your review.`,
-//             text: `
-// Dear Team,
+      //       // Step 5: Send email to each user
+      //       for (const user of creditUsers) {
+      //         if (user.email) {
+      //           await sendMail({
+      //             to: user.email,
+      //             subject: "Case Pending for RM Approval",
+      //             // text: `Customer case ${customerName} approved by Credit L1 and pending your review.`,
+      //             text: `
+      // Dear Team,
 
-// The credit case for customer ${customerName} has been approved by MD and is now pending your review and approval at the RM stage.
+      // The credit case for customer ${customerName} has been approved by MD and is now pending your review and approval at the RM stage.
 
-// Please log in to the LMS and take the necessary action.
+      // Please log in to the LMS and take the necessary action.
 
-// Customer Name : ${customerName}
-// Case ID       : ${customerId}
-// Current Stage : RM Approval
+      // Customer Name : ${customerName}
+      // Case ID       : ${customerId}
+      // Current Stage : RM Approval
 
-// Regards,
-// Credit Workflow System
-// Fintree Finance Pvt. Ltd.
-// `,
-//           });
-//         }
-//       }
-//     }
-
-
+      // Regards,
+      // Credit Workflow System
+      // Fintree Finance Pvt. Ltd.
+      // `,
+      //           });
+      //         }
+      //       }
+      //     }
 
       const allSanctions = await this.sanctionRepository.find({
         where: { customerId },
@@ -2376,7 +2354,7 @@ Fintree Finance Pvt. Ltd.
 
     return workflow;
   }
-/**
+  /**
    * RM adds a new partner and submits directly to MD
    * Bypasses Credit L1/L2 approval
    * Flow: RM selects partner → enters sanction terms → direct to MD → MD approves → eSign/eNach → Loan Accounts
@@ -2402,7 +2380,7 @@ Fintree Finance Pvt. Ltd.
   //   const validStatuses = ["completed", "md_approved", "ops_l1_review", "ops_l1_approved"];
   //   const workflow = await this.getOrCreateWorkflow(customerId);
   //   const currentStatus = workflow.currentStatus.toLowerCase();
-    
+
   //   if (!validStatuses.includes(currentStatus)) {
   //     throw new Error(
   //       `Cannot add new partner. Case must be completed or MD approved. Current status: ${currentStatus}`
@@ -2410,7 +2388,7 @@ Fintree Finance Pvt. Ltd.
   //   }
 
   //   const partnerCode = partner.toUpperCase();
-    
+
   //   // Validate partner exists
   //   const validPartner = await this.partnerRepository.findOne({
   //     where: { code: partnerCode },
@@ -2461,12 +2439,12 @@ Fintree Finance Pvt. Ltd.
 
   //   // Step 2: Generate LAN and create loan account for this partner
   //   const lanId = await this.getNextLanId(partnerCode);
-    
+
   //   // Check if loan account already exists for this partner
   //   let loanAccount = await this.loanAccountRepository.findOne({
   //     where: { customerId, lender: partnerCode as any },
   //   });
-    
+
   //   if (loanAccount) {
   //     // Update existing
   //     await this.loanAccountRepository.update(loanAccount.id, {
@@ -2556,61 +2534,57 @@ Fintree Finance Pvt. Ltd.
     workflow.remarks = remarks;
     await this.workflowRepository.save(workflow);
 
-
-    
-    if ( workflow.currentStatus === "ops_l1_review") {
-
+    if (workflow.currentStatus === "ops_l1_review") {
       // // Step 1: Get RM id from customer table
       const customer = await this.customerRepository.findOne({
         where: { id: customerId },
-        select: ["id", "rmId","customerName","companyName"],
+        select: ["id", "rmId", "customerName", "companyName"],
       });
 
+      if (workflow.currentStatus === "ops_l1_review") {
+        const customerName =
+          customer?.companyName || customer?.customerName || `ID ${customerId}`;
 
+        // Step 1: Get roleId from roles table
+        const role = await this.roleRepository.findOne({
+          where: { name: "operations_team_l1" }, // change if column name differs
+          select: ["id"], // primary key column
+        });
 
-          if (workflow.currentStatus === "ops_l1_review") {
-      const customerName = customer?.companyName || customer?.customerName || `ID ${customerId}`;
+        if (!role) {
+          throw new Error("operations_team_l1 role not found");
+        }
 
-      // Step 1: Get roleId from roles table
-      const role = await this.roleRepository.findOne({
-        where: { name: "operations_team_l1" }, // change if column name differs
-        select: ["id"], // primary key column
-      });
+        // Step 2: Get all userIds mapped to this roleId from user_roles table
+        const userRoles = await this.userRoleRepository.find({
+          where: { roleId: role.id }, // IMPORTANT: use role.id unless schema differs
+          select: ["userId"],
+        });
 
-      if (!role) {
-        throw new Error("operations_team_l1 role not found");
-      }
+        if (!userRoles.length) {
+          console.log("No users assigned to operations_team_l1 role");
+          return;
+        }
 
-      // Step 2: Get all userIds mapped to this roleId from user_roles table
-      const userRoles = await this.userRoleRepository.find({
-        where: { roleId: role.id }, // IMPORTANT: use role.id unless schema differs
-        select: ["userId"],
-      });
+        // Step 3: Extract userIds
+        const userIds = userRoles.map((ur) => ur.userId);
 
-      if (!userRoles.length) {
-        console.log("No users assigned to operations_team_l1 role");
-        return;
-      }
+        // Step 4: Fetch emails from users table
+        const creditUsers = await this.userRepository.find({
+          where: {
+            id: In(userIds),
+          },
+          select: ["id", "email"],
+        });
 
-      // Step 3: Extract userIds
-      const userIds = userRoles.map((ur) => ur.userId);
-
-      // Step 4: Fetch emails from users table
-      const creditUsers = await this.userRepository.find({
-        where: {
-          id: In(userIds),
-        },
-        select: ["id", "email"],
-      });
-
-      // Step 5: Send email to each user
-      for (const user of creditUsers) {
-        if (user.email) {
-          await sendMail({
-            to: user.email,
-            subject: "Case Pending for operations_team_l1 Approval",
-            // text: `Customer case ${customerName} approved by Credit L1 and pending your review.`,
-            text: `
+        // Step 5: Send email to each user
+        for (const user of creditUsers) {
+          if (user.email) {
+            await sendMail({
+              to: user.email,
+              subject: "Case Pending for operations_team_l1 Approval",
+              // text: `Customer case ${customerName} approved by Credit L1 and pending your review.`,
+              text: `
 Dear Team,
 
 The credit case for customer ${customerName} has been send by RM and is now pending your review and approval at the operations_team_l1 stage.
@@ -2625,11 +2599,11 @@ Regards,
 Credit Workflow System
 Fintree Finance Pvt. Ltd.
 `,
-          });
+            });
+          }
         }
       }
     }
-  }
     // const opsUsers = await this.userRepository.find({
     //   where: {
     //     defaultRole: "operations_team_l1",
@@ -2698,58 +2672,57 @@ Fintree Finance Pvt. Ltd.
     //   }
     // }
 
-  if ( workflow.currentStatus === "ops_l1_approved") {
-
+    if (workflow.currentStatus === "ops_l1_approved") {
       // // Step 1: Get RM id from customer table
       const customer = await this.customerRepository.findOne({
         where: { id: customerId },
-        select: ["id", "rmId","customerName","companyName"],
+        select: ["id", "rmId", "customerName", "companyName"],
       });
 
-    
-    if (approved) {
-      const customerName = customer?.companyName || customer?.customerName || `ID ${customerId}`;
+      if (approved) {
+        const customerName =
+          customer?.companyName || customer?.customerName || `ID ${customerId}`;
 
-      // Step 1: Get roleId from roles table
-      const role = await this.roleRepository.findOne({
-        where: { name: "operations_team_l2" }, // change if column name differs
-        select: ["id"], // primary key column
-      });
+        // Step 1: Get roleId from roles table
+        const role = await this.roleRepository.findOne({
+          where: { name: "operations_team_l2" }, // change if column name differs
+          select: ["id"], // primary key column
+        });
 
-      if (!role) {
-        throw new Error("operations_team_l2 role not found");
-      }
+        if (!role) {
+          throw new Error("operations_team_l2 role not found");
+        }
 
-      // Step 2: Get all userIds mapped to this roleId from user_roles table
-      const userRoles = await this.userRoleRepository.find({
-        where: { roleId: role.id }, // IMPORTANT: use role.id unless schema differs
-        select: ["userId"],
-      });
+        // Step 2: Get all userIds mapped to this roleId from user_roles table
+        const userRoles = await this.userRoleRepository.find({
+          where: { roleId: role.id }, // IMPORTANT: use role.id unless schema differs
+          select: ["userId"],
+        });
 
-      if (!userRoles.length) {
-        console.log("No users assigned to operations_team_l2 role");
-        return;
-      }
+        if (!userRoles.length) {
+          console.log("No users assigned to operations_team_l2 role");
+          return;
+        }
 
-      // Step 3: Extract userIds
-      const userIds = userRoles.map((ur) => ur.userId);
+        // Step 3: Extract userIds
+        const userIds = userRoles.map((ur) => ur.userId);
 
-      // Step 4: Fetch emails from users table
-      const creditUsers = await this.userRepository.find({
-        where: {
-          id: In(userIds),
-        },
-        select: ["id", "email"],
-      });
+        // Step 4: Fetch emails from users table
+        const creditUsers = await this.userRepository.find({
+          where: {
+            id: In(userIds),
+          },
+          select: ["id", "email"],
+        });
 
-      // Step 5: Send email to each user
-      for (const user of creditUsers) {
-        if (user.email) {
-          await sendMail({
-            to: user.email,
-            subject: "Case Pending for Operations Team L2 Review",
-            // text: `Customer case ${customerName} approved by Credit L1 and pending your review.`,
-            text: `
+        // Step 5: Send email to each user
+        for (const user of creditUsers) {
+          if (user.email) {
+            await sendMail({
+              to: user.email,
+              subject: "Case Pending for Operations Team L2 Review",
+              // text: `Customer case ${customerName} approved by Credit L1 and pending your review.`,
+              text: `
 Dear Team,
 
 The credit case for customer ${customerName} has been approved by operations_team_l1 and is now pending your review and approval at the operations_team_l2 stage.
@@ -2764,15 +2737,12 @@ Regards,
 Credit Workflow System
 Fintree Finance Pvt. Ltd.
 `,
-          });
+            });
+          }
         }
       }
     }
 
-
-  }
-
-    
     // Sync customer status
     await this.customerRepository.update(customerId, {
       status: workflow.currentStatus as any,
@@ -3007,34 +2977,32 @@ Fintree Finance Pvt. Ltd.
     await this.workflowRepository.save(workflow);
 
     if (workflow.currentStatus === "completed") {
-  const customer = await this.customerRepository.findOne({
-    where: { id: customerId },
-    select: ["customerName", "companyName"],
-  });
+      const customer = await this.customerRepository.findOne({
+        where: { id: customerId },
+        select: ["customerName", "companyName"],
+      });
 
-  const customerName =
-    customer?.companyName ||
-    customer?.customerName ||
-    `ID ${customerId}`;
+      const customerName =
+        customer?.companyName || customer?.customerName || `ID ${customerId}`;
 
-  // ✅ Hardcoded email (you can add multiple if needed)
-  const recipients = [
-    "sajag.jain@fintreefinance.com",
-    "vinod.singh@fintreefinance.com",
-    "lalit.shah@fintreefinance.com" 
-    //  "harish.l@fintreefinance.com",
-    // "pratik.sonawane@fintreefinance.com",
-    // "vishal.y@fintreefinance.com",
-    // "aachal.d@fintreefinance.com"
-    // change to actual email
-    // "second@email.com"
-  ];
+      // ✅ Hardcoded email (you can add multiple if needed)
+      const recipients = [
+        "sajag.jain@fintreefinance.com",
+        "vinod.singh@fintreefinance.com",
+        "lalit.shah@fintreefinance.com",
+        //  "harish.l@fintreefinance.com",
+        // "pratik.sonawane@fintreefinance.com",
+        // "vishal.y@fintreefinance.com",
+        // "aachal.d@fintreefinance.com"
+        // change to actual email
+        // "second@email.com"
+      ];
 
-  for (const email of recipients) {
-    await sendMail({
-      to: email,
-      subject: "Customer Successfully Onboarded",
-      text: `
+      for (const email of recipients) {
+        await sendMail({
+          to: email,
+          subject: "Customer Successfully Onboarded",
+          text: `
 Dear Sir/Madam,
 
 This is to inform you that the customer ${customerName} has been successfully onboarded.
@@ -3047,9 +3015,9 @@ Regards,
 
 Fintree Finance Pvt. Ltd.
 `,
-    });
-  }
-}
+        });
+      }
+    }
 
     const customer = await this.customerRepository.findOne({
       where: { id: customerId },
@@ -3113,17 +3081,17 @@ Fintree Finance Pvt. Ltd.
     // Get pending workflows (base query)
     const pendingWorkflows = await this.workflowRepository.find({
       where: {
-      workflowType: "CUSTOMER_ONBOARDING",
-      currentStatus: statusFilter as any,
-      currentApproverRoleName: r,
-    },
+        workflowType: "CUSTOMER_ONBOARDING",
+        currentStatus: statusFilter as any,
+        currentApproverRoleName: r,
+      },
       relations: ["customer"],
     });
 
     // 🔧 FIX: Filter by assignedUserId - only show cases assigned to this specific user
     // Check both case_workflow.assignedUserId and customer.assignedUserId
     let filteredPending = pendingWorkflows;
-    if (userId && statusFilter == 'submitted') {
+    if (userId && statusFilter == "submitted") {
       filteredPending = pendingWorkflows.filter(
         (w) =>
           w.assignedUserId === userId ||
@@ -3211,7 +3179,9 @@ Fintree Finance Pvt. Ltd.
 
     const workflowsWithAssignedUserName = allWorkflows.map((workflow: any) => {
       const assignedUserName =
-        workflow.assignedUser?.name || workflow.customer?.assignedUser?.name || null;
+        workflow.assignedUser?.name ||
+        workflow.customer?.assignedUser?.name ||
+        null;
 
       const { assignedUser, ...workflowWithoutAssignedUser } = workflow;
       const customer = workflow.customer
@@ -3223,8 +3193,7 @@ Fintree Finance Pvt. Ltd.
 
             return {
               ...customerWithoutAssignedUser,
-              assignedUserName:
-                customerAssignedUser?.name || assignedUserName,
+              assignedUserName: customerAssignedUser?.name || assignedUserName,
             };
           })()
         : workflow.customer;
@@ -3282,10 +3251,21 @@ Fintree Finance Pvt. Ltd.
   }
 
   async updateBankDetails(customerId: number, data: any) {
+    if (!customerId) {
+      throw new Error("Customer ID is required");
+    }
+
+    if (!data) {
+      throw new Error("Bank details are required");
+    }
+
     const customer = await this.customerRepository.findOne({
       where: { id: customerId },
     });
-    if (!customer) throw new Error("Customer not found");
+
+    if (!customer) {
+      throw new Error("Customer not found");
+    }
 
     const {
       bankAccountNo,
@@ -3297,13 +3277,46 @@ Fintree Finance Pvt. Ltd.
       sanctionData,
     } = data;
 
-    if (bankAccountNo) customer.bankAccountNo = bankAccountNo;
-    if (bankIfscCode) customer.bankIfscCode = bankIfscCode;
-    if (bankName) customer.bankName = bankName;
-    if (bankBranch) customer.bankBranch = bankBranch;
-    if (data.bankType) customer.bankType = data.bankType;
-    if (eNachStatus) customer.eNachStatus = eNachStatus;
-    if (eSignStatus) customer.eSignStatus = eSignStatus;
+    if (!bankAccountNo) {
+      throw new Error("Bank account number is required");
+    }
+
+    if (!bankIfscCode) {
+      throw new Error("Bank IFSC code is required");
+    }
+
+    if (!bankName) {
+      throw new Error("Bank name is required");
+    }
+
+    if (!bankBranch) {
+      throw new Error("Bank branch is required");
+    }
+
+    if (bankAccountNo.length < 6) {
+      throw new Error("Bank account number is invalid");
+    }
+
+    if (bankIfscCode.length !== 11) {
+      throw new Error("IFSC code must be 11 characters");
+    }
+
+    customer.bankAccountNo = bankAccountNo;
+    customer.bankIfscCode = bankIfscCode;
+    customer.bankName = bankName;
+    customer.bankBranch = bankBranch;
+
+    if (data.bankType) {
+      customer.bankType = data.bankType;
+    }
+
+    if (eNachStatus) {
+      customer.eNachStatus = eNachStatus;
+    }
+
+    if (eSignStatus) {
+      customer.eSignStatus = eSignStatus;
+    }
 
     if (sanctionData) {
       await this.sanctionRepository.update({ customerId }, sanctionData);
@@ -3346,14 +3359,15 @@ Fintree Finance Pvt. Ltd.
         where: { customerId, applicantType: "applicant" },
       });
 
-       const applicant = await this.ApplicantRepository.findOne({
-        where: { customerId},
-        select:["aadhaarNumber","pan"]
+      const applicant = await this.ApplicantRepository.findOne({
+        where: { customerId },
+        select: ["aadhaarNumber", "pan"],
       });
 
       const applicantPan =
         applicant?.pan ||
-        applicantKycDetails.find((k) => k.kycType === "PAN")?.kycNumber || "";
+        applicantKycDetails.find((k) => k.kycType === "PAN")?.kycNumber ||
+        "";
       const applicantAadhaar =
         applicant?.aadhaarNumber ||
         applicantKycDetails.find((k) => k.kycType === "AADHAAR")?.kycNumber ||
@@ -3370,7 +3384,7 @@ Fintree Finance Pvt. Ltd.
       // Get co-applicant if exists
       const coApplicant = await this.coApplicantRepository.findOne({
         where: { customerId },
-        select: [ "pan"],
+        select: ["pan"],
       });
 
       let coApplicantData: LMSSupplyChainPayload["co_applicant"] | undefined;
@@ -3406,7 +3420,7 @@ Fintree Finance Pvt. Ltd.
 
       // Get loan accounts (LANs) for this customer - these represent the sanctions
       const loanAccounts = await this.loanAccountRepository.find({
-        where: { customerId, status: "active",isOnboarded:false },
+        where: { customerId, status: "active", isOnboarded: false },
         relations: ["partner"],
       });
 
@@ -3508,8 +3522,10 @@ Fintree Finance Pvt. Ltd.
         console.log(
           `[LMS Supply Chain] LMS API response status: ${response.status}`,
         );
-        await this.loanAccountRepository.update({ customerId, status: "active",isOnboarded:false }, { isOnboarded: true });
-        
+        await this.loanAccountRepository.update(
+          { customerId, status: "active", isOnboarded: false },
+          { isOnboarded: true },
+        );
       } catch (error: any) {
         if (error.response) {
           throw new Error(
