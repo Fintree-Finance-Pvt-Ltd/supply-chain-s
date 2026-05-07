@@ -15,6 +15,7 @@ const SupplierCreate = () => {
     customerId: '',
     mobileNumber: '',
     gstNumber: '',
+    supplierName: '',
   })
 
   // Fetch approved customers on mount
@@ -52,9 +53,12 @@ const SupplierCreate = () => {
         return toast.error('GST Number required')
       }
 
+        if (!form.supplierName.trim()) {
+        return toast.error('Supplier Name required')
+      }
       const payload = {
         customerId: Number(form.customerId),
-        supplierName: `Supplier-${Date.now()}`,
+        supplierName: form.supplierName.trim(),
         mobileNumber: form.mobileNumber.trim(),
         address: null,
         gstNumber: form.gstNumber?.trim() || null,
@@ -137,7 +141,15 @@ const SupplierCreate = () => {
           setForm({ ...form, gstNumber: e.target.value })
         }
       />
-
+      
+ <input
+        placeholder="Supplier Name *"
+        className="w-full border p-2 rounded mb-3"
+        value={form.supplierName}
+        onChange={(e) =>
+          setForm({ ...form, supplierName: e.target.value })
+        }
+      />
       <button
         onClick={submit}
         className="bg-primary-600 text-white px-4 py-2 rounded-lg"
