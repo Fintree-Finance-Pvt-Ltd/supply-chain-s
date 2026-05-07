@@ -2218,7 +2218,7 @@ async setPassword(
           totalSanctioned: Number(sanction.totalSanctioned),
           totalUtilized: Number(sanction.totalUtilized),
           totalAvailable: Number(sanction.totalAvailable),
-          totalLoans: Number(loanSummary.totalLoans),
+          totalLoans: Number(active.activeLoans),
           totalDisbursed: Number(loanSummary.totalDisbursed),
           totalOutstanding: Number(loanSummary.totalOutstanding),
           activeLoans: Number(active.activeLoans),
