@@ -34,6 +34,22 @@ const SupplierDetail = () => {
   })
   const { user } = useSelector((s) => s.auth)
 
+  const normalizeRole = (role) => {
+    const value = role?.role?.name || role?.roleName || role?.name || role
+    return String(value || '').toLowerCase()
+  }
+
+  const hasUserRole = (role) => {
+    const userRoles = [
+      user?.role,
+      user?.defaultRole,
+      ...(user?.roles || []),
+      ...(user?.userRoles || [])
+    ]
+
+    return userRoles.map(normalizeRole).includes(role)
+  }
+
   // Fetch supplier details on mount
   useEffect(() => {
     fetchSupplierDetails()
@@ -98,6 +114,22 @@ const SupplierDetail = () => {
     chequeNumber: bankForm.chequeNumber.trim()
   })
 
+  const getNormalizedSavedBank = () => ({
+    bankAccountNumber: String(bank?.bankAccountNumber || '').replace(/\s+/g, ''),
+    ifscCode: String(bank?.ifscCode || '').replace(/\s+/g, '').toUpperCase(),
+    bankName: String(bank?.bankName || '').trim(),
+    accountHolderName: String(bank?.accountHolderName || '').trim(),
+    micrCode: String(bank?.micrCode || '').replace(/\s+/g, ''),
+    chequeNumber: String(bank?.chequeNumber || '').trim()
+  })
+
+  const isBankFormSaved = (values) => {
+    if (!bank) return false
+    const savedBank = getNormalizedSavedBank()
+
+    return Object.keys(values).every((key) => values[key] === savedBank[key])
+  }
+
   const validateBankDetails = () => {
     const values = getNormalizedBankForm()
     const errors = {}
@@ -150,16 +182,6 @@ const SupplierDetail = () => {
           
           // Log provider name
           console.log('Cheque OCR Provider:', ocrResult.provider);
-          
-          // Auto-fill bank details from OCR
-          setBank({
-            bankAccountNumber: bank_account_number,
-            ifscCode: ifsc_code,
-            bankName: bank_name,
-            accountHolderName: account_holder_name,
-            micrCode: micr_code,
-            chequeNumber: cheque_number
-          });
           
           // Populate form with OCR data for editing
           setBankForm({
@@ -275,10 +297,12 @@ const SupplierDetail = () => {
 
     try {
       setIsSubmittingToOpsHead(true)
-      const bankRes = await supplierService.updateBankDetails(Number(id), validation.values)
-      setBank(bankRes.data?.data)
-      setBankForm(validation.values)
-      setIsEditingBank(false)
+      if (!isBankFormSaved(validation.values)) {
+        setIsEditingBank(true)
+        toast.error('Please save bank details before submitting to Ops Head')
+        return
+      }
+
       await supplierService.submitToOpsHead(Number(id), remarks || 'Submitting to Operations Head')
       toast.success('Supplier submitted to Operations Head')
       fetchSupplierDetails()
@@ -323,9 +347,12 @@ const SupplierDetail = () => {
 
   if (!supplier) return <div className="p-6">Supplier not found</div>
 
-  const isOpsL1Draft = user?.role === ROLES.OPERATIONS_TEAM_L1 && normalizeStatus(supplier.status) === 'DRAFT'
+  const isOpsL1Draft = hasUserRole(ROLES.OPERATIONS_TEAM_L1) && normalizeStatus(supplier.status) === 'DRAFT'
+  const isRMUser = hasUserRole(ROLES.RELATIONSHIP_MANAGER)
+  const isOpsHeadUser = hasUserRole(ROLES.OPERATIONS_HEAD)
   const showBankDetailsPanel = bank || chequeDocument || isEditingBank || isOpsL1Draft
   const showBankForm = isOpsL1Draft && (isEditingBank || !bank)
+  const hasSavedBankDetails = isBankFormSaved(getNormalizedBankForm())
 
   return (
     <div className="p-6">
@@ -509,7 +536,7 @@ const SupplierDetail = () => {
                 <div className="mt-4 pt-4 border-t">
                   <div className="flex justify-between items-center mb-2">
                     <h4 className="font-medium text-sm">Cheque Document</h4>
-                    {user?.role === ROLES.OPERATIONS_TEAM_L1 && normalizeStatus(supplier.status) === 'DRAFT' && (
+                    {isOpsL1Draft && (
                       <button
                         onClick={deleteCheque}
                         disabled={isDeletingCheque}
@@ -583,7 +610,7 @@ const SupplierDetail = () => {
           )}
 
           {/* RM: Submit for Operations */}
-          {user?.role === ROLES.RELATIONSHIP_MANAGER && normalizeStatus(supplier.status) === 'DRAFT' && (
+          {isRMUser && normalizeStatus(supplier.status) === 'DRAFT' && (
             <div className="bg-white shadow rounded-lg p-6">
               <h3 className="font-semibold mb-3">Submit for Operations</h3>
               <textarea
@@ -602,7 +629,7 @@ const SupplierDetail = () => {
           )}
 
           {/* Ops L1: Upload Cheque - only show for DRAFT status */}
-          {user?.role === ROLES.OPERATIONS_TEAM_L1 && normalizeStatus(supplier.status) === 'DRAFT' && (
+          {isOpsL1Draft && (
             <div className="bg-white shadow rounded-lg p-6">
               <h3 className="font-semibold mb-3">Upload Cheque</h3>
               <input
@@ -627,7 +654,7 @@ const SupplierDetail = () => {
           )}
 
           {/* Ops L1: Submit to Ops Head - only show for DRAFT status */}
-          {user?.role === ROLES.OPERATIONS_TEAM_L1 && normalizeStatus(supplier.status) === 'DRAFT' && (
+          {isOpsL1Draft && (
             <div className="bg-white shadow rounded-lg p-6">
               <h3 className="font-semibold mb-3">Submit to Operations Head</h3>
               <textarea
@@ -643,16 +670,16 @@ const SupplierDetail = () => {
               >
                 {isSubmittingToOpsHead ? 'Submitting...' : 'Submit to Ops Head'}
               </button>
-              {!bank && (
+              {!hasSavedBankDetails && (
                 <p className="text-xs text-red-500 mt-2">
-                  Bank details are required before submitting to Ops Head.
+                  Save bank details before submitting to Ops Head.
                 </p>
               )}
             </div>
           )}
 
           {/* Ops Head: Decision */}
-          {user?.role === ROLES.OPERATIONS_HEAD && (
+          {isOpsHeadUser && (
             <div className="bg-white shadow rounded-lg p-6">
               <h3 className="font-semibold mb-3">Operations Head Decision</h3>
               {!canApprove() ? (
