@@ -23,12 +23,9 @@ import axios from "axios";
 import { getRepository } from "typeorm";
 import { User } from "../entities/User";
 import { sendMail } from "../utils/emailService";
-import { Role, UserRole } from "../entities";
+import { Applicant, Role, UserRole } from "../entities";
 const customerRepository = AppDataSource.getRepository(Customer);
 const userRepository = AppDataSource.getRepository(User);
-// const roleRepository = AppDataSource.getRepository(Role);
-// const userRoleRepository = AppDataSource.getRepository(UserRole);
-
 
 /**
  * LMS Supply Chain API Payload interfaces
@@ -80,6 +77,7 @@ CustomerOnboardingService {
   private sanctionHistoryRepository =
     AppDataSource.getRepository(SanctionLimitHistory);
   private loanAccountRepository = AppDataSource.getRepository(LoanAccount);
+    private ApplicantRepository = AppDataSource.getRepository(Applicant);
   private coApplicantRepository = AppDataSource.getRepository(CoApplicant);
   private partnerRepository = AppDataSource.getRepository(Partner);
   private kycDetailRepository = AppDataSource.getRepository(KycDetail);
@@ -182,6 +180,7 @@ CustomerOnboardingService {
       "processingFees",
       "legalCharges",
       "serviceFee",
+      "cashCollateral",
       "conditions",
     ];
 
@@ -263,6 +262,7 @@ CustomerOnboardingService {
       processingFees: Number(partnerSanction.processingFees || 0),
       legalCharges: Number(partnerSanction.legalCharges || 0),
       serviceFee: Number(partnerSanction.serviceFee || 0),
+      cashCollateral: Number(partnerSanction.cashCollateral || 0),
       conditions: partnerSanction.conditions || "",
     };
   }
@@ -279,6 +279,7 @@ CustomerOnboardingService {
       "processingFees",
       "legalCharges",
       "serviceFee",
+      "cashCollateral",
     ];
 
     for (const field of numericFields) {
@@ -422,6 +423,7 @@ CustomerOnboardingService {
         processingFees: 0,
         legalCharges: 0,
         serviceFee: 0,
+        cashCollateral: 0,
         conditions: "",
         status: "pending",
       });
@@ -715,45 +717,31 @@ await this.logHistory({
 });
 
 
+if (newStatus === "submitted" ) {
+  const customer = await this.customerRepository.findOne({
+    where: { id: customerId },
+    select: ["assignedUserId", "customerName", "companyName"],
+  });
 
-if (newStatus === "submitted") {
-  // ✅ 1. Send to assigned CREDIT_TEAM_L1
-  if (workflow.assignedUserId) {
-    const assignedUser = await this.userRepository.findOne({
+  if (customer?.assignedUserId) {
+    const rmUser = await this.userRepository.findOne({
       where: {
-        id: workflow.assignedUserId,
-        defaultRole: "CREDIT_TEAM_L1",
+        id: customer.assignedUserId,
+        // defaultRole: "RELATIONSHIP_MANAGER",
       },
       select: ["email"],
     });
 
-    if (assignedUser?.email) {
+    if (rmUser?.email) {
       await sendMail({
-        to: assignedUser.email,
-        subject: "New Case Assigned - Credit L1",
+        to: rmUser.email,
+        subject: "Case submitted by RM - Credit L1 Review Pending",
         text: `Customer ID: ${customerId} is assigned to you for review.`,
       });
     }
   }
-
-  // ✅ 2. Send to ALL MD users
-  const mdUsers = await this.userRepository.find({
-    where: {
-      defaultRole: "MD",
-    },
-    select: ["email"],
-  });
-
-  for (const md of mdUsers) {
-    if (md.email) {
-      await sendMail({
-        to: md.email,
-        subject: "New Case Submitted",
-        text: `Customer ID: ${customerId} has been submitted and assigned to Credit L1.`,
-      });
-    }
-  }
 }
+
 
 // Existing logic
 await this.awardOpsApprovalRewards(
@@ -910,6 +898,7 @@ Fintree Finance Pvt. Ltd.
               interestRate: ps.interestRate || 0,
               legalCharges: ps.legalCharges || 0,
               serviceFee: ps.serviceFee || 0,
+              cashCollateral: ps.cashCollateral || 0,
               conditions: ps.conditions || null,
               penalCharges: ps.penalCharges || 0,
               processingFees: ps.processingFees || 0,
@@ -2100,6 +2089,7 @@ Fintree Finance Pvt. Ltd.
               processingFees: partnerSanction.processingFees || 0,
               legalCharges: partnerSanction.legalCharges || 0,
               serviceFee: partnerSanction.serviceFee || 0,
+              cashCollateral: partnerSanction.cashCollateral || 0,
               conditions: partnerSanction.conditions || "",
               status: sanctionStatus,
             });
@@ -2114,6 +2104,7 @@ Fintree Finance Pvt. Ltd.
               processingFees: partnerSanction.processingFees || 0,
               legalCharges: partnerSanction.legalCharges || 0,
               serviceFee: partnerSanction.serviceFee || 0,
+              cashCollateral: partnerSanction.cashCollateral || 0,
               conditions: partnerSanction.conditions || "",
               status: sanctionStatus,
               creditOfficerId: userId,
@@ -3028,11 +3019,14 @@ Fintree Finance Pvt. Ltd.
 
   // ✅ Hardcoded email (you can add multiple if needed)
   const recipients = [
-    "opshead@fintreefinance.com", 
-    "harish.l@fintreefinance.com",
-    "pratik.sonawane@fintreefinance.com",
-    "vishal.y@fintreefinance.com",
-    "aachal.d@fintreefinance.com"// change to actual email
+    "sajag.jain@fintreefinance.com",
+    "vinod.singh@fintreefinance.com",
+    "lalit.shah@fintreefinance.com" 
+    //  "harish.l@fintreefinance.com",
+    // "pratik.sonawane@fintreefinance.com",
+    // "vishal.y@fintreefinance.com",
+    // "aachal.d@fintreefinance.com"
+    // change to actual email
     // "second@email.com"
   ];
 
@@ -3043,7 +3037,7 @@ Fintree Finance Pvt. Ltd.
       text: `
 Dear Sir/Madam,
 
-This is to inform you that the customer ${customerName} has been successfully onboarded after completion of all approval stages.
+This is to inform you that the customer ${customerName} has been successfully onboarded.
 
 Customer Name : ${customerName}
 Case ID       : ${customerId}
@@ -3352,9 +3346,16 @@ Fintree Finance Pvt. Ltd.
         where: { customerId, applicantType: "applicant" },
       });
 
+       const applicant = await this.ApplicantRepository.findOne({
+        where: { customerId},
+        select:["aadhaarNumber","pan"]
+      });
+
       const applicantPan =
+        applicant?.pan ||
         applicantKycDetails.find((k) => k.kycType === "PAN")?.kycNumber || "";
       const applicantAadhaar =
+        applicant?.aadhaarNumber ||
         applicantKycDetails.find((k) => k.kycType === "AADHAAR")?.kycNumber ||
         "";
 
@@ -3369,6 +3370,7 @@ Fintree Finance Pvt. Ltd.
       // Get co-applicant if exists
       const coApplicant = await this.coApplicantRepository.findOne({
         where: { customerId },
+        select: [ "pan"],
       });
 
       let coApplicantData: LMSSupplyChainPayload["co_applicant"] | undefined;
@@ -3378,6 +3380,7 @@ Fintree Finance Pvt. Ltd.
         });
 
         const coApplicantPan =
+          coApplicant?.pan ||
           coApplicantKycDetails.find((k) => k.kycType === "PAN")?.kycNumber ||
           "";
         const coApplicantAadhaar =
@@ -3451,17 +3454,17 @@ Fintree Finance Pvt. Ltd.
       const payload: LMSSupplyChainPayload = {
         partner_loan_id: String(customerId),
         applicant: {
-          name: customer.name || "",
+          name: customer.name,
           pan: applicantPan ?? customer.pan,
-          aadhaar: applicantAadhaar ?? "9968xxxxxx",
-          mobile: customer.mobile || "",
+          aadhaar: applicantAadhaar,
+          mobile: customer.mobile,
           address: applicantAddressStr,
         },
         co_applicant: coApplicantData,
         company: {
-          name: customer.companyName || customer.companyName || "",
-          pan: customer.companyPan || "",
-          gst: customer.gstNumber || "",
+          name: customer.companyName || customer.companyName,
+          pan: customer.companyPan,
+          gst: customer.gstNumber,
           address: companyAddressStr,
         },
         sanctions: sanctions,
