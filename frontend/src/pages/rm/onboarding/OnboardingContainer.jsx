@@ -1586,14 +1586,7 @@ if (!formData.applicantAadhaarNumber?.trim()) {
 if (!formData.applicantAadhaarAddress?.trim()) {
   newErrors.applicantAadhaarAddress =
     "Applicant Aadhaar Address is required";
-} else if (
-  formData.applicantAadhaarAddress.replace(/\D/g, "").length !== 12
-) {
-  newErrors.applicantAadhaarAddress =
-    "Applicant Aadhaar Address must be 12 digits";
 }
-
-
 
 
 
