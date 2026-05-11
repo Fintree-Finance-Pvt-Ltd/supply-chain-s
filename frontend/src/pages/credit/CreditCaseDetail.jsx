@@ -785,16 +785,18 @@ const canEditSanctionAmount = () => {
   const getMimeType = (fileName) => {
     const ext = fileName?.toLowerCase().split(".").pop() || "";
     const mimeTypes = {
-      jpg: "image/jpeg",
-      jpeg: "image/jpeg",
-      png: "image/png",
-      gif: "image/gif",
-      webp: "image/webp",
-      bmp: "image/bmp",
-      svg: "image/svg+xml",
-      pdf: "application/pdf",
-      doc: "application/msword",
-      docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      jpg: 'image/jpeg',
+      jpeg: 'image/jpeg',
+      png: 'image/png',
+      gif: 'image/gif',
+      webp: 'image/webp',
+      bmp: 'image/bmp',
+      svg: 'image/svg+xml',
+      pdf: 'application/pdf',
+      doc: 'application/msword',
+      xls: 'application/vnd.ms-excel',
+      xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     };
     return mimeTypes[ext] || "application/octet-stream";
   };
