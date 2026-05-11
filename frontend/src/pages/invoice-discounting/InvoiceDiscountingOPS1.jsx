@@ -78,8 +78,31 @@ export default function InvoiceDiscountingOPS1() {
   };
 
   const handleViewInvoice = (invoice) => {
-    setSelectedInvoice(invoice);
+
+      const invoiceDocs = invoice.invoiceFilePath
+    ? [
+        {
+          id: invoice.id,
+
+          fileName:
+            invoice.invoiceNumber || "Invoice Document",
+
+          filePath: invoice.invoiceFilePath,
+
+          documentType: "INVOICE",
+        },
+      ]
+    : [];
+
+  setSelectedInvoice({
+    ...invoice,
+
+    invoiceDocuments: invoiceDocs,
+  });
+
+    // setSelectedInvoice(invoice);
     setShowViewModal(true);
+   
   };
 
   const handleDisbursementDateChange = (date) => {
@@ -376,242 +399,248 @@ export default function InvoiceDiscountingOPS1() {
         )}
       </tbody>
 
-    {showViewModal && (
-    <div
-      style={{
-        position: "fixed",
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        background: "rgba(15, 23, 42, 0.7)",
-        backdropFilter: "blur(8px)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        zIndex: 1000,
-      }}
-    >
-      <div
-        style={{
-          background: "#fff",
-          padding: "32px",
-          borderRadius: "24px",
-          width: "650px",
-          maxHeight: "85vh",
-          overflowY: "auto",
-          position: "relative",
-          boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25)",
-          border: "1px solid rgba(255, 255, 255, 0.3)",
-        }}
-      >
-        {/* CLOSE BUTTON */}
-        <button
-          onClick={() => setShowViewModal(false)}
+      {showViewModal && (
+        <div
           style={{
-            position: "absolute",
-            top: "20px",
-            right: "20px",
-            border: "none",
-            background: "#f1f5f9",
-            width: "36px",
-            height: "36px",
-            borderRadius: "50%",
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: "rgba(15, 23, 42, 0.7)",
+            backdropFilter: "blur(8px)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            cursor: "pointer",
-            color: "#64748b",
-            transition: "all 0.2s",
+            zIndex: 1000,
           }}
         >
-          <FiX size={18} />
-        </button>
-
-        <h3 style={{ 
-          marginBottom: "28px", 
-          fontSize: "22px", 
-          fontWeight: "800", 
-          color: "#1e293b",
-          letterSpacing: "-0.02em" 
-        }}>
-          Invoice Overview
-        </h3>
-
-        {/* TOP HIGHLIGHT CARD */}
-        <div style={{
-          background: "linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)",
-          padding: "20px",
-          borderRadius: "16px",
-          border: "1px solid #e2e8f0",
-          marginBottom: "24px",
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center"
-        }}>
-          <div>
-            <div style={{ fontSize: "11px", color: "#94a3b8", fontWeight: "700", textTransform: "uppercase", marginBottom: "4px" }}>
-              Invoice Number
-            </div>
-            <div style={{ fontWeight: "700", color: "#1e293b", fontSize: "15px" }}>
-              {selectedInvoice?.invoiceNumber}
-            </div>
-          </div>
-          <div style={{ textAlign: "right" }}>
-            <div style={{ fontSize: "11px", color: "#94a3b8", fontWeight: "700", textTransform: "uppercase", marginBottom: "4px" }}>
-              Current Status
-            </div>
-            <div>{getStatusBadge(selectedInvoice?.status)}</div>
-          </div>
-        </div>
-
-        {/* DATA GRID */}
-        <div style={{ 
-          display: "grid", 
-          gridTemplateColumns: "1fr 1fr", 
-          gap: "20px",
-          padding: "0 4px" 
-        }}>
-          <div>
-            <label style={{ fontSize: "12px", color: "#94a3b8", fontWeight: "600", display: "block", marginBottom: "4px" }}>
-              Customer
-            </label>
-            <div style={{ fontWeight: "600", color: "#334155", fontSize: "14px" }}>
-              {selectedInvoice?.customer?.name || selectedInvoice?.customerName}
-            </div>
-          </div>
-
-          <div>
-            <label style={{ fontSize: "12px", color: "#94a3b8", fontWeight: "600", display: "block", marginBottom: "4px" }}>
-              Supplier
-            </label>
-            <div style={{ fontWeight: "600", color: "#334155", fontSize: "14px" }}>
-              {selectedInvoice?.supplier?.supplierName || selectedInvoice?.supplierName}
-            </div>
-          </div>
-
-          <div style={{ borderTop: "1px solid #f1f5f9", paddingTop: "16px", marginTop: "4px" }}>
-            <label style={{ fontSize: "12px", color: "#94a3b8", fontWeight: "600", display: "block", marginBottom: "4px" }}>
-              Invoice Amount
-            </label>
-            <div style={{ fontWeight: "700", color: "#1e293b", fontSize: "16px" }}>
-              ₹{selectedInvoice?.invoiceAmount?.toLocaleString()}
-            </div>
-          </div>
-
-          <div style={{ borderTop: "1px solid #f1f5f9", paddingTop: "16px", marginTop: "4px" }}>
-            <label style={{ fontSize: "12px", color: "#94a3b8", fontWeight: "600", display: "block", marginBottom: "4px" }}>
-              Disbursement
-            </label>
-            <div style={{ fontWeight: "800", color: "#6366f1", fontSize: "16px" }}>
-              ₹{selectedInvoice?.disbursementAmount?.toLocaleString()}
-            </div>
-          </div>
-
-          <div style={{ background: "#f5f3ff", padding: "12px", borderRadius: "12px" }}>
-            <label style={{ fontSize: "11px", color: "#6366f1", fontWeight: "700", textTransform: "uppercase", display: "block", marginBottom: "2px" }}>
-              ROI
-            </label>
-            <div style={{ fontWeight: "700", color: "#4338ca", fontSize: "15px" }}>
-              {selectedInvoice?.roiPercentage}%
-            </div>
-          </div>
-
-          <div style={{ background: "#fff1f2", padding: "12px", borderRadius: "12px" }}>
-            <label style={{ fontSize: "11px", color: "#e11d48", fontWeight: "700", textTransform: "uppercase", display: "block", marginBottom: "2px" }}>
-              Penal Charges
-            </label>
-            <div style={{ fontWeight: "700", color: "#be123c", fontSize: "15px" }}>
-              {selectedInvoice?.penalCharges}%
-            </div>
-
-            
-          </div>
-
-
-            <div style={{ background: "#f1fff3", padding: "12px", borderRadius: "12px" }}>
-            <label style={{ fontSize: "11px", color: "#074d31", fontWeight: "700", textTransform: "uppercase", display: "block", marginBottom: "2px" }}>
-             Service Fee
-            </label>
-            <div style={{ fontWeight: "700", color: "#074d33", fontSize: "15px" }}>
-              {selectedInvoice?.serviceFee}%
-            </div>
-
-            
-          </div>
-        </div>
-
-        {/* DOCUMENTS SECTION */}
-        <div style={{ marginTop: "24px", borderTop: "1px solid #f1f5f9", paddingTop: "20px" }}>
-          <label style={{ fontSize: "13px", color: "#475569", fontWeight: "700", display: "block", marginBottom: "12px" }}>
-            Attached Documents
-          </label>
-          <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-            {!selectedInvoice?.invoiceDocuments || selectedInvoice.invoiceDocuments.length === 0 ? (
-              <p style={{ fontSize: "13px", color: "#94a3b8", fontStyle: "italic" }}>No documents uploaded.</p>
-            ) : (
-              selectedInvoice.invoiceDocuments.map((doc) => {
-                const baseUrl = import.meta.env.VITE_API_BASE_URL?.replace("/api/documents/customer", "") || "http://localhost:4000";
-                const fileUrl = doc.filePath?.startsWith("http") ? doc.filePath : `${baseUrl}/${doc.filePath?.replace(/\\/g, "/")}`;
-
-                return (
-                  <div key={doc.id} style={{ 
-                    display: "flex", 
-                    alignItems: "center", 
-                    justifyContent: "space-between", 
-                    background: "#f8fafc", 
-                    padding: "10px 16px", 
-                    borderRadius: "12px", 
-                    border: "1px solid #e2e8f0" 
-                  }}>
-                    <span style={{ fontSize: "13px", color: "#1e293b", fontWeight: "500", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "250px" }}>
-                      📄 {doc.fileName}
-                    </span>
-                    <button
-                      onClick={() => window.open(fileUrl, "_blank")}
-                      style={{ 
-                        background: "#6366f1", 
-                        color: "#fff", 
-                        border: "none", 
-                        padding: "6px 14px", 
-                        borderRadius: "8px", 
-                        fontSize: "12px", 
-                        fontWeight: "600",
-                        cursor: "pointer",
-                        boxShadow: "0 4px 6px -1px rgba(99, 102, 241, 0.2)"
-                      }}
-                    >
-                      View File
-                    </button>
-                  </div>
-                );
-              })
-            )}
-          </div>
-        </div>
-
-        {/* FOOTER ACTION */}
-        <div style={{ marginTop: "32px", display: "flex", justifyContent: "flex-end" }}>
-          <button
-            onClick={() => setShowViewModal(false)}
+          <div
             style={{
-              padding: "12px 32px",
-              background: "#1e293b",
-              color: "#fff",
-              border: "none",
-              borderRadius: "12px",
-              fontWeight: "700",
-              fontSize: "14px",
-              cursor: "pointer",
-              boxShadow: "0 10px 15px -3px rgba(30, 41, 59, 0.3)",
+              background: "#fff",
+              padding: "32px",
+              borderRadius: "24px",
+              width: "650px",
+              maxHeight: "85vh",
+              overflowY: "auto",
+              position: "relative",
+              boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25)",
+              border: "1px solid rgba(255, 255, 255, 0.3)",
             }}
           >
-            Close Details
-          </button>
+            {/* CLOSE BUTTON */}
+            <button
+              onClick={() => setShowViewModal(false)}
+              style={{
+                position: "absolute",
+                top: "20px",
+                right: "20px",
+                border: "none",
+                background: "#f1f5f9",
+                width: "36px",
+                height: "36px",
+                borderRadius: "50%",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                cursor: "pointer",
+                color: "#64748b",
+                transition: "all 0.2s",
+              }}
+            >
+              <FiX size={18} />
+            </button>
+
+            <h3 style={{
+              marginBottom: "28px",
+              fontSize: "22px",
+              fontWeight: "800",
+              color: "#1e293b",
+              letterSpacing: "-0.02em"
+            }}>
+              Invoice Overview
+            </h3>
+
+            {/* TOP HIGHLIGHT CARD */}
+            <div style={{
+              background: "linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)",
+              padding: "20px",
+              borderRadius: "16px",
+              border: "1px solid #e2e8f0",
+              marginBottom: "24px",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center"
+            }}>
+              <div>
+                <div style={{ fontSize: "11px", color: "#94a3b8", fontWeight: "700", textTransform: "uppercase", marginBottom: "4px" }}>
+                  Invoice Number
+                </div>
+                <div style={{ fontWeight: "700", color: "#1e293b", fontSize: "15px" }}>
+                  {selectedInvoice?.invoiceNumber}
+                </div>
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <div style={{ fontSize: "11px", color: "#94a3b8", fontWeight: "700", textTransform: "uppercase", marginBottom: "4px" }}>
+                  Current Status
+                </div>
+                <div>{getStatusBadge(selectedInvoice?.status)}</div>
+              </div>
+            </div>
+
+            {/* DATA GRID */}
+            <div style={{
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr",
+              gap: "20px",
+              padding: "0 4px"
+            }}>
+              <div>
+                <label style={{ fontSize: "12px", color: "#94a3b8", fontWeight: "600", display: "block", marginBottom: "4px" }}>
+                  Customer
+                </label>
+                <div style={{ fontWeight: "600", color: "#334155", fontSize: "14px" }}>
+                  {selectedInvoice?.customer?.name || selectedInvoice?.customerName}
+                </div>
+              </div>
+
+              <div>
+                <label style={{ fontSize: "12px", color: "#94a3b8", fontWeight: "600", display: "block", marginBottom: "4px" }}>
+                  Supplier
+                </label>
+                <div style={{ fontWeight: "600", color: "#334155", fontSize: "14px" }}>
+                  {selectedInvoice?.supplier?.supplierName || selectedInvoice?.supplierName}
+                </div>
+              </div>
+
+              <div style={{ borderTop: "1px solid #f1f5f9", paddingTop: "16px", marginTop: "4px" }}>
+                <label style={{ fontSize: "12px", color: "#94a3b8", fontWeight: "600", display: "block", marginBottom: "4px" }}>
+                  Invoice Amount
+                </label>
+                <div style={{ fontWeight: "700", color: "#1e293b", fontSize: "16px" }}>
+                  ₹{selectedInvoice?.invoiceAmount?.toLocaleString()}
+                </div>
+              </div>
+
+              <div style={{ borderTop: "1px solid #f1f5f9", paddingTop: "16px", marginTop: "4px" }}>
+                <label style={{ fontSize: "12px", color: "#94a3b8", fontWeight: "600", display: "block", marginBottom: "4px" }}>
+                  Disbursement
+                </label>
+                <div style={{ fontWeight: "800", color: "#6366f1", fontSize: "16px" }}>
+                  ₹{selectedInvoice?.disbursementAmount?.toLocaleString()}
+                </div>
+              </div>
+
+              <div style={{ background: "#f5f3ff", padding: "12px", borderRadius: "12px" }}>
+                <label style={{ fontSize: "11px", color: "#6366f1", fontWeight: "700", textTransform: "uppercase", display: "block", marginBottom: "2px" }}>
+                  ROI
+                </label>
+                <div style={{ fontWeight: "700", color: "#4338ca", fontSize: "15px" }}>
+                  {selectedInvoice?.roiPercentage}%
+                </div>
+              </div>
+
+              <div style={{ background: "#fff1f2", padding: "12px", borderRadius: "12px" }}>
+                <label style={{ fontSize: "11px", color: "#e11d48", fontWeight: "700", textTransform: "uppercase", display: "block", marginBottom: "2px" }}>
+                  Penal Charges
+                </label>
+                <div style={{ fontWeight: "700", color: "#be123c", fontSize: "15px" }}>
+                  {selectedInvoice?.penalCharges}%
+                </div>
+
+
+              </div>
+
+
+              <div style={{ background: "#f1fff3", padding: "12px", borderRadius: "12px" }}>
+                <label style={{ fontSize: "11px", color: "#074d31", fontWeight: "700", textTransform: "uppercase", display: "block", marginBottom: "2px" }}>
+                  Service Fee
+                </label>
+                <div style={{ fontWeight: "700", color: "#074d33", fontSize: "15px" }}>
+                  {selectedInvoice?.serviceFee}%
+                </div>
+
+
+              </div>
+            </div>
+
+            {/* DOCUMENTS SECTION */}
+            <div style={{ marginTop: "24px", borderTop: "1px solid #f1f5f9", paddingTop: "20px" }}>
+              <label style={{ fontSize: "13px", color: "#475569", fontWeight: "700", display: "block", marginBottom: "12px" }}>
+                Attached Documents
+              </label>
+              <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                {!selectedInvoice?.invoiceDocuments || selectedInvoice.invoiceDocuments.length === 0 ? (
+                  <p style={{ fontSize: "13px", color: "#94a3b8", fontStyle: "italic" }}>No documents uploaded.</p>
+                ) : (
+                  selectedInvoice.invoiceDocuments.map((doc) => {
+                    const apiBase =
+                      import.meta.env.VITE_API_BASE_URL || "http://localhost:4000/api";
+
+                    const baseUrl = apiBase.replace("/api", "");
+                    const fileUrl = doc.filePath?.startsWith("http")
+                      ? doc.filePath
+                      : `${baseUrl}/${doc.filePath.replace(/\\/g, "/")}`;
+
+                    return (
+                      <div key={doc.id} style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        background: "#f8fafc",
+                        padding: "10px 16px",
+                        borderRadius: "12px",
+                        border: "1px solid #e2e8f0"
+                      }}>
+                        <span style={{ fontSize: "13px", color: "#1e293b", fontWeight: "500", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "250px" }}>
+                          📄 {doc.fileName}
+                        </span>
+                        <button
+                          onClick={() =>
+                             window.open(fileUrl, "_blank")}
+                          style={{
+                            background: "#6366f1",
+                            color: "#fff",
+                            border: "none",
+                            padding: "6px 14px",
+                            borderRadius: "8px",
+                            fontSize: "12px",
+                            fontWeight: "600",
+                            cursor: "pointer",
+                            boxShadow: "0 4px 6px -1px rgba(99, 102, 241, 0.2)"
+                          }}
+                        >
+                          View File
+                        </button>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+
+            {/* FOOTER ACTION */}
+            <div style={{ marginTop: "32px", display: "flex", justifyContent: "flex-end" }}>
+              <button
+                onClick={() => setShowViewModal(false)}
+                style={{
+                  padding: "12px 32px",
+                  background: "#1e293b",
+                  color: "#fff",
+                  border: "none",
+                  borderRadius: "12px",
+                  fontWeight: "700",
+                  fontSize: "14px",
+                  cursor: "pointer",
+                  boxShadow: "0 10px 15px -3px rgba(30, 41, 59, 0.3)",
+                }}
+              >
+                Close Details
+              </button>
+            </div>
+          </div>
         </div>
-      </div>
-    </div>
-  )}
+      )}
     </table>
   );
 
@@ -749,181 +778,181 @@ export default function InvoiceDiscountingOPS1() {
 
       {/* Verification Modal */}
       {showModal && (
-  <div
-    style={{
-      position: "fixed",
-      inset: 0,
-      background: "rgba(15, 23, 42, 0.7)",
-      backdropFilter: "blur(12px)",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      zIndex: 1000,
-      padding: "20px",
-    }}
-  >
-    <div
-      style={{
-        background: "#ffffff",
-        borderRadius: "28px",
-        width: "100%",
-        maxWidth: "540px",
-        maxHeight: "90vh",
-        overflow: "hidden",
-        boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.3)",
-        display: "flex",
-        flexDirection: "column",
-        border: "1px solid rgba(255, 255, 255, 0.2)",
-      }}
-    >
-      {/* Header Section */}
-      <div
-        style={{
-          padding: "32px 40px",
-          background: actionType === "approve" 
-            ? "linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)" 
-            : "linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%)",
-          borderBottom: "1px solid rgba(0,0,0,0.05)",
-          display: "flex",
-          alignItems: "center",
-          gap: "16px",
-        }}
-      >
-        <div style={{
-          width: "48px",
-          height: "48px",
-          borderRadius: "14px",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          background: actionType === "approve" ? "#10b981" : "#ef4444",
-          color: "#fff",
-          fontSize: "20px"
-        }}>
-          {actionType === "approve" ? <FiCheck /> : <FiX />}
-        </div>
-        <div>
-          <h3 style={{ margin: 0, fontSize: "20px", fontWeight: "800", color: "#0f172a" }}>
-            {actionType === "approve" ? "Verify & Approve" : "Reject Application"}
-          </h3>
-          <p style={{ margin: "2px 0 0", fontSize: "13px", color: "#64748b", fontWeight: "500" }}>
-            Please review the details before proceeding
-          </p>
-        </div>
-      </div>
-
-      <div style={{ padding: "32px 40px", overflowY: "auto" }}>
-        {/* Info Cards */}
-        <div style={{ display: "flex", flexDirection: "column", gap: "12px", marginBottom: "32px" }}>
-          {[
-            { label: "Invoice ID", value: selectedInvoice?.invoiceNumber },
-            { label: "Customer", value: selectedInvoice?.customer?.name || "N/A" },
-            { label: "Supplier", value: selectedInvoice?.supplier?.supplierName|| "N/A" },
-            { label: "Release Amount", value: `₹${selectedInvoice?.disbursementAmount?.toLocaleString()}`, highlight: true },
-          ].map((item, idx) => (
-            <div key={idx} style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              padding: "14px 18px",
-              background: "#f8fafc",
-              borderRadius: "14px",
-              border: "1px solid #f1f5f9"
-            }}>
-              <span style={{ fontSize: "12px", color: "#94a3b8", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.025em" }}>
-                {item.label}
-              </span>
-              <span style={{ 
-                fontSize: item.highlight ? "16px" : "14px", 
-                fontWeight: "700", 
-                color: item.highlight ? "#6366f1" : "#1e293b" 
-              }}>
-                {item.value}
-              </span>
-            </div>
-          ))}
-        </div>
-
-        {/* Remarks Input */}
-        <div style={{ marginBottom: "8px" }}>
-          <label style={{ display: "block", marginBottom: "10px", fontWeight: "700", fontSize: "13px", color: "#475569", marginLeft: "4px" }}>
-            Internal Remarks
-          </label>
-          <textarea
-            value={remarks}
-            onChange={(e) => setRemarks(e.target.value)}
-            placeholder="Provide a brief reason for this action..."
-            style={{
-              width: "100%",
-              padding: "16px",
-              border: "2px solid #f1f5f9",
-              borderRadius: "16px",
-              minHeight: "110px",
-              fontSize: "14px",
-              fontFamily: "inherit",
-              outline: "none",
-              backgroundColor: "#fdfdfd",
-              transition: "all 0.2s ease",
-              resize: "none"
-            }}
-            onFocus={(e) => (e.target.style.borderColor = "#6366f1")}
-            onBlur={(e) => (e.target.style.borderColor = "#f1f5f9")}
-          />
-        </div>
-      </div>
-
-      {/* Footer Actions */}
-      <div style={{ 
-        padding: "24px 40px 40px", 
-        display: "flex", 
-        gap: "12px", 
-        justifyContent: "flex-end",
-        background: "#fff" 
-      }}>
-        <button
-          onClick={() => setShowModal(false)}
+        <div
           style={{
-            padding: "14px 24px",
-            background: "#fff",
-            color: "#64748b",
-            border: "1px solid #e2e8f0",
-            borderRadius: "14px",
-            cursor: "pointer",
-            fontWeight: "700",
-            fontSize: "14px",
-            transition: "all 0.2s"
-          }}
-          onMouseEnter={(e) => (e.target.style.background = "#f8fafc")}
-          onMouseLeave={(e) => (e.target.style.background = "#fff")}
-        >
-          Cancel
-        </button>
-        <button
-          onClick={submitVerification}
-          disabled={loading}
-          style={{
-            padding: "14px 32px",
-            background: actionType === "approve" ? "#10b981" : "#ef4444",
-            color: "#fff",
-            border: "none",
-            borderRadius: "14px",
-            cursor: "pointer",
-            fontWeight: "700",
-            fontSize: "14px",
-            boxShadow: actionType === "approve" 
-              ? "0 10px 20px -6px rgba(16, 185, 129, 0.4)" 
-              : "0 10px 20px -6px rgba(239, 68, 68, 0.4)",
+            position: "fixed",
+            inset: 0,
+            background: "rgba(15, 23, 42, 0.7)",
+            backdropFilter: "blur(12px)",
             display: "flex",
             alignItems: "center",
-            gap: "8px"
+            justifyContent: "center",
+            zIndex: 1000,
+            padding: "20px",
           }}
         >
-          {loading ? "Processing..." : (actionType === "approve" ? "Release Approval" : "Confirm Rejection")}
-        </button>
-      </div>
-    </div>
-  </div>
-)}
+          <div
+            style={{
+              background: "#ffffff",
+              borderRadius: "28px",
+              width: "100%",
+              maxWidth: "540px",
+              maxHeight: "90vh",
+              overflow: "hidden",
+              boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.3)",
+              display: "flex",
+              flexDirection: "column",
+              border: "1px solid rgba(255, 255, 255, 0.2)",
+            }}
+          >
+            {/* Header Section */}
+            <div
+              style={{
+                padding: "32px 40px",
+                background: actionType === "approve"
+                  ? "linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)"
+                  : "linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%)",
+                borderBottom: "1px solid rgba(0,0,0,0.05)",
+                display: "flex",
+                alignItems: "center",
+                gap: "16px",
+              }}
+            >
+              <div style={{
+                width: "48px",
+                height: "48px",
+                borderRadius: "14px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                background: actionType === "approve" ? "#10b981" : "#ef4444",
+                color: "#fff",
+                fontSize: "20px"
+              }}>
+                {actionType === "approve" ? <FiCheck /> : <FiX />}
+              </div>
+              <div>
+                <h3 style={{ margin: 0, fontSize: "20px", fontWeight: "800", color: "#0f172a" }}>
+                  {actionType === "approve" ? "Verify & Approve" : "Reject Application"}
+                </h3>
+                <p style={{ margin: "2px 0 0", fontSize: "13px", color: "#64748b", fontWeight: "500" }}>
+                  Please review the details before proceeding
+                </p>
+              </div>
+            </div>
+
+            <div style={{ padding: "32px 40px", overflowY: "auto" }}>
+              {/* Info Cards */}
+              <div style={{ display: "flex", flexDirection: "column", gap: "12px", marginBottom: "32px" }}>
+                {[
+                  { label: "Invoice ID", value: selectedInvoice?.invoiceNumber },
+                  { label: "Customer", value: selectedInvoice?.customer?.name || "N/A" },
+                  { label: "Supplier", value: selectedInvoice?.supplier?.supplierName || "N/A" },
+                  { label: "Release Amount", value: `₹${selectedInvoice?.disbursementAmount?.toLocaleString()}`, highlight: true },
+                ].map((item, idx) => (
+                  <div key={idx} style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    padding: "14px 18px",
+                    background: "#f8fafc",
+                    borderRadius: "14px",
+                    border: "1px solid #f1f5f9"
+                  }}>
+                    <span style={{ fontSize: "12px", color: "#94a3b8", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.025em" }}>
+                      {item.label}
+                    </span>
+                    <span style={{
+                      fontSize: item.highlight ? "16px" : "14px",
+                      fontWeight: "700",
+                      color: item.highlight ? "#6366f1" : "#1e293b"
+                    }}>
+                      {item.value}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Remarks Input */}
+              <div style={{ marginBottom: "8px" }}>
+                <label style={{ display: "block", marginBottom: "10px", fontWeight: "700", fontSize: "13px", color: "#475569", marginLeft: "4px" }}>
+                  Internal Remarks
+                </label>
+                <textarea
+                  value={remarks}
+                  onChange={(e) => setRemarks(e.target.value)}
+                  placeholder="Provide a brief reason for this action..."
+                  style={{
+                    width: "100%",
+                    padding: "16px",
+                    border: "2px solid #f1f5f9",
+                    borderRadius: "16px",
+                    minHeight: "110px",
+                    fontSize: "14px",
+                    fontFamily: "inherit",
+                    outline: "none",
+                    backgroundColor: "#fdfdfd",
+                    transition: "all 0.2s ease",
+                    resize: "none"
+                  }}
+                  onFocus={(e) => (e.target.style.borderColor = "#6366f1")}
+                  onBlur={(e) => (e.target.style.borderColor = "#f1f5f9")}
+                />
+              </div>
+            </div>
+
+            {/* Footer Actions */}
+            <div style={{
+              padding: "24px 40px 40px",
+              display: "flex",
+              gap: "12px",
+              justifyContent: "flex-end",
+              background: "#fff"
+            }}>
+              <button
+                onClick={() => setShowModal(false)}
+                style={{
+                  padding: "14px 24px",
+                  background: "#fff",
+                  color: "#64748b",
+                  border: "1px solid #e2e8f0",
+                  borderRadius: "14px",
+                  cursor: "pointer",
+                  fontWeight: "700",
+                  fontSize: "14px",
+                  transition: "all 0.2s"
+                }}
+                onMouseEnter={(e) => (e.target.style.background = "#f8fafc")}
+                onMouseLeave={(e) => (e.target.style.background = "#fff")}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={submitVerification}
+                disabled={loading}
+                style={{
+                  padding: "14px 32px",
+                  background: actionType === "approve" ? "#10b981" : "#ef4444",
+                  color: "#fff",
+                  border: "none",
+                  borderRadius: "14px",
+                  cursor: "pointer",
+                  fontWeight: "700",
+                  fontSize: "14px",
+                  boxShadow: actionType === "approve"
+                    ? "0 10px 20px -6px rgba(16, 185, 129, 0.4)"
+                    : "0 10px 20px -6px rgba(239, 68, 68, 0.4)",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px"
+                }}
+              >
+                {loading ? "Processing..." : (actionType === "approve" ? "Release Approval" : "Confirm Rejection")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Disbursement Entry Modal */}
       {showDisbursementModal && (

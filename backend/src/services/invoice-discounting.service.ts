@@ -429,6 +429,8 @@ export class InvoiceDiscountingService {
       roiPercentage?: number;
       penalCharges?: number;
         serviceFee?: number;
+          invoiceFilePath?: string;
+
     },
     rmId: number,
   ) {
@@ -463,6 +465,8 @@ export class InvoiceDiscountingService {
     const invoice = this.invoiceRepository.create({
       ...data,
       
+        // ✅ save uploaded invoice path
+  invoiceFilePath: data.invoiceFilePath,
       invoiceDate: new Date(data.invoiceDate),
       createdByUserId: rmId,
       status: "DRAFT",
