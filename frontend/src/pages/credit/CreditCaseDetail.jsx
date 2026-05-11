@@ -26,6 +26,30 @@ const DETAIL_SECTIONS = [
   'history',
   'sanctions',
 ]
+
+const normalizePartnerCode = (code) => (code || '').toString().trim().toUpperCase()
+
+const normalizePartnerForState = (partner) => {
+  const normalizedCode = normalizePartnerCode(partner?.code || partner?.id)
+  return {
+    ...partner,
+    id: partner?.id ?? normalizedCode,
+    code: normalizedCode,
+  }
+}
+
+const dedupePartnersByCode = (partnerList) => {
+  const partnerMap = new Map()
+
+  partnerList.forEach(partner => {
+    const normalizedPartner = normalizePartnerForState(partner)
+    if (normalizedPartner.code && !partnerMap.has(normalizedPartner.code)) {
+      partnerMap.set(normalizedPartner.code, normalizedPartner)
+    }
+  })
+
+  return Array.from(partnerMap.values())
+}
  
 const CreditCaseDetail = () => {
   const { id } = useParams()
@@ -102,7 +126,7 @@ const CreditCaseDetail = () => {
   const hasL1Role = userRoles.includes('credit_team_l1')
   const hasL2Role = userRoles.includes('credit_team_l2')
   const isSanctionLocked = (partnerCode) =>
-    (partnerSanctions[partnerCode]?.status || '').toLowerCase() === 'approved'
+    (partnerSanctions[normalizePartnerCode(partnerCode)]?.status || '').toLowerCase() === 'approved'
  
   // Fetch partners from API - role-based logic
   // credit_l1: fetch from partners table (for new sanctions)
@@ -123,7 +147,7 @@ const CreditCaseDetail = () => {
         const data = await partnerService.getActivePartners()
         // Store full partner objects
         if (data.partners && data.partners.length > 0) {
-          setPartners(data.partners)
+          setPartners(dedupePartnersByCode(data.partners))
           console.log('fetchPartners: Set', data.partners.length, 'partners from API')
         }
         // Set loading to false after partners are loaded
@@ -187,16 +211,20 @@ const CreditCaseDetail = () => {
           // Extract partners from existing sanctions - for ALL roles
           // Handle both 'partner' and 'partner_code' field names
           const existingPartners = Array.from(
-            new Map(
-              sanctionsArray.map(s => {
-                const partnerCode = s.partner || s.partner_code
-                return [partnerCode, {
+            sanctionsArray.reduce((partnerMap, s) => {
+              const rawPartnerCode = s.partner || s.partner_code
+              const partnerCode = normalizePartnerCode(rawPartnerCode)
+
+              if (partnerCode) {
+                partnerMap.set(partnerCode, {
                   id: partnerCode,
                   code: partnerCode,
-                  name: s.partnerName || partnerCode
-                }]
-              })
-            ).values()
+                  name: s.partnerName || rawPartnerCode || partnerCode
+                })
+              }
+
+              return partnerMap
+            }, new Map()).values()
           )
           console.log('Extracted partners:', existingPartners)
           const hasApprovedSanctions = sanctionsArray.some(
@@ -208,27 +236,20 @@ const CreditCaseDetail = () => {
           // For other roles: use partners from sanctions only
           if (hasL1Role) {
             if (hasApprovedSanctions) {
-              setPartners(existingPartners)
+              setPartners(dedupePartnersByCode(existingPartners))
               setPartnersLoading(false)
             } else {
             // Use functional update to get the current partners state from partners table
             setPartners(currentPartners => {
               // Merge: add sanction partners that don't exist in the current partners list
-              const currentPartnerCodes = new Set(currentPartners.map(p => p.code))
-              const sanctionPartnerCodes = existingPartners.map(p => p.code).filter(code => code && !currentPartnerCodes.has(code))
-              const newPartnersFromSanctions = sanctionPartnerCodes.map(code => ({
-                id: code,
-                code: code,
-                name: code
-              }))
-              const mergedPartners = [...currentPartners, ...newPartnersFromSanctions]
+              const mergedPartners = dedupePartnersByCode([...currentPartners, ...existingPartners])
               console.log('Merged partners:', mergedPartners)
               return mergedPartners
             })
             }
           } else {
             // For other roles, use partners from sanctions only
-            setPartners(existingPartners)
+            setPartners(dedupePartnersByCode(existingPartners))
           }
           // Set partnersLoading to false after partners are loaded from sanctions
           setPartnersLoading(false)
@@ -236,7 +257,10 @@ const CreditCaseDetail = () => {
           // Create a map of partner code to sanction data
           const sanctionMap = {}
           sanctionsArray.forEach(s => {
-            sanctionMap[s.partner || s.partner_code] = {
+            const partnerCode = normalizePartnerCode(s.partner || s.partner_code)
+            if (!partnerCode || sanctionMap[partnerCode]) return
+
+            sanctionMap[partnerCode] = {
               // sanctionAmount: s.sanction_limit || s.sanctionAmount || '',
               sanctionAmount: parseFloat(s.sanction_limit || s.sanctionAmount || 0) || '',
               tenor: s.tenure || s.tenor || '',
@@ -306,7 +330,7 @@ const CreditCaseDetail = () => {
       // Initialize all partners with default values
       const partnerSanctionsData = {};
       PARTNERS.forEach(partner => {
-        const partnerCode = partner.code;
+        const partnerCode = normalizePartnerCode(partner.code);
         partnerSanctionsData[partnerCode] = {
           sanctionAmount: '',
           tenor: '',
@@ -321,9 +345,9 @@ const CreditCaseDetail = () => {
       // First, try to load from creditSanctions (multiple partners supported)
       if (existingCreditSanctions && existingCreditSanctions.length > 0) {
         existingCreditSanctions.forEach(sanction => {
-          const partnerCode = sanction.partner;
+          const partnerCode = normalizePartnerCode(sanction.partner);
           // Check if partnerCode matches any partner's code
-          const matchingPartner = PARTNERS.find(p => p.code === partnerCode);
+          const matchingPartner = PARTNERS.find(p => normalizePartnerCode(p.code) === partnerCode);
           if (matchingPartner) {
             partnerSanctionsData[partnerCode] = {
               sanctionAmount: sanction.sanctionAmount || '',
@@ -340,9 +364,9 @@ const CreditCaseDetail = () => {
       // Fallback: Load from sanctionLimitHistory (partner-specific data from L1)
       else if (sanctionHistory && sanctionHistory.length > 0) {
         sanctionHistory.forEach(limit => {
-          const partnerCode = limit.lender;
+          const partnerCode = normalizePartnerCode(limit.lender);
           // Check if partnerCode matches any partner's code
-          const matchingPartner = PARTNERS.find(p => p.code === partnerCode);
+          const matchingPartner = PARTNERS.find(p => normalizePartnerCode(p.code) === partnerCode);
           if (matchingPartner) {
             partnerSanctionsData[partnerCode] = {
               sanctionAmount: limit.sanctionAmount || '',
