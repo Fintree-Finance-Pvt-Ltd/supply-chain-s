@@ -254,12 +254,20 @@ const handleLANChange = async (lanId) => {
 
     try {
       setLoading(true);
+
       const response = await workflowService.createInvoice({
-        customerId: selectedCustomer.id,
-        loanAccountId: selectedLAN,
-        supplierId: selectedSupplier.id,
-        ...formData,
-      });
+  customerId: selectedCustomer.id,
+
+  loanAccountId: selectedLAN,
+
+  supplierId: selectedSupplier.id,
+
+  ...formData,
+
+  // ✅ save uploaded invoice file path
+  invoiceFilePath:
+    invoiceFiles?.[0]?.filePath || "",
+});
       // Get invoice ID from response - handle multiple response formats
       const invoiceData = response?.data?.data || response?.data;
       const invoiceId = invoiceData?.invoice?.id;
@@ -294,13 +302,20 @@ const handleLANChange = async (lanId) => {
 
       try {
         setLoading(true);
-        // First create the invoice
+
         const response = await workflowService.createInvoice({
-          customerId: selectedCustomer.id,
-          loanAccountId: selectedLAN,
-          supplierId: selectedSupplier.id,
-          ...formData,
-        });
+  customerId: selectedCustomer.id,
+
+  loanAccountId: selectedLAN,
+
+  supplierId: selectedSupplier.id,
+
+  ...formData,
+
+  // ✅ uploaded invoice document path
+  invoiceFilePath:
+    invoiceFiles?.[0]?.filePath || "",
+});
         // Get invoice ID from response
         const invoiceId =
           response?.data?.data?.invoice?.id || response?.data?.invoice?.id;
@@ -491,40 +506,47 @@ const handleLANChange = async (lanId) => {
 
   if (loading) return <LoadingSpinner />;
 
-  const handleInvoiceUpload = async (e) => {
-    const files = Array.from(e.target.files || []);
-    if (!files.length) return;
+const handleInvoiceUpload = async (e) => {
+  const files = Array.from(e.target.files || []);
 
-    if (!selectedCustomer?.id) {
-      toast.error("Select customer first");
-      return;
+  if (!files.length) return;
+
+  if (!selectedCustomer?.id) {
+    toast.error("Select customer first");
+    return;
+  }
+
+  try {
+    const uploaded = [];
+
+    for (const file of files) {
+
+      // ONLY upload document
+      const res = await documentService.uploadDocument(
+        selectedCustomer.id,
+        file,
+        "INVOICE",
+        "applicant",
+        0,
+        null,
+        {}
+      );
+
+      uploaded.push(res.data);
     }
 
-    try {
-      const uploaded = [];
+    // store uploaded docs in state
+    setInvoiceFiles((prev) => [...prev, ...uploaded]);
 
-      for (const file of files) {
-        const res = await documentService.uploadDocument(
-          selectedCustomer.id,
-          file,
-          "INVOICE",
-          "applicant",
-          0,
-          null,
-          {},
-        );
+    toast.success("Invoice uploaded successfully");
 
-        uploaded.push(res.data);
-      }
+  } catch (err) {
+    console.error(err);
 
-      setInvoiceFiles((prev) => [...prev, ...uploaded]);
+    toast.error("Upload failed");
+  }
+};
 
-      toast.success("Invoice(s) uploaded");
-    } catch (err) {
-      console.error(err);
-      toast.error("Upload failed");
-    }
-  };
   const handleRemoveInvoice = async (docId) => {
     try {
       await documentService.deleteDocument(docId);
