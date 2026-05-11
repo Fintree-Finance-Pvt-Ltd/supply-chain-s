@@ -189,7 +189,7 @@ const isFreshCustomer = location.state?.isFreshCustomer;
     applicantEmail: "",
     applicantPan: "",
     applicantAadhaarNumber: "",
-    applicantAddress: "",
+    applicantAadhaarAddress: "",
 
     remarks: "",
   });
@@ -243,8 +243,8 @@ if (isFreshCustomer && currentCase?.status === "draft"  && !currentCase?.applica
   applicantPan: currentCase.applicant?.pan || "",
   applicantAadhaarNumber:
     currentCase.applicant?.aadhaarNumber || "",
-  applicantAddress:
-    currentCase.applicant?.address || "",
+  applicantAadhaarAddress:
+    currentCase.applicant?.aadhaarAddress || "",
 
   remarks: currentCase.remarks || "",
 });
@@ -1579,11 +1579,21 @@ if (!formData.applicantAadhaarNumber?.trim()) {
     "Applicant Aadhaar Number must be 12 digits";
 }
 
-//  Applicant Address Mandatory
-if (!formData.applicantAddress?.trim()) {
-  newErrors.applicantAddress =
-    "Applicant Address is required";
+
+
+
+
+if (!formData.applicantAadhaarAddress?.trim()) {
+  newErrors.applicantAadhaarAddress =
+    "Applicant Aadhaar Address is required";
+} else if (
+  formData.applicantAadhaarAddress.replace(/\D/g, "").length !== 12
+) {
+  newErrors.applicantAadhaarAddress =
+    "Applicant Aadhaar Address must be 12 digits";
 }
+
+
 
 
 
@@ -1649,7 +1659,7 @@ if (strict) {
     pan: formData.applicantPan,
 
     aadhaarNumber: formData.applicantAadhaarNumber || "",
-    applicantAddress: formData.applicantAddress || "",
+    applicantAddress: formData.applicantAadhaarAddress || "",
     remarks: formData.remarks,
   });
 

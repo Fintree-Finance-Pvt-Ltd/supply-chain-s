@@ -286,7 +286,7 @@ export class CustomerService {
     const applicantAadhaar =
       typeof applicantAadhaarRaw === "string" ? applicantAadhaarRaw.trim() : "";
 
-    const applicantAadhaarAddressRaw = cleanedData.aadhaarAddress;
+const applicantAadhaarAddressRaw =cleanedData.applicantAddress ;
     const applicantAadhaarAddress =
       typeof applicantAadhaarAddressRaw === "string"
         ? applicantAadhaarAddressRaw.trim()
@@ -305,7 +305,7 @@ export class CustomerService {
         if (shouldSaveAadhaarAddress)
           applicant.aadhaarAddress = applicantAadhaarAddress;
 
-        await applicantRepo.save(applicant);
+          await applicantRepo.save(applicant);
       } else {
         await applicantRepo.save(
           applicantRepo.create({

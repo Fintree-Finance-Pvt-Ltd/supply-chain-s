@@ -520,25 +520,25 @@ const BasicKycTab = ({
           {/* Applicant Address */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Applicant Address <span className="text-red-500">*</span>
+              Applicant Aadhaar Address <span className="text-red-500">*</span>
             </label>
 
             <textarea
-              value={formData.applicantAddress || ""}
+              value={formData.applicantAadhaarAddress || ""}
               required
               onChange={(e) =>
                 setFormData((p) => ({
                   ...p,
-                  applicantAddress: e.target.value,
+                  applicantAadhaarAddress: e.target.value,
                 }))
               }
               className="input-field min-h-[100px]"
-              placeholder="Enter Applicant Address"
+              placeholder="Enter Applicant Aadhaar Address"
             />
 
-            {errors.applicantAddress && (
+            {errors.applicantAadhaarAddress && (
               <p className="text-red-500 text-xs mt-1">
-                {errors.applicantAddress}
+                {errors.applicantAadhaarAddress}
               </p>
             )}
           </div>
