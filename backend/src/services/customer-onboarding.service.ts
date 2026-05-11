@@ -3348,82 +3348,88 @@ Fintree Finance Pvt. Ltd.
 
     return { pending: pendingWorkflows, handled: handledWorkflows };
   }
-
-  async updateBankDetails(customerId: number, data: any) {
-    if (!customerId) {
-      throw new Error("Customer ID is required");
-    }
-
-    if (!data) {
-      throw new Error("Bank details are required");
-    }
-
-    const customer = await this.customerRepository.findOne({
-      where: { id: customerId },
-    });
-
-    if (!customer) {
-      throw new Error("Customer not found");
-    }
-
-    const {
-      bankAccountNo,
-      bankIfscCode,
-      bankName,
-      bankBranch,
-      eNachStatus,
-      eSignStatus,
-      sanctionData,
-    } = data;
-
-    if (!bankAccountNo) {
-      throw new Error("Bank account number is required");
-    }
-
-    if (!bankIfscCode) {
-      throw new Error("Bank IFSC code is required");
-    }
-
-    if (!bankName) {
-      throw new Error("Bank name is required");
-    }
-
-    if (!bankBranch) {
-      throw new Error("Bank branch is required");
-    }
-
-    if (bankAccountNo.length < 6) {
-      throw new Error("Bank account number is invalid");
-    }
-
-    if (bankIfscCode.length !== 11) {
-      throw new Error("IFSC code must be 11 characters");
-    }
-
-    customer.bankAccountNo = bankAccountNo;
-    customer.bankIfscCode = bankIfscCode;
-    customer.bankName = bankName;
-    customer.bankBranch = bankBranch;
-
-    if (data.bankType) {
-      customer.bankType = data.bankType;
-    }
-
-    if (eNachStatus) {
-      customer.eNachStatus = eNachStatus;
-    }
-
-    if (eSignStatus) {
-      customer.eSignStatus = eSignStatus;
-    }
-
-    if (sanctionData) {
-      await this.sanctionRepository.update({ customerId }, sanctionData);
-    }
-
-    return await this.customerRepository.save(customer);
+async updateBankDetails(customerId: number, data: any) {
+  if (!customerId) {
+    throw new Error("Customer ID is required");
   }
 
+  if (!data) {
+    throw new Error("Bank details are required");
+  }
+
+  const customer = await this.customerRepository.findOne({
+    where: { id: customerId },
+  });
+
+  console.log("CUSTOMER DATA =>", customer);
+
+  if (!customer) {
+    throw new Error("Customer not found");
+  }
+
+  // Merge existing DB values with incoming data
+  const updatedData = {
+    ...customer,
+    ...data,
+  };
+
+  const bankAccountNo = updatedData.bankAccountNo;
+  const bankIfscCode = updatedData.bankIfscCode;
+  const bankName = updatedData.bankName;
+  const bankBranch = updatedData.bankBranch;
+
+  // Validate merged data
+  if (!bankAccountNo) {
+    throw new Error("Bank account number is required");
+  }
+
+  if (!bankIfscCode) {
+    throw new Error("Bank IFSC code is required");
+  }
+
+  if (!bankName) {
+    throw new Error("Bank name is required");
+  }
+
+  if (!bankBranch) {
+    throw new Error("Bank branch is required");
+  }
+
+  if (String(bankAccountNo).length < 6) {
+    throw new Error("Bank account number is invalid");
+  }
+
+  if (String(bankIfscCode).length !== 11) {
+    throw new Error("IFSC code must be 11 characters");
+  }
+
+  // Save values
+  customer.bankAccountNo = bankAccountNo;
+  customer.bankIfscCode = bankIfscCode;
+  customer.bankName = bankName;
+  customer.bankBranch = bankBranch;
+
+  if (updatedData.bankType) {
+    customer.bankType = updatedData.bankType;
+  }
+
+  if (updatedData.eNachStatus) {
+    customer.eNachStatus = updatedData.eNachStatus;
+  }
+
+  if (updatedData.eSignStatus) {
+    customer.eSignStatus = updatedData.eSignStatus;
+  }
+
+  if (updatedData.sanctionData) {
+    await this.sanctionRepository.update(
+      { customerId },
+      updatedData.sanctionData
+    );
+  }
+
+  return await this.customerRepository.save(customer);
+}
   /**
    * Send customer data to LMS after successful onboarding
    * This is called after opsHeadApprove completes the onboarding process

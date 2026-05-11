@@ -238,7 +238,7 @@ const ApprovalScreen = () => {
             interestRate: s.interestRate || "",
             penalCharges: s.penalCharges || "",
             processingFees: s.processingFees || "",
-            
+
             conditions: s.conditions || "",
           });
         }
@@ -415,6 +415,9 @@ const ApprovalScreen = () => {
       pdf: "application/pdf",
       doc: "application/msword",
       docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      // Excel
+      xls: "application/vnd.ms-excel",
+      xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     };
     return mimeTypes[ext] || "application/octet-stream";
   };
