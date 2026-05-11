@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import { toast } from "react-toastify";
 import {
@@ -66,9 +66,11 @@ const dedupePartnersByCode = (partnerList) => {
 const CreditCaseDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const dispatch = useDispatch();
   const { user } = useSelector((state) => state.auth);
   const { currentCase, isLoading, error } = useSelector((state) => state.cases);
+  const isForcedReadOnly = searchParams.get("readOnly") === "true";
 
   // Dynamic partners from API - store full objects
   const [partners, setPartners] = useState([]);
@@ -436,20 +438,21 @@ const CreditCaseDetail = () => {
     "relationship_manager",
     "credit_team_l1",
     "credit_team_l2",
+    "credit_head",
     "ceo",
     "md",
   ];
 
   const canAccessSanctionDetails = () => {
     if (!user) return false;
-    const role = (user.role || "").toLowerCase();
-    return CAN_VIEW_SANCTION_ROLES.includes(role);
+    return userRoles.some((role) => CAN_VIEW_SANCTION_ROLES.includes(role));
   };
 
   // Role-based field visibility helpers for sanction fields
   const canViewSanctionAmount = () => {
-    const role = (user?.role || "").toLowerCase();
-    return ["credit_team_l1", "credit_team_l2", "ceo", "md"].includes(role);
+    return userRoles.some((role) =>
+      ["credit_team_l1", "credit_team_l2", "credit_head", "ceo", "md"].includes(role),
+    );
   };
 
 const canEditSanctionAmount = () => {
@@ -608,7 +611,7 @@ const canEditSanctionAmount = () => {
     return false;
   };
 
-  const readOnly = !isEditable();
+  const readOnly = isForcedReadOnly || !isEditable();
 
   const formattedApprovals = (currentCase?.statusHistory || []).map(
     (action) => ({
@@ -1326,7 +1329,7 @@ const canEditSanctionAmount = () => {
             </div>
           )}
 
-          {hasL1Role && currentCase.status === "submitted" && (
+          {!readOnly && hasL1Role && currentCase.status === "submitted" && (
             <button
               onClick={handleSendBackToRM}
               disabled={isSubmitting}
@@ -1336,33 +1339,34 @@ const canEditSanctionAmount = () => {
             </button>
           )}
 
-          <button
-            onClick={handleSaveSanction}
-            disabled={
-              isSubmitting ||
-              readOnly ||
-              (!allDocsPreviewed && currentCase.documents?.length > 0)
-            }
-            className={`w-full btn-success flex items-center justify-center space-x-2 ${readOnly || (!allDocsPreviewed && currentCase.documents?.length > 0) ? "opacity-50 cursor-not-allowed" : ""}`}
-            title={
-              !allDocsPreviewed && currentCase.documents?.length > 0
-                ? "Please preview all documents before proceeding"
-                : ""
-            }
-          >
-            {isSubmitting ? (
-              <LoadingSpinner size="sm" />
-            ) : (
-              <>
-                <FiCheck className="h-5 w-5" />
-                <span>
-                  {!allDocsPreviewed && currentCase.documents?.length > 0
-                    ? "Preview All Docs to Enable"
-                    : "Save & Submit"}
-                </span>
-              </>
-            )}
-          </button>
+          {!readOnly && (
+            <button
+              onClick={handleSaveSanction}
+              disabled={
+                isSubmitting ||
+                (!allDocsPreviewed && currentCase.documents?.length > 0)
+              }
+              className={`w-full btn-success flex items-center justify-center space-x-2 ${!allDocsPreviewed && currentCase.documents?.length > 0 ? "opacity-50 cursor-not-allowed" : ""}`}
+              title={
+                !allDocsPreviewed && currentCase.documents?.length > 0
+                  ? "Please preview all documents before proceeding"
+                  : ""
+              }
+            >
+              {isSubmitting ? (
+                <LoadingSpinner size="sm" />
+              ) : (
+                <>
+                  <FiCheck className="h-5 w-5" />
+                  <span>
+                    {!allDocsPreviewed && currentCase.documents?.length > 0
+                      ? "Preview All Docs to Enable"
+                      : "Save & Submit"}
+                  </span>
+                </>
+              )}
+            </button>
+          )}
         </div>
       </div>
     </div>

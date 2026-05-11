@@ -91,7 +91,7 @@ export const workflowService = {
     getRMSupplierDashboard: () => api.get(API_ENDPOINTS.DASHBOARD_RM_SUPPLIERS),
     getRMInvoiceDashboard: () => api.get(API_ENDPOINTS.DASHBOARD_RM_INVOICES),
     getRMInvoices: () => api.get('/workflows/invoices/dashboard/rm'),
-    getCreditDashboard: (level) => api.get(API_ENDPOINTS.DASHBOARD_CREDIT_PENDING(level)),
+    getCreditDashboard: (level, params = {}) => api.get(API_ENDPOINTS.DASHBOARD_CREDIT_PENDING(level), { params }),
     getExecutiveDashboard: () => api.get(API_ENDPOINTS.DASHBOARD_EXECUTIVE_PENDING),
     getOperationsDashboard: () => api.get(API_ENDPOINTS.DASHBOARD_OPERATIONS_PENDING),
 }

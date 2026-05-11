@@ -29,11 +29,14 @@ export const fetchRMDashboard = createAsyncThunk(
 
 export const fetchWorkflowDashboard = createAsyncThunk(
   'cases/fetchWorkflowDashboard',
-  async ({ role, level }, { rejectWithValue }) => {
+  async ({ role, level, handledPage, handledLimit }, { rejectWithValue }) => {
     try {
       let response;
       if (role === 'credit') {
-        response = await workflowService.getCreditDashboard(level);
+        response = await workflowService.getCreditDashboard(level, {
+          handledPage,
+          handledLimit,
+        });
       } else if (role === 'operations') {
         response = await workflowService.getOperationsDashboard();
       }

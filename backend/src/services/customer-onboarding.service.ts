@@ -3165,7 +3165,20 @@ Fintree Finance Pvt. Ltd.
     return { pending: pendingWorkflows, handled: handledWorkflows };
   }
 
-  async getCreditHeadPending(userId?: number) {
+  async getCreditHeadPending(
+    userId?: number,
+    handledPagination: { page?: number; limit?: number } = {},
+  ) {
+    const rawHandledPage = Number(handledPagination.page);
+    const rawHandledLimit = Number(handledPagination.limit);
+    const handledPage =
+      Number.isInteger(rawHandledPage) && rawHandledPage > 0
+        ? rawHandledPage
+        : 1;
+    const handledLimit =
+      Number.isInteger(rawHandledLimit) && rawHandledLimit > 0
+        ? Math.min(rawHandledLimit, 100)
+        : 10;
     const creditHeadVisibleStatuses = ["submitted", "credit_l1_approved"];
 
     const allWorkflows = await this.workflowRepository.find({
@@ -3177,7 +3190,7 @@ Fintree Finance Pvt. Ltd.
       order: { createdAt: "DESC" },
     });
 
-    const workflowsWithAssignedUserName = allWorkflows.map((workflow: any) => {
+    const withAssignedUserName = (workflow: any) => {
       const assignedUserName =
         workflow.assignedUser?.name ||
         workflow.customer?.assignedUser?.name ||
@@ -3202,12 +3215,98 @@ Fintree Finance Pvt. Ltd.
         ...workflowWithoutAssignedUser,
         customer,
       };
-    });
+    };
+
+    const workflowsWithAssignedUserName =
+      allWorkflows.map(withAssignedUserName);
 
     const pending = workflowsWithAssignedUserName;
-    const handled: any[] = [];
 
-    return { pending, handled };
+    let handled: any[] = [];
+    if (userId) {
+      const isCreditHeadHandledAction = (history: CaseStatusHistory) => {
+        const status = (history.status || "").toLowerCase();
+        const previousStatus = (history.previousStatus || "").toLowerCase();
+        const creditPreviousStatuses = [
+          "submitted",
+          "credit_l1_review",
+          "credit_l1_approved",
+          "credit_l2_review",
+        ];
+
+        return (
+          ["credit_l1_approved", "credit_l2_approved"].includes(status) ||
+          (status === "rejected" &&
+            creditPreviousStatuses.includes(previousStatus)) ||
+          (status === "returned_to_rm" &&
+            creditPreviousStatuses.includes(previousStatus))
+        );
+      };
+
+      const creditHeadHistory = await this.historyRepository.find({
+        where: { changedBy: userId },
+        relations: [
+          "caseWorkflow",
+          "caseWorkflow.customer",
+          "caseWorkflow.assignedUser",
+          "caseWorkflow.customer.assignedUser",
+        ],
+        order: { createdAt: "DESC" },
+      });
+
+      const latestHistoryByWorkflow = new Map<number, CaseStatusHistory>();
+
+      creditHeadHistory.forEach((history) => {
+        const workflow = history.caseWorkflow;
+        if (
+          !workflow ||
+          workflow.workflowType !== "CUSTOMER_ONBOARDING" ||
+          !isCreditHeadHandledAction(history) ||
+          latestHistoryByWorkflow.has(workflow.id)
+        ) {
+          return;
+        }
+
+        latestHistoryByWorkflow.set(workflow.id, history);
+      });
+
+      handled = Array.from(latestHistoryByWorkflow.values())
+        .map((history: any) => ({
+          ...withAssignedUserName(history.caseWorkflow),
+          lastAction: history.status,
+          lastHandledDate: history.createdAt,
+        }))
+        .sort(
+          (a, b) =>
+            new Date(b.lastHandledDate).getTime() -
+            new Date(a.lastHandledDate).getTime(),
+        );
+    }
+
+    const handledTotal = handled.length;
+    const handledTotalPages = Math.max(
+      1,
+      Math.ceil(handledTotal / handledLimit),
+    );
+    const handledCurrentPage = Math.min(handledPage, handledTotalPages);
+    const handledOffset = (handledCurrentPage - 1) * handledLimit;
+    const paginatedHandled = handled.slice(
+      handledOffset,
+      handledOffset + handledLimit,
+    );
+
+    return {
+      pending,
+      handled: paginatedHandled,
+      handledPagination: {
+        page: handledCurrentPage,
+        limit: handledLimit,
+        total: handledTotal,
+        totalPages: handledTotalPages,
+        from: handledTotal === 0 ? 0 : handledOffset + 1,
+        to: Math.min(handledOffset + handledLimit, handledTotal),
+      },
+    };
   }
 
   async getOperationsPending(role: string, userId?: number) {

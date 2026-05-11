@@ -852,11 +852,19 @@ router.get('/customers/dashboard/credit/:level', checkRole(['credit_team_l1', 'c
   try {
     const { level } = req.params;
     const user = (req as any).user;
+    const parsePositiveInt = (value: any, fallback: number) => {
+      const rawValue = Array.isArray(value) ? value[0] : value;
+      const parsed = Number(rawValue);
+      return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+    };
     console.log("level",level)
     // Handle credit_head - can see all cases (no round-robin restriction)
     const userRoles = user?.roles?.map((r: any) => r.name.toLowerCase()) || [];
     if (userRoles.includes('credit_head')) {
-      const dashboard = await customerOnboardingService.getCreditHeadPending(user?.id);
+      const dashboard = await customerOnboardingService.getCreditHeadPending(user?.id, {
+        page: parsePositiveInt(req.query.handledPage ?? req.query.page, 1),
+        limit: parsePositiveInt(req.query.handledLimit ?? req.query.limit, 10),
+      });
       
       return res.json({
         success: true,
