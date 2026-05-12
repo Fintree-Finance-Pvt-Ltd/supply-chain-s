@@ -799,7 +799,7 @@ export class CustomerOnboardingService {
 
       // Step 2: Get all userIds mapped to this roleId from user_roles table
       const userRoles = await this.userRoleRepository.find({
-        where: { roleId: role.id }, // IMPORTANT: use role.id unless schema differs
+        where: { roleId: role.id,isActive:true }, // IMPORTANT: use role.id unless schema differs
         select: ["userId"],
       });
 
@@ -1157,7 +1157,7 @@ Fintree Finance Pvt. Ltd.
 
       // Step 2: Get all userIds mapped to this roleId from user_roles table
       const userRoles = await this.userRoleRepository.find({
-        where: { roleId: role.id }, // IMPORTANT: use role.id unless schema differs
+        where: { roleId: role.id ,isActive:true}, // IMPORTANT: use role.id unless schema differs
         select: ["userId"],
       });
 
@@ -1401,7 +1401,7 @@ Fintree Finance Pvt. Ltd.
 
       // Step 2: Get all userIds mapped to this roleId from user_roles table
       const userRoles = await this.userRoleRepository.find({
-        where: { roleId: role.id }, // IMPORTANT: use role.id unless schema differs
+        where: { roleId: role.id, isActive:true}, // IMPORTANT: use role.id unless schema differs
         select: ["userId"],
       });
 
@@ -2557,7 +2557,7 @@ Fintree Finance Pvt. Ltd.
 
         // Step 2: Get all userIds mapped to this roleId from user_roles table
         const userRoles = await this.userRoleRepository.find({
-          where: { roleId: role.id }, // IMPORTANT: use role.id unless schema differs
+          where: { roleId: role.id ,isActive:true}, // IMPORTANT: use role.id unless schema differs
           select: ["userId"],
         });
 
@@ -2695,7 +2695,7 @@ Fintree Finance Pvt. Ltd.
 
         // Step 2: Get all userIds mapped to this roleId from user_roles table
         const userRoles = await this.userRoleRepository.find({
-          where: { roleId: role.id }, // IMPORTANT: use role.id unless schema differs
+          where: { roleId: role.id,isActive:true }, // IMPORTANT: use role.id unless schema differs
           select: ["userId"],
         });
 

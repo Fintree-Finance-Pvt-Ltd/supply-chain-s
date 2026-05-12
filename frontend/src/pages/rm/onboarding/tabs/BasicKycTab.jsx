@@ -304,7 +304,7 @@ const BasicKycTab = ({
               }
               className="input-field"
               placeholder="Applicant name"
-              disabled={applicantVerified.pan}
+              // disabled={applicantVerified.pan}
             />
             {errors.applicantName && (
               <p className="text-red-500 text-xs mt-1">
