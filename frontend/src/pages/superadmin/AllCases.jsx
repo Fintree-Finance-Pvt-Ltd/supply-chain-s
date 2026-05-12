@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { performanceService } from '../../services/performanceService';
+import { CASE_STATUS, CASE_STATUS_LABELS } from '../../constants/caseStatus';
 import {
   MdFilterList,
   MdWarning,
-  MdAssignment,
   MdChevronLeft,
   MdChevronRight,
 } from 'react-icons/md';
@@ -15,17 +15,55 @@ const STAGE_OPTIONS = [
   { value: 'credit_l2', label: 'Credit L2' },
   { value: 'ps_l1', label: 'PS L1' },
   { value: 'ps_l2', label: 'PS L2' },
+  { value: 'ready_for_ops', label: 'Ready for Ops' },
+  { value: 'ops_l1', label: 'Operations L1' },
+  { value: 'ops_l2', label: 'Operations L2' },
+  { value: 'ops_head', label: 'Operations Head' },
+  { value: 'completed', label: 'Completed' },
+  { value: 'rejected', label: 'Rejected' },
   { value: 'rm', label: 'RM' },
 ];
 
 // Status options
 const STATUS_OPTIONS = [
   { value: '', label: 'All Status' },
-  { value: 'pending', label: 'Pending' },
-  { value: 'in_progress', label: 'In Progress' },
-  { value: 'completed', label: 'Completed' },
-  { value: 'overdue', label: 'Overdue' },
+  { value: CASE_STATUS.DRAFT, label: CASE_STATUS_LABELS[CASE_STATUS.DRAFT] },
+  { value: CASE_STATUS.SUBMITTED, label: CASE_STATUS_LABELS[CASE_STATUS.SUBMITTED] },
+  { value: CASE_STATUS.CREDIT_L1_APPROVED, label: CASE_STATUS_LABELS[CASE_STATUS.CREDIT_L1_APPROVED] },
+  { value: CASE_STATUS.CREDIT_L2_APPROVED, label: CASE_STATUS_LABELS[CASE_STATUS.CREDIT_L2_APPROVED] },
+  { value: CASE_STATUS.CEO_APPROVED, label: CASE_STATUS_LABELS[CASE_STATUS.CEO_APPROVED] },
+  { value: CASE_STATUS.MD_PENDING_TERMS, label: CASE_STATUS_LABELS[CASE_STATUS.MD_PENDING_TERMS] },
+  { value: CASE_STATUS.MD_TERMS_SUBMITTED, label: CASE_STATUS_LABELS[CASE_STATUS.MD_TERMS_SUBMITTED] },
+  { value: CASE_STATUS.MD_APPROVED, label: CASE_STATUS_LABELS[CASE_STATUS.MD_APPROVED] },
+  { value: CASE_STATUS.OPS_L1_REVIEW, label: CASE_STATUS_LABELS[CASE_STATUS.OPS_L1_REVIEW] },
+  { value: CASE_STATUS.OPS_L1_APPROVED, label: CASE_STATUS_LABELS[CASE_STATUS.OPS_L1_APPROVED] },
+  { value: CASE_STATUS.OPS_HEAD_APPROVED, label: CASE_STATUS_LABELS[CASE_STATUS.OPS_HEAD_APPROVED] },
+  { value: CASE_STATUS.COMPLETED, label: CASE_STATUS_LABELS[CASE_STATUS.COMPLETED] },
+  { value: CASE_STATUS.DISBURSED, label: CASE_STATUS_LABELS[CASE_STATUS.DISBURSED] },
+  { value: CASE_STATUS.REJECTED, label: CASE_STATUS_LABELS[CASE_STATUS.REJECTED] },
+  { value: CASE_STATUS.RETURNED_TO_RM, label: CASE_STATUS_LABELS[CASE_STATUS.RETURNED_TO_RM] },
 ];
+
+const STAGE_LABELS = Object.fromEntries(STAGE_OPTIONS.map((option) => [option.value, option.label]));
+
+const STATUS_BADGE_CLASSES = {
+  [CASE_STATUS.DRAFT]: 'bg-gray-100 text-gray-800',
+  [CASE_STATUS.SUBMITTED]: 'bg-blue-100 text-blue-800',
+  [CASE_STATUS.CREDIT_L1_APPROVED]: 'bg-indigo-100 text-indigo-800',
+  [CASE_STATUS.CREDIT_L2_APPROVED]: 'bg-indigo-100 text-indigo-800',
+  [CASE_STATUS.CEO_APPROVED]: 'bg-purple-100 text-purple-800',
+  [CASE_STATUS.MD_PENDING_TERMS]: 'bg-orange-100 text-orange-800',
+  [CASE_STATUS.MD_TERMS_SUBMITTED]: 'bg-blue-100 text-blue-800',
+  [CASE_STATUS.MD_APPROVED]: 'bg-green-100 text-green-800',
+  [CASE_STATUS.OPS_L1_REVIEW]: 'bg-orange-100 text-orange-800',
+  [CASE_STATUS.OPS_L1_APPROVED]: 'bg-teal-100 text-teal-800',
+  [CASE_STATUS.OPS_L2_VERIFIED]: 'bg-teal-100 text-teal-800',
+  [CASE_STATUS.OPS_HEAD_APPROVED]: 'bg-teal-100 text-teal-800',
+  [CASE_STATUS.COMPLETED]: 'bg-green-100 text-green-800',
+  [CASE_STATUS.DISBURSED]: 'bg-purple-100 text-purple-800',
+  [CASE_STATUS.REJECTED]: 'bg-red-100 text-red-800',
+  [CASE_STATUS.RETURNED_TO_RM]: 'bg-orange-100 text-orange-800',
+};
 
 // Format time in minutes to readable format
 const formatTime = (minutes) => {
@@ -37,6 +75,11 @@ const formatTime = (minutes) => {
   const days = Math.floor(hours / 24);
   const remainingHours = hours % 24;
   return `${days}d ${remainingHours}h`;
+};
+
+const formatLabel = (value) => {
+  if (!value) return 'N/A';
+  return CASE_STATUS_LABELS[value] || value.replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
 };
 
 const AllCases = () => {
@@ -102,7 +145,7 @@ const AllCases = () => {
   };
 
   const handleFilterChange = (key, value) => {
-    setFilters(prev => ({ ...prev, [key]: value, offset: 0 }));
+    setFilters(prev => ({ ...prev, [key]: value, page: 1 }));
   };
 
   const clearFilters = () => {
@@ -218,20 +261,20 @@ const AllCases = () => {
           {/* Status Summary */}
           <div className="flex gap-3 text-sm">
             <span className="flex items-center">
-              <span className="w-2 h-2 bg-yellow-500 rounded-full mr-2"></span>
-              Pending: {cases.filter(c => c.status === 'pending').length}
+              <span className="w-2 h-2 bg-gray-500 rounded-full mr-2"></span>
+              Draft: {cases.filter(c => c.status === CASE_STATUS.DRAFT).length}
             </span>
             <span className="flex items-center">
               <span className="w-2 h-2 bg-blue-500 rounded-full mr-2"></span>
-              In Progress: {cases.filter(c => c.status === 'in_progress').length}
+              Active: {cases.filter(c => ![CASE_STATUS.DRAFT, CASE_STATUS.COMPLETED, CASE_STATUS.DISBURSED, CASE_STATUS.REJECTED].includes(c.status)).length}
             </span>
             <span className="flex items-center">
               <span className="w-2 h-2 bg-green-500 rounded-full mr-2"></span>
-              Completed: {cases.filter(c => c.status === 'completed').length}
+              Completed: {cases.filter(c => [CASE_STATUS.COMPLETED, CASE_STATUS.DISBURSED].includes(c.status)).length}
             </span>
             <span className="flex items-center">
               <span className="w-2 h-2 bg-red-500 rounded-full mr-2"></span>
-              Overdue: {cases.filter(c => c.status === 'overdue').length}
+              Rejected: {cases.filter(c => c.status === CASE_STATUS.REJECTED).length}
             </span>
           </div>
         </div>
@@ -263,7 +306,7 @@ const AllCases = () => {
               </thead>
               <tbody className="divide-y divide-gray-200">
                 {cases.map((c) => (
-                  <tr key={c.id} className="hover:bg-gray-50">
+                  <tr key={`${c.taskType || 'case'}-${c.id}-${c.taskId}`} className="hover:bg-gray-50">
                     <td className="px-4 py-3">
                       <span className="font-medium text-gray-900">{c.taskId}</span>
                     </td>
@@ -276,27 +319,27 @@ const AllCases = () => {
                         c.bucket === 'credit_l2' ? 'bg-indigo-100 text-indigo-800' :
                         c.bucket === 'ps_l1' ? 'bg-green-100 text-green-800' :
                         c.bucket === 'ps_l2' ? 'bg-teal-100 text-teal-800' :
+                        c.bucket === 'ready_for_ops' ? 'bg-amber-100 text-amber-800' :
+                        c.bucket === 'ops_l1' ? 'bg-orange-100 text-orange-800' :
+                        c.bucket === 'ops_l2' ? 'bg-cyan-100 text-cyan-800' :
+                        c.bucket === 'ops_head' ? 'bg-purple-100 text-purple-800' :
+                        c.bucket === 'completed' ? 'bg-green-100 text-green-800' :
+                        c.bucket === 'rejected' ? 'bg-red-100 text-red-800' :
                         c.bucket === 'rm' ? 'bg-orange-100 text-orange-800' :
                         'bg-gray-100 text-gray-800'
                       }`}>
-                        {c.bucket || 'N/A'}
+                        {STAGE_LABELS[c.bucket] || formatLabel(c.bucket)}
                       </span>
                     </td>
                     <td className="px-4 py-3">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        c.status === 'completed' ? 'bg-green-100 text-green-800' :
-                        c.status === 'in_progress' ? 'bg-blue-100 text-blue-800' :
-                        c.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                        c.status === 'overdue' ? 'bg-red-100 text-red-800' :
-                        'bg-gray-100 text-gray-800'
-                      }`}>
-                        {c.status?.replace('_', ' ')}
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${STATUS_BADGE_CLASSES[c.status] || 'bg-gray-100 text-gray-800'}`}>
+                        {formatLabel(c.status)}
                       </span>
                     </td>
                     <td className="px-4 py-3">
                       <div>
-                        <p className="font-medium text-gray-900">{c.userName}</p>
-                        <p className="text-sm text-gray-500">{c.userEmail}</p>
+                        <p className="font-medium text-gray-900">{c.assignedToName || c.userName || 'Unassigned'}</p>
+                        <p className="text-sm text-gray-500">{c.assignedToEmail || c.userEmail || ''}</p>
                       </div>
                     </td>
                     <td className="px-4 py-3 text-gray-600">
@@ -306,7 +349,7 @@ const AllCases = () => {
                       {c.completedAt ? new Date(c.completedAt).toLocaleDateString() : '-'}
                     </td>
                     <td className="px-4 py-3 text-center">
-                      {formatTime(c.totalCompletionTimeMinutes)}
+                      {formatTime(c.totalCompletionTimeMinutes || c.roleStageTime)}
                     </td>
                   </tr>
                 ))}

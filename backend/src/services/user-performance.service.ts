@@ -6,7 +6,7 @@ import { UserRole } from '../entities/UserRole';
 import { Role } from '../entities/Role';
 import { CaseWorkflow } from '../entities/CaseWorkflow';
 import { Customer } from '../entities/Customer';
-import { Repository, In } from 'typeorm';
+import { Repository } from 'typeorm';
 
 // Stage/steps mapping based on bucket field
 const STAGE_MAPPING: Record<string, string> = {
@@ -40,6 +40,8 @@ const VALID_ROLES = [
 
 // Roles EXCLUDED from time tracking
 const EXCLUDED_ROLES = ['admin', 'superadmin'];
+
+const LEGACY_TASK_STATUSES = new Set(['pending', 'in_progress', 'completed', 'overdue', 'rejected']);
 
 /**
  * Check if timing should be calculated for a role
@@ -115,6 +117,7 @@ export class UserPerformanceService {
   private userRoleRepository: Repository<UserRole>;
   private roleRepository: Repository<Role>;
   private caseWorkflowRepository: Repository<CaseWorkflow>;
+  private customerRepository: Repository<Customer>;
 
   constructor() {
     this.taskTimeTrackingRepository = AppDataSource.getRepository(TaskTimeTracking);
@@ -123,6 +126,7 @@ export class UserPerformanceService {
     this.userRoleRepository = AppDataSource.getRepository(UserRole);
     this.roleRepository = AppDataSource.getRepository(Role);
     this.caseWorkflowRepository = AppDataSource.getRepository(CaseWorkflow);
+    this.customerRepository = AppDataSource.getRepository(Customer);
   }
 
   /**
@@ -542,10 +546,15 @@ let rewardMap: Record<string, number> = {};
       companyName: string;
       bucket: string | null;
       status: string;
+      caseStatus?: string;
+      trackingStatus?: string | null;
       isOverdue: boolean;
       userId: number;
       userName: string;
       userEmail: string;
+      assignedTo?: number | null;
+      assignedToName?: string | null;
+      assignedToEmail?: string | null;
       assignedAt: Date | null;
       startedAt: Date | null;
       completedAt: Date | null;
@@ -558,73 +567,83 @@ let rewardMap: Record<string, number> = {};
   }> {
     const { status, stage, userId, startDate, endDate, limit = 50, offset = 0 } = filters || {};
 
-    let allCases: any[] = [];
-
-    // Map stage to workflow status for credit/ops stages
-    const stageToWorkflowStatus: Record<string, string[]> = {
-      'credit_l1': ['submitted'],
-      'credit_l2': ['credit_l1_approved'],
-      'ps_l1': ['credit_l2_approved'],
-      'ps_l2': ['ceo_approved', 'md_approved'],
-      'rm': ['draft', 'rejected'],
+    const toNumber = (value: any): number | null => {
+      if (value === null || value === undefined || value === '') return null;
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : null;
     };
 
-    // Get workflow cases when filtering by stage (credit_l1, credit_l2, etc.)
-    if (stage && stageToWorkflowStatus[stage]) {
-      const workflowStatuses = stageToWorkflowStatus[stage];
-      const workflowQuery = this.caseWorkflowRepository
-        .createQueryBuilder('workflow')
-        .select('workflow.id', 'id')
-        .addSelect('workflow.id', 'taskId')
-        .addSelect("'customer_onboarding'", 'taskType')
-        .addSelect('workflow.currentStatus', 'bucket')
-        .addSelect('workflow.currentStatus', 'status')
-        .addSelect('false', 'isOverdue')
-        .addSelect('0', 'userId')
-        .addSelect('workflow.currentApproverRoleName', 'userName')
-        .addSelect("''", 'userEmail')
-        .addSelect('workflow.createdAt', 'assignedAt')
-        .addSelect('workflow.createdAt', 'startedAt')
-        .addSelect('workflow.completedAt', 'completedAt')
-        .addSelect('null', 'totalCompletionTimeMinutes')
-        .addSelect('null', 'l1ProcessingTimeMinutes')
-        .addSelect('null', 'l2ProcessingTimeMinutes')
-        .addSelect('workflow.createdAt', 'createdAt')
-        .innerJoin('workflow.customer', 'customer')
-        .addSelect('customer.companyName', 'customerName')
-        .where('workflow.workflowType = :type', { type: 'CUSTOMER_ONBOARDING' })
-        .andWhere('workflow.currentStatus IN (:...statuses)', { statuses: workflowStatuses })
-        .andWhere('workflow.isCompleted = :completed', { completed: false });
+    const toDate = (value: any): Date | null => {
+      if (!value) return null;
+      const parsed = new Date(value);
+      return Number.isNaN(parsed.getTime()) ? null : parsed;
+    };
 
-      if (startDate) {
-        workflowQuery.andWhere('workflow.createdAt >= :startDate', { startDate });
-      }
-      if (endDate) {
-        workflowQuery.andWhere('workflow.createdAt <= :endDate', { endDate });
-      }
+    const isNewerTracking = (candidate: any, current?: any): boolean => {
+      if (!current) return true;
+      const candidateDate =
+        toDate(candidate.completedAt) ||
+        toDate(candidate.startedAt) ||
+        toDate(candidate.assignedAt) ||
+        toDate(candidate.createdAt);
+      const currentDate =
+        toDate(current.completedAt) ||
+        toDate(current.startedAt) ||
+        toDate(current.assignedAt) ||
+        toDate(current.createdAt);
 
-const workflowCases = await workflowQuery.getRawMany();
-      allCases = workflowCases.map(c => ({
-        id: parseInt(c.id),
-        taskId: `CUST${String(c.id).padStart(6, '0')}`,
-        companyName: c.customerName || 'Unknown',
-        bucket: c.bucket,
-        status: c.status,
-        isOverdue: false,
-        userId: 0,
-        userName: c.userName || 'Waiting for Review',
-        userEmail: '',
-        assignedAt: c.assignedAt,
-        startedAt: c.startedAt,
-        completedAt: c.completedAt,
-        totalCompletionTimeMinutes: null,
-        l1ProcessingTimeMinutes: null,
-        l2ProcessingTimeMinutes: null,
-        createdAt: c.createdAt,
-      }));
-    }
+      return (candidateDate?.getTime() || 0) > (currentDate?.getTime() || 0);
+    };
 
-// Also get task tracking cases
+    const normalizeText = (value?: string | null): string => (value || '').toLowerCase();
+
+    // Workflow is the canonical case list. Task tracking is optional timing/user metadata.
+    const workflowRows = await this.caseWorkflowRepository
+      .createQueryBuilder('workflow')
+      .select('workflow.id', 'id')
+      .addSelect('workflow.workflowType', 'workflowType')
+      .addSelect('workflow.customerId', 'customerId')
+      .addSelect('workflow.currentStatus', 'currentStatus')
+      .addSelect('workflow.currentApproverRoleName', 'currentApproverRoleName')
+      .addSelect('workflow.assignedStage', 'assignedStage')
+      .addSelect('workflow.assignedUserId', 'workflowAssignedUserId')
+      .addSelect('workflow.isRejected', 'isRejected')
+      .addSelect('workflow.isCompleted', 'isCompleted')
+      .addSelect('workflow.completedDate', 'completedDate')
+      .addSelect('workflow.createdAt', 'createdAt')
+      .addSelect('workflow.updatedAt', 'updatedAt')
+      .addSelect('customer.companyName', 'companyName')
+      .addSelect('customer.customerName', 'customerName')
+      .addSelect('customer.customerCode', 'customerCode')
+      .addSelect('customer.assignedUserId', 'customerAssignedUserId')
+      .addSelect('customer.assignedStage', 'customerAssignedStage')
+      .addSelect('assignedUser.name', 'workflowAssignedUserName')
+      .addSelect('assignedUser.email', 'workflowAssignedUserEmail')
+      .addSelect('customerAssignedUser.name', 'customerAssignedUserName')
+      .addSelect('customerAssignedUser.email', 'customerAssignedUserEmail')
+      .leftJoin('workflow.customer', 'customer')
+      .leftJoin('workflow.assignedUser', 'assignedUser')
+      .leftJoin('customer.assignedUser', 'customerAssignedUser')
+      .where('workflow.workflowType = :type', { type: 'CUSTOMER_ONBOARDING' })
+      .getRawMany();
+
+    const customerRows = await this.customerRepository
+      .createQueryBuilder('customer')
+      .select('customer.id', 'customerId')
+      .addSelect('customer.companyName', 'companyName')
+      .addSelect('customer.customerName', 'customerName')
+      .addSelect('customer.customerCode', 'customerCode')
+      .addSelect('customer.status', 'status')
+      .addSelect('customer.assignedUserId', 'assignedUserId')
+      .addSelect('customer.assignedStage', 'assignedStage')
+      .addSelect('customer.createdAt', 'createdAt')
+      .addSelect('customer.updatedAt', 'updatedAt')
+      .addSelect('assignedUser.name', 'assignedUserName')
+      .addSelect('assignedUser.email', 'assignedUserEmail')
+      .leftJoin('customer.assignedUser', 'assignedUser')
+      .getRawMany();
+
+    // Also get task tracking rows so older tracked tasks without workflow rows are not lost.
     const trackingQuery = this.taskTimeTrackingRepository
       .createQueryBuilder('tracking')
       .select('tracking.id', 'id')
@@ -643,59 +662,209 @@ const workflowCases = await workflowQuery.getRawMany();
       .addSelect('tracking.l1ProcessingTimeMinutes', 'l1ProcessingTimeMinutes')
       .addSelect('tracking.l2ProcessingTimeMinutes', 'l2ProcessingTimeMinutes')
       .addSelect('tracking.createdAt', 'createdAt')
+      .addSelect('workflow.id', 'workflowId')
+      .addSelect('workflow.customerId', 'workflowCustomerId')
+      .addSelect('taskCustomer.id', 'taskCustomerId')
       .addSelect('COALESCE(workflowCustomer.companyName, taskCustomer.companyName)', 'customerName')
       .leftJoin('tracking.user', 'user')
       .leftJoin('tracking.caseWorkflow', 'workflow')
       .leftJoin('workflow.customer', 'workflowCustomer')
       .leftJoin(Customer, 'taskCustomer', 'taskCustomer.id = tracking.taskId');
 
-    if (stage && stage !== 'credit_l2') {
-      trackingQuery.andWhere('tracking.bucket = :stage', { stage });
-    }
-
-    if (status) {
-      trackingQuery.andWhere('tracking.status = :status', { status });
-    }
-
-    if (userId) {
-      trackingQuery.andWhere('tracking.userId = :userId', { userId });
-    }
-
-    if (startDate) {
-      trackingQuery.andWhere('tracking.createdAt >= :startDate', { startDate });
-    }
-
-    if (endDate) {
-      trackingQuery.andWhere('tracking.createdAt <= :endDate', { endDate });
-    }
-
-    // Get tracking cases
     const trackingCases = await trackingQuery
       .orderBy('tracking.createdAt', 'DESC')
       .getRawMany();
 
-    // Map tracking cases with company names
-    const mappedTrackingCases = trackingCases.map((c: any) => ({
-      id: parseInt(c.id),
-      taskId: c.taskId,
-      companyName: c.customerName || '',
-      bucket: c.bucket,
-      status: c.status,
-      isOverdue: Boolean(c.isOverdue),
-      userId: parseInt(c.userId),
-      userName: c.userName || 'Unknown',
-      userEmail: c.userEmail || '',
-      assignedAt: c.assignedAt,
-      startedAt: c.startedAt,
-      completedAt: c.completedAt,
-      totalCompletionTimeMinutes: c.totalCompletionTimeMinutes ? parseFloat(c.totalCompletionTimeMinutes) : null,
-      l1ProcessingTimeMinutes: c.l1ProcessingTimeMinutes ? parseInt(c.l1ProcessingTimeMinutes) : null,
-      l2ProcessingTimeMinutes: c.l2ProcessingTimeMinutes ? parseInt(c.l2ProcessingTimeMinutes) : null,
-      createdAt: c.createdAt,
-    }));
+    const mappedTrackingCases = trackingCases.map((c: any) => {
+      const taskId = String(c.taskId || '');
+      const numericTaskId = /^\d+$/.test(taskId) ? parseInt(taskId) : null;
+      const workflowId = toNumber(c.workflowId);
+      const customerId = toNumber(c.workflowCustomerId) || toNumber(c.taskCustomerId) || numericTaskId;
 
-    // Combine workflow and tracking cases
-    allCases = [...allCases, ...mappedTrackingCases];
+      return {
+        id: parseInt(c.id),
+        taskId: c.taskId,
+        taskType: c.taskType,
+        workflowId,
+        customerId,
+        companyName: c.customerName || '',
+        bucket: c.bucket,
+        status: c.status,
+        caseStatus: c.status,
+        trackingStatus: c.status,
+        isOverdue: Boolean(c.isOverdue),
+        userId: parseInt(c.userId),
+        userName: c.userName || 'Unknown',
+        userEmail: c.userEmail || '',
+        assignedTo: parseInt(c.userId),
+        assignedToName: c.userName || 'Unknown',
+        assignedToEmail: c.userEmail || '',
+        assignedAt: c.assignedAt,
+        startedAt: c.startedAt,
+        completedAt: c.completedAt,
+        totalCompletionTimeMinutes: c.totalCompletionTimeMinutes ? parseFloat(c.totalCompletionTimeMinutes) : null,
+        l1ProcessingTimeMinutes: c.l1ProcessingTimeMinutes ? parseInt(c.l1ProcessingTimeMinutes) : null,
+        l2ProcessingTimeMinutes: c.l2ProcessingTimeMinutes ? parseInt(c.l2ProcessingTimeMinutes) : null,
+        createdAt: c.createdAt,
+      };
+    });
+
+    const trackingByWorkflowId = new Map<number, any>();
+    const trackingByCustomerId = new Map<number, any>();
+
+    for (const tracking of mappedTrackingCases) {
+      if (tracking.workflowId && isNewerTracking(tracking, trackingByWorkflowId.get(tracking.workflowId))) {
+        trackingByWorkflowId.set(tracking.workflowId, tracking);
+      }
+      if (tracking.customerId && isNewerTracking(tracking, trackingByCustomerId.get(tracking.customerId))) {
+        trackingByCustomerId.set(tracking.customerId, tracking);
+      }
+    }
+
+    const workflowIds = new Set<number>();
+    const workflowCustomerIds = new Set<number>();
+
+    let allCases: any[] = workflowRows.map((c: any) => {
+      const workflowId = parseInt(c.id);
+      const customerId = toNumber(c.customerId);
+      workflowIds.add(workflowId);
+      if (customerId) workflowCustomerIds.add(customerId);
+
+      const tracking = trackingByWorkflowId.get(workflowId) || (customerId ? trackingByCustomerId.get(customerId) : null);
+      const assignedUserId =
+        toNumber(c.workflowAssignedUserId) ||
+        toNumber(c.customerAssignedUserId) ||
+        tracking?.assignedTo ||
+        tracking?.userId ||
+        null;
+      const assignedUserName =
+        c.workflowAssignedUserName ||
+        c.customerAssignedUserName ||
+        tracking?.assignedToName ||
+        c.currentApproverRoleName ||
+        'Unassigned';
+      const assignedUserEmail =
+        c.workflowAssignedUserEmail ||
+        c.customerAssignedUserEmail ||
+        tracking?.assignedToEmail ||
+        '';
+      const workflowStage =
+        this.getStageFromWorkflowStatus(c.currentStatus, c.currentApproverRoleName) ||
+        c.assignedStage ||
+        c.customerAssignedStage;
+      const currentStatus = c.currentStatus || 'draft';
+      const derivedTrackingStatus = tracking?.trackingStatus || this.getTaskStatusFromWorkflowStatus(
+        currentStatus,
+        Boolean(c.isCompleted),
+        Boolean(c.isRejected)
+      );
+
+      return {
+        id: workflowId,
+        workflowId,
+        customerId,
+        taskId: c.customerCode || (customerId ? `CUST${String(customerId).padStart(6, '0')}` : `WF${String(workflowId).padStart(6, '0')}`),
+        taskType: 'CUSTOMER_ONBOARDING',
+        companyName: c.companyName || c.customerName || tracking?.companyName || 'Unknown',
+        bucket: workflowStage,
+        status: currentStatus,
+        caseStatus: currentStatus,
+        trackingStatus: derivedTrackingStatus,
+        isOverdue: Boolean(tracking?.isOverdue),
+        userId: assignedUserId || 0,
+        userName: assignedUserName,
+        userEmail: assignedUserEmail,
+        assignedTo: assignedUserId,
+        assignedToName: assignedUserName,
+        assignedToEmail: assignedUserEmail,
+        assignedAt: tracking?.assignedAt || c.updatedAt || c.createdAt,
+        startedAt: tracking?.startedAt || null,
+        completedAt: tracking?.completedAt || c.completedDate || null,
+        totalCompletionTimeMinutes: tracking?.totalCompletionTimeMinutes || null,
+        l1ProcessingTimeMinutes: tracking?.l1ProcessingTimeMinutes || null,
+        l2ProcessingTimeMinutes: tracking?.l2ProcessingTimeMinutes || null,
+        createdAt: c.createdAt,
+      };
+    });
+
+    const customerOnlyCases = customerRows
+      .filter((c: any) => {
+        const customerId = toNumber(c.customerId);
+        return customerId && !workflowCustomerIds.has(customerId);
+      })
+      .map((c: any) => {
+        const customerId = toNumber(c.customerId)!;
+        const tracking = trackingByCustomerId.get(customerId);
+        const assignedUserId = toNumber(c.assignedUserId) || tracking?.assignedTo || tracking?.userId || null;
+        const assignedUserName = c.assignedUserName || tracking?.assignedToName || 'Unassigned';
+        const assignedUserEmail = c.assignedUserEmail || tracking?.assignedToEmail || '';
+        const currentStatus = c.status || 'draft';
+        const workflowStage = this.getStageFromWorkflowStatus(currentStatus) || c.assignedStage || tracking?.bucket;
+        const derivedTrackingStatus = tracking?.trackingStatus || this.getTaskStatusFromWorkflowStatus(currentStatus);
+
+        workflowCustomerIds.add(customerId);
+
+        return {
+          id: customerId,
+          workflowId: null,
+          customerId,
+          taskId: c.customerCode || `CUST${String(customerId).padStart(6, '0')}`,
+          taskType: 'CUSTOMER_ONBOARDING',
+          companyName: c.companyName || c.customerName || tracking?.companyName || 'Unknown',
+          bucket: workflowStage,
+          status: currentStatus,
+          caseStatus: currentStatus,
+          trackingStatus: derivedTrackingStatus,
+          isOverdue: Boolean(tracking?.isOverdue),
+          userId: assignedUserId || 0,
+          userName: assignedUserName,
+          userEmail: assignedUserEmail,
+          assignedTo: assignedUserId,
+          assignedToName: assignedUserName,
+          assignedToEmail: assignedUserEmail,
+          assignedAt: tracking?.assignedAt || c.updatedAt || c.createdAt,
+          startedAt: tracking?.startedAt || null,
+          completedAt: tracking?.completedAt || null,
+          totalCompletionTimeMinutes: tracking?.totalCompletionTimeMinutes || null,
+          l1ProcessingTimeMinutes: tracking?.l1ProcessingTimeMinutes || null,
+          l2ProcessingTimeMinutes: tracking?.l2ProcessingTimeMinutes || null,
+          createdAt: c.createdAt,
+        };
+      });
+
+    allCases = [...allCases, ...customerOnlyCases];
+
+    const orphanTrackingCases = mappedTrackingCases.filter((tracking) => {
+      if (tracking.workflowId && workflowIds.has(tracking.workflowId)) return false;
+      if (tracking.customerId && workflowCustomerIds.has(tracking.customerId)) return false;
+      return true;
+    });
+
+    allCases = [...allCases, ...orphanTrackingCases];
+
+    const normalizedStatus = normalizeText(status);
+    allCases = allCases.filter((c) => {
+      if (stage && c.bucket !== stage) return false;
+
+      if (normalizedStatus) {
+        const caseStatus = normalizeText(c.caseStatus || c.status);
+        const trackingStatus = normalizeText(c.trackingStatus);
+
+        if (LEGACY_TASK_STATUSES.has(normalizedStatus)) {
+          if (caseStatus !== normalizedStatus && trackingStatus !== normalizedStatus) return false;
+        } else if (caseStatus !== normalizedStatus) {
+          return false;
+        }
+      }
+
+      if (userId && c.userId !== userId && c.assignedTo !== userId) return false;
+
+      const createdAt = toDate(c.createdAt);
+      if (startDate && createdAt && createdAt.getTime() < startDate.getTime()) return false;
+      if (endDate && createdAt && createdAt.getTime() > endDate.getTime()) return false;
+
+      return true;
+    });
 
     // Sort by createdAt descending
     allCases.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
@@ -710,6 +879,62 @@ const workflowCases = await workflowQuery.getRawMany();
       cases: paginatedCases,
       total,
     };
+  }
+
+  private getStageFromWorkflowStatus(status?: string | null, approverRole?: string | null): string | null {
+    const normalizedStatus = (status || '').toLowerCase();
+    const statusToStage: Record<string, string> = {
+      draft: 'rm',
+      returned_to_rm: 'rm',
+      md_pending_terms: 'rm',
+      md_approved: 'ready_for_ops',
+      submitted: 'credit_l1',
+      credit_l1_approved: 'credit_l2',
+      credit_l2_approved: 'ps_l1',
+      ceo_approved: 'ps_l2',
+      md_terms_submitted: 'ps_l2',
+      ops_l1_review: 'ops_l1',
+      ops_l1_approved: 'ops_head',
+      ops_head_approved: 'ops_head',
+      completed: 'completed',
+      disbursed: 'completed',
+      rejected: 'rejected',
+    };
+
+    if (statusToStage[normalizedStatus]) {
+      return statusToStage[normalizedStatus];
+    }
+
+    const role = (approverRole || '').toLowerCase();
+
+    if (role === 'rm' || role === 'relationship_manager') return 'rm';
+    if (role === 'credit_team_l1') return 'credit_l1';
+    if (role === 'credit_team_l2') return 'credit_l2';
+    if (role === 'ceo') return 'ps_l1';
+    if (role === 'md') return 'ps_l2';
+    if (role === 'operations_team_l1') return 'ops_l1';
+    if (role === 'operations_team_l2') return 'ops_l2';
+    if (role === 'operations_head') return 'ops_head';
+
+    return null;
+  }
+
+  private getTaskStatusFromWorkflowStatus(
+    status?: string | null,
+    isCompleted: boolean = false,
+    isRejected: boolean = false
+  ): string {
+    const normalizedStatus = (status || '').toLowerCase();
+
+    if (isCompleted || ['completed', 'disbursed'].includes(normalizedStatus)) {
+      return 'completed';
+    }
+
+    if (isRejected || normalizedStatus === 'rejected') {
+      return 'rejected';
+    }
+
+    return 'pending';
   }
 
   /**

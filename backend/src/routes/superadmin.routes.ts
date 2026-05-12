@@ -11,6 +11,30 @@ import { ROLES } from '../config/constants';
 
 const router = Router();
 
+const parsePositiveInt = (value: unknown, fallback: number): number => {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+};
+
+const parseNonNegativeInt = (value: unknown, fallback: number): number => {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed >= 0 ? parsed : fallback;
+};
+
+const parseDateQuery = (value: unknown, endOfDay = false): Date | undefined => {
+  if (!value || Array.isArray(value)) return undefined;
+
+  const rawValue = String(value);
+  const date = new Date(rawValue);
+  if (Number.isNaN(date.getTime())) return undefined;
+
+  if (endOfDay && /^\d{4}-\d{2}-\d{2}$/.test(rawValue)) {
+    date.setHours(23, 59, 59, 999);
+  }
+
+  return date;
+};
+
 // ==========================================
 // SUPERADMIN Dashboard & Analytics Routes
 // ==========================================
@@ -680,18 +704,25 @@ router.get('/cases', roleMiddleware([ROLES.SUPERADMIN]), async (req: Request, re
       startDate, 
       endDate,
       limit, 
-      page 
+      page,
+      offset
     } = req.query;
+
+    const limitNum = parsePositiveInt(limit, 50);
+    const offsetNum = offset !== undefined
+      ? parseNonNegativeInt(offset, 0)
+      : (parsePositiveInt(page, 1) - 1) * limitNum;
+    const pageNum = Math.floor(offsetNum / limitNum) + 1;
 
     // Use the userPerformanceService which has proper filtering logic
     const filters = {
       stage: stage as string || undefined,
       status: status as string || undefined,
       userId: userId ? parseInt(userId as string) : undefined,
-      startDate: startDate ? new Date(startDate as string) : undefined,
-      endDate: endDate ? new Date(endDate as string) : undefined,
-      limit: limit ? parseInt(limit as string) : 50,
-      offset: page ? (parseInt(page as string) - 1) * (limit ? parseInt(limit as string) : 50) : 0,
+      startDate: parseDateQuery(startDate),
+      endDate: parseDateQuery(endDate, true),
+      limit: limitNum,
+      offset: offsetNum,
     };
 
     const result = await userPerformanceService.getAllCasesByUsers(filters);
@@ -716,9 +747,7 @@ router.get('/cases', roleMiddleware([ROLES.SUPERADMIN]), async (req: Request, re
     }));
 
     // Calculate total pages
-    const limitNum = limit ? parseInt(limit as string) : 50;
     const totalPages = Math.ceil(result.total / limitNum);
-    const pageNum = page ? parseInt(page as string) : 1;
 
     res.json({ 
       success: true, 

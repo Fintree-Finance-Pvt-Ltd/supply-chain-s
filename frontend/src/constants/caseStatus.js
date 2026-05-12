@@ -4,6 +4,8 @@ export const CASE_STATUS = {
   CREDIT_L1_APPROVED: 'credit_l1_approved',
   CREDIT_L2_APPROVED: 'credit_l2_approved',
   CEO_APPROVED: 'ceo_approved',
+  MD_PENDING_TERMS: 'md_pending_terms',
+  MD_TERMS_SUBMITTED: 'md_terms_submitted',
   MD_APPROVED: 'md_approved',
   OPS_L1_REVIEW: 'ops_l1_review',
   OPS_L1_APPROVED: 'ops_l1_approved',
@@ -12,6 +14,7 @@ export const CASE_STATUS = {
   COMPLETED: 'completed',
   DISBURSED: 'disbursed',
   REJECTED: 'rejected',
+  RETURNED_TO_RM: 'returned_to_rm',
 }
 
 export const CASE_STATUS_LABELS = {
@@ -20,6 +23,8 @@ export const CASE_STATUS_LABELS = {
   [CASE_STATUS.CREDIT_L1_APPROVED]: 'Credit L1 Approved',
   [CASE_STATUS.CREDIT_L2_APPROVED]: 'Credit L2 Approved',
   [CASE_STATUS.CEO_APPROVED]: 'CEO Approved',
+  [CASE_STATUS.MD_PENDING_TERMS]: 'MD Pending Terms',
+  [CASE_STATUS.MD_TERMS_SUBMITTED]: 'MD Terms Submitted',
   [CASE_STATUS.MD_APPROVED]: 'MD Approved',
   [CASE_STATUS.OPS_L1_REVIEW]: 'Ops L1 Review',
   [CASE_STATUS.OPS_L1_APPROVED]: 'Ops L1 Approved',
@@ -28,6 +33,7 @@ export const CASE_STATUS_LABELS = {
   [CASE_STATUS.COMPLETED]: 'Completed',
   [CASE_STATUS.DISBURSED]: 'Disbursed',
   [CASE_STATUS.REJECTED]: 'Rejected',
+  [CASE_STATUS.RETURNED_TO_RM]: 'Returned to RM',
 }
 
 export const CASE_STATUS_COLORS = {
@@ -36,6 +42,8 @@ export const CASE_STATUS_COLORS = {
   [CASE_STATUS.CREDIT_L1_APPROVED]: 'green',
   [CASE_STATUS.CREDIT_L2_APPROVED]: 'green',
   [CASE_STATUS.CEO_APPROVED]: 'green',
+  [CASE_STATUS.MD_PENDING_TERMS]: 'orange',
+  [CASE_STATUS.MD_TERMS_SUBMITTED]: 'blue',
   [CASE_STATUS.MD_APPROVED]: 'green',
   [CASE_STATUS.OPS_L1_REVIEW]: 'orange',
   [CASE_STATUS.OPS_L1_APPROVED]: 'green',
@@ -44,5 +52,6 @@ export const CASE_STATUS_COLORS = {
   [CASE_STATUS.COMPLETED]: 'green',
   [CASE_STATUS.DISBURSED]: 'purple',
   [CASE_STATUS.REJECTED]: 'red',
+  [CASE_STATUS.RETURNED_TO_RM]: 'orange',
 }
 
