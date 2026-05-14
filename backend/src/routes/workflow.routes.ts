@@ -786,7 +786,8 @@ router.get('/invoices/customers/:customerId/lans/:lanId/rates', async (req, res)
       data: {
         roi: sanction?.interestRate || 0,
         penalCharges: sanction?.penalCharges || 0,
-        serviceFee: sanction?.serviceFee || 0
+        serviceFee: sanction?.serviceFee || 0,
+        sanctionAmount: sanction?.sanctionAmount || 0,
       }
     });
 
@@ -1273,6 +1274,7 @@ router.post('/invoices/create', checkRole(['relationship_manager']), async (req:
       roiPercentage,
       penalCharges,
       serviceFee,  
+      sanctionAmount,
         invoiceFilePath,
     } = req.body;
     const user = (req as any).user;
@@ -1296,6 +1298,7 @@ router.post('/invoices/create', checkRole(['relationship_manager']), async (req:
         roiPercentage,
         penalCharges,
         serviceFee,
+        sanctionAmount,
           invoiceFilePath,
 
       },

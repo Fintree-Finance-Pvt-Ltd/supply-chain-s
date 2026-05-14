@@ -34,7 +34,8 @@ export class Invoice {
   @Column({ type: "decimal", precision: 10, scale: 2, nullable: true })
 serviceFee: number;
   
-
+  @Column({ type: "decimal", precision: 10, scale: 2, nullable: true })
+sanctionAmount: number;
   @Column({ type: 'date' })
   invoiceDate: Date;
 

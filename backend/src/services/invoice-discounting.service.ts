@@ -57,6 +57,7 @@ interface InvoiceDisbursementPayload {
   total_roi_amount: number;
   emi_amount: number;
     service_fee: number; 
+      sanctionAmount: number;
 }
 
 export class InvoiceDiscountingService {
@@ -429,7 +430,9 @@ export class InvoiceDiscountingService {
       roiPercentage?: number;
       penalCharges?: number;
         serviceFee?: number;
+        sanctionAmount?: number;
           invoiceFilePath?: string;
+
 
     },
     rmId: number,
@@ -509,6 +512,7 @@ export class InvoiceDiscountingService {
       roiPercentage?: number;
       penalCharges?: number;
         serviceFee?: number; 
+          sanctionAmount?: number;
     },
     userId: number,
   ) {
@@ -1658,6 +1662,10 @@ export class InvoiceDiscountingService {
    service_fee:
     invoice.serviceFee !== null && invoice.serviceFee !== undefined
       ? Number(invoice.serviceFee)
+      : 0, // Added THIS
+      sanctionAmount:
+    invoice.sanctionAmount !== null && invoice.sanctionAmount !== undefined
+      ? Number(invoice.sanctionAmount)
       : 0, // Added THIS
     };
 
