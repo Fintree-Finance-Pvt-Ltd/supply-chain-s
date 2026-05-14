@@ -600,8 +600,79 @@ if (existingInvoices.length > 0) {
     }
 
     const previousStatus = invoice.status;
+
+      // ✅ Store utilized limit = disbursement amount
+invoice.utilizedLimit = Number(
+  invoice.disbursementAmount || 0
+);
+
+invoice.unutilizedLimit =
+  Number(invoice.sanctionAmount || 0) -
+  Number(invoice.disbursementAmount || 0);
+
     invoice.status = "PENDING_CUSTOMER_APPROVAL";
     await this.invoiceRepository.save(invoice);
+
+    const loanAccountRepository =
+  AppDataSource.getRepository(LoanAccount);
+
+const loanAccount = await loanAccountRepository.findOne({
+  where: {
+    id: invoice.loanAccountId,
+  },
+});
+
+if (loanAccount) {
+
+  // ✅ utilized = disbursement amount
+  // loanAccount.utilizedLimit = Number(
+  //   invoice.disbursementAmount || 0
+  // );
+
+  // // ✅ unutilized = sanction - utilized
+  // loanAccount.unutilizedLimit =
+  //   Number(invoice.sanctionAmount || 0) -
+  //   Number(invoice.disbursementAmount || 0);
+
+
+  // existing utilized from DB
+const existingUtilized = Number(
+  loanAccount.utilizedLimit || 0
+);
+ 
+
+// current invoice disbursement
+const currentDisbursement = Number(
+  invoice.disbursementAmount || 0
+);
+
+// ✅ add previous + current
+const totalUtilized =
+  existingUtilized + currentDisbursement;
+
+  
+// sanction amount
+const sanctionAmount = Number(
+  invoice.sanctionAmount || 0
+);
+
+// remaining limit
+const totalUnutilized =
+  sanctionAmount - totalUtilized;
+
+// save
+loanAccount.utilizedLimit =
+  totalUtilized;
+
+loanAccount.unutilizedLimit =
+  totalUnutilized;
+
+await loanAccountRepository.save(
+  loanAccount
+);
+
+  await loanAccountRepository.save(loanAccount);
+}
 
     const workflow = await this.createOrGetWorkflow(invoiceId);
     workflow.currentStatus = "PENDING_CUSTOMER_APPROVAL";

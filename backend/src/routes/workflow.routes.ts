@@ -8,6 +8,7 @@ import { AppDataSource } from '../config/database';
 import { Partner, PARTNER_STATUS } from '../entities/Partner';
 import multer from 'multer';
 import path from 'path';
+import { LoanAccount } from '../entities/LoanAccount';
 import { CLIENT_RENEG_LIMIT } from 'tls';
 const router = Router();
 
@@ -775,6 +776,58 @@ router.get('/invoices/customers/:customerId/lans/:lanId/rates', async (req, res)
       order: { createdAt: 'DESC' }
     });
 
+    // ✅ fetch from loan_accounts table
+const LoanAccountRepository =
+  AppDataSource.getRepository(LoanAccount);
+
+const loanAccountData =
+  await LoanAccountRepository.findOne({
+    where: {
+      id: parseInt(lanId),
+    },
+  });
+
+// sanction amount
+const sanctionAmount = Number(
+  sanction?.sanctionAmount || 0
+);
+
+// utilized from loan_accounts
+const utilizedLimit = Number(
+  loanAccountData?.utilizedLimit || 0
+);
+
+// unutilized from loan_accounts
+const unutilizedLimit = Number(
+  loanAccountData?.unutilizedLimit ||
+  (sanctionAmount - utilizedLimit)
+);
+      // ✅ latest invoice
+    // const InvoiceRepository =
+    //   AppDataSource.getRepository('Invoice');
+
+    // const latestInvoice = await InvoiceRepository.findOne({
+    //   where: {
+    //     customerId: parseInt(customerId),
+    //     loanAccountId: parseInt(lanId),
+    //   },
+    //   order: {
+    //     createdAt: 'DESC'
+    //   }
+    // });
+
+
+    //   // ✅ values
+    // const utilizedLimit = Number(
+    //   latestInvoice?.utilizedLimit || 0
+    // );
+
+    // const sanctionAmount = Number(
+    //   sanction?.sanctionAmount || 0
+    // );
+
+    // const unutilizedLimit =
+    //   sanctionAmount - utilizedLimit;
     // ✅ ADD CACHE DISABLE HEADERS
     res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
     res.set('Pragma', 'no-cache');
@@ -788,6 +841,8 @@ router.get('/invoices/customers/:customerId/lans/:lanId/rates', async (req, res)
         penalCharges: sanction?.penalCharges || 0,
         serviceFee: sanction?.serviceFee || 0,
         sanctionAmount: sanction?.sanctionAmount || 0,
+        utilizedLimit,
+        unutilizedLimit,
       }
     });
 

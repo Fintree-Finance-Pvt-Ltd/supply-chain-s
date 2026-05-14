@@ -34,7 +34,7 @@ export default function InvoiceDiscountingRM() {
   const [invoices, setInvoices] = useState([]);
 
   const [customerLimits, setCustomerLimits] = useState({
-  sectionAmount: 0,
+  sanctionAmount: 0,
   utilizedAmount: 0,
   unutilizedAmount: 0,
 });
@@ -50,6 +50,9 @@ export default function InvoiceDiscountingRM() {
     penalCharges: "",
     serviceFee: "",
     sanctionAmount: "",
+    utilizedAmount: "",
+    unutilizedAmount: "",
+
   });
 
   useEffect(() => {
@@ -207,7 +210,43 @@ const handleLANChange = async (lanId) => {
               penalCharges: ratesResponse.data.data.penalCharges || '',
             serviceFee: ratesResponse.data.data.serviceFee || '',
             sanctionAmount: ratesResponse.data.data.sanctionAmount || '',
+          utilizedAmount: ratesResponse.data.data.utilizedLimit || '',
+          unutilizedAmount: ratesResponse.data.data.unutilizedLimit || '',
           }));
+
+// ✅ set limit card values
+ // ✅ customer limit cards
+  setCustomerLimits({
+    sanctionAmount: Number(
+      data.sanctionAmount || 0
+    ),
+
+    utilizedAmount: Number(
+      data.utilizedLimit || 0
+    ),
+
+    unutilizedAmount: Number(
+      data.unutilizedLimit || 0
+    ),
+  });
+// setCustomerLimits({
+//   sanctionAmount: Number(data.sanctionAmount || 0),
+
+//   utilizedAmount: Number(
+//     data.utilizedLimit ||
+//     data.utilized_limit ||
+//     0
+//   ),
+
+//   unutilizedAmount: Number(
+//     data.unutilizedLimit ||
+//     data.unutilized_limit ||
+//     (
+//       Number(data.sanctionAmount || 0) -
+//       Number(data.utilizedLimit || 0)
+//     )
+//   ),
+// });
         }
       } catch (ratesError) {
         console.error('❌ Rates Error:', ratesError.response?.data || ratesError.message);
@@ -782,7 +821,7 @@ const getAllowedInvoiceDays = () => {
             color: "#991b1b",
           }}
         >
-          ₹ {formatINR(customerLimits.utilizedAmount)}
+          ₹ {formatINR(formData.utilizedAmount)}
         </div>
       </div>
 
@@ -815,7 +854,7 @@ const getAllowedInvoiceDays = () => {
             color: "#065f46",
           }}
         >
-          ₹ {formatINR(customerLimits.unutilizedAmount)}
+          ₹ {formatINR(formData.unutilizedAmount)}
         </div>
       </div>
     </div>
@@ -1185,7 +1224,7 @@ const getAllowedInvoiceDays = () => {
             )}
           </div>
 
-          <div>
+          {/* <div>
             <label
               style={{
                 display: "flex",
@@ -1232,8 +1271,175 @@ const getAllowedInvoiceDays = () => {
                 ₹ {formatINR(formData.disbursementAmount)} ({numberToWords(formData.disbursementAmount)} Only)
               </p>
             )}
-          </div>
+          </div> */}
+<div>
+<label
 
+    style={{
+
+      display: "flex",
+
+      alignItems: "center",
+
+      marginBottom: "8px",
+
+      fontWeight: "600",
+
+      fontSize: "16px",
+
+      color: "#202b3a"
+
+    }}
+>
+<FiDollarSign style={{ marginRight: "8px", color: "#6366f1" }} />
+
+    Disbursement Amount
+</label>
+ 
+  <input
+
+    type="number"
+
+    name="disbursementAmount"
+
+    value={formData.disbursementAmount}
+
+    onWheel={(e) => e.target.blur()}
+ 
+    onChange={(e) => {
+ 
+      const value = e.target.value;
+ 
+      // ✅ convert values
+
+      const enteredAmount = Number(value || 0);
+ 
+      const availableLimit = Number(
+
+        customerLimits.unutilizedAmount || 0
+
+      );
+ 
+      // ❌ validation
+
+      if (enteredAmount > availableLimit) {
+ 
+        toast.error(
+
+          `Disbursement amount cannot exceed unutilized limit of ₹${formatINR(availableLimit)}`
+
+        );
+ 
+        return;
+
+      }
+ 
+      handleInputChange(e);
+
+    }}
+ 
+    placeholder="0.00"
+ 
+    style={{
+
+      width: "100%",
+
+      padding: "12px",
+
+      border:
+
+        Number(formData.disbursementAmount || 0) >
+
+        Number(customerLimits.unutilizedAmount || 0)
+
+          ? "1px solid #ef4444"
+
+          : "1px solid #e2e8f0",
+ 
+      borderRadius: "10px",
+
+      fontSize: "16px",
+
+      fontWeight: "600",
+
+    }}
+
+  />
+ 
+  {/* LIMIT INFO */}
+<div
+
+    style={{
+
+      marginTop: "8px",
+
+      display: "flex",
+
+      justifyContent: "space-between",
+
+      alignItems: "center",
+
+      flexWrap: "wrap",
+
+      gap: "8px",
+
+    }}
+>
+<p
+
+      style={{
+
+        fontSize: "12px",
+
+        color: "#64748b",
+
+        margin: 0,
+
+      }}
+>
+
+      Available Limit:
+<strong style={{ color: "#059669" }}>
+
+        {" "}
+
+        ₹ {formatINR(customerLimits.unutilizedAmount)}
+</strong>
+</p>
+ 
+    {formData.disbursementAmount && (
+<p
+
+        style={{
+
+          fontSize: "13px",
+
+          color: "#6366f1",
+
+          background: "#eef2ff",
+
+          padding: "4px 10px",
+
+          borderRadius: "20px",
+
+          display: "inline-block",
+
+          fontWeight: "600",
+
+          margin: 0,
+
+        }}
+>
+
+        ₹ {formatINR(formData.disbursementAmount)} (
+
+        {numberToWords(formData.disbursementAmount)} Only)
+</p>
+
+    )}
+</div>
+</div>
+ 
           <div>
             <label
               style={{

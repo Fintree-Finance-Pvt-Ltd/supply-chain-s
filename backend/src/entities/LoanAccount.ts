@@ -56,6 +56,13 @@ export class LoanAccount {
   @Column({ type: 'boolean', default: false })
   isOnboarded: boolean;
 
+   // Limit utilization tracking (persisted per invoice; utilized counts only after disbursement)
+  @Column({ type: 'decimal', precision: 15, scale: 2, nullable: true })
+  utilizedLimit: number;
+
+  @Column({ type: 'decimal', precision: 15, scale: 2, nullable: true })
+  unutilizedLimit: number;
+
   @CreateDateColumn()
   createdAt: Date;
 
