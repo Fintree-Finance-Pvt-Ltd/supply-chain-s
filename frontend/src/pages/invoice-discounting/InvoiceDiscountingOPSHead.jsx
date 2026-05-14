@@ -215,54 +215,117 @@ const loadData = async () => {
                     ₹{invoice.disbursementAmount?.toLocaleString()}
                   </td>
                   <td style={{ padding: '12px', textAlign: 'center' }}>{getStatusBadge(invoice.status)}</td>
-                  <td style={{ padding: '12px', textAlign: 'center' }}>
-                    <button
-                      onClick={() => handleVerify(invoice, 'approve')}
-                      style={{
-                        padding: '6px 12px',
-                        background: '#28a745',
-                        color: '#fff',
-                        border: 'none',
-                        borderRadius: '4px',
-                        cursor: 'pointer',
-                        marginRight: '8px',
-                      }}
-                    >
-                      <FiCheck /> Approve
-                    </button>
+          <td
+  style={{
+    padding: "12px",
+    textAlign: "center",
+  }}
+>
+  <div
+    style={{
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: "10px",
+      flexWrap: "wrap",
+    }}
+  >
+    {/* APPROVE */}
+    <button
+      onClick={() => handleVerify(invoice, "approve")}
+      style={{
+        minWidth: "110px",
+        height: "40px",
+        padding: "0 16px",
+        background: "linear-gradient(135deg, #22c55e 0%, #16a34a 100%)",
+        color: "#fff",
+        border: "none",
+        borderRadius: "10px",
+        cursor: "pointer",
+        fontWeight: "700",
+        fontSize: "13px",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: "8px",
+        boxShadow: "0 4px 12px rgba(34,197,94,0.25)",
+        transition: "all 0.2s ease",
+      }}
+      onMouseEnter={(e) => {
+        e.target.style.transform = "translateY(-1px)";
+      }}
+      onMouseLeave={(e) => {
+        e.target.style.transform = "translateY(0)";
+      }}
+    >
+      <FiCheck size={15} />
+      Approve
+    </button>
 
-                    <button
-                      onClick={() => handleViewInvoice(invoice)}
-                      style={{
-                        padding: '6px 12px',
-                        background: '#007bff',
-                        color: '#fff',
-                        border: 'none',
-                        borderRadius: '4px',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '4px',
-                        marginRight: '8px',
-                      }}
-                    >
-                      <FiEye size={14} /> View
-                    </button>
+    {/* VIEW */}
+    <button
+      onClick={() => handleViewInvoice(invoice)}
+      style={{
+        minWidth: "90px",
+        height: "40px",
+        padding: "0 16px",
+        background: "linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)",
+        color: "#fff",
+        border: "none",
+        borderRadius: "10px",
+        cursor: "pointer",
+        fontWeight: "700",
+        fontSize: "13px",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: "8px",
+        boxShadow: "0 4px 12px rgba(59,130,246,0.25)",
+        transition: "all 0.2s ease",
+      }}
+      onMouseEnter={(e) => {
+        e.target.style.transform = "translateY(-1px)";
+      }}
+      onMouseLeave={(e) => {
+        e.target.style.transform = "translateY(0)";
+      }}
+    >
+      👁 View
+    </button>
 
-                    <button
-                      onClick={() => handleVerify(invoice, 'reject')}
-                      style={{
-                        padding: '6px 12px',
-                        background: '#dc3545',
-                        color: '#fff',
-                        border: 'none',
-                        borderRadius: '4px',
-                        cursor: 'pointer',
-                      }}
-                    >
-                      <FiX /> Reject
-                    </button>
-                  </td>
+    {/* REJECT */}
+    <button
+      onClick={() => handleVerify(invoice, "reject")}
+      style={{
+        minWidth: "105px",
+        height: "40px",
+        padding: "0 16px",
+        background: "linear-gradient(135deg, #ef4444 0%, #dc2626 100%)",
+        color: "#fff",
+        border: "none",
+        borderRadius: "10px",
+        cursor: "pointer",
+        fontWeight: "700",
+        fontSize: "13px",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: "8px",
+        boxShadow: "0 4px 12px rgba(239,68,68,0.25)",
+        transition: "all 0.2s ease",
+      }}
+      onMouseEnter={(e) => {
+        e.target.style.transform = "translateY(-1px)";
+      }}
+      onMouseLeave={(e) => {
+        e.target.style.transform = "translateY(0)";
+      }}
+    >
+      <FiX size={15} />
+      Reject
+    </button>
+  </div>
+</td>
                 </tr>
               ))
             )}
@@ -472,77 +535,117 @@ const loadData = async () => {
               </div>
             </div>
 
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: '1fr 1fr',
-                gap: '20px',
-                padding: '0 4px',
-              }}
-            >
-              <div>
-                <label style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 600, display: 'block', marginBottom: '4px' }}>
-                  Customer
-                </label>
-                <div style={{ fontWeight: 600, color: '#334155', fontSize: '14px' }}>
-                  {selectedInvoice?.customer?.name || selectedInvoice?.customerName}
-                </div>
-              </div>
+           <div style={{
+  background: "#f8fafc",
+  padding: "20px",
+  borderRadius: "24px",
+  fontFamily: "'Inter', sans-serif",
+  boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.05)"
+}}>
+  
+  {/* TOP SECTION: ENTITY NAMES */}
+  <div style={{ 
+    display: "flex", 
+    justifyContent: "space-between", 
+    marginBottom: "24px",
+    padding: "0 8px"
+  }}>
+    <div style={{ width: "45%" }}>
+      <p style={{ margin: 0, fontSize: "11px", color: "#64748b", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.05em" }}>Customer</p>
+      <h3 style={{ margin: "4px 0 0", fontSize: "16px", color: "#1e293b", fontWeight: "600" }}>
+        {selectedInvoice?.customer?.name || selectedInvoice?.customerName}
+      </h3>
+    </div>
+    <div style={{ width: "45%", textAlign: "right" }}>
+      <p style={{ margin: 0, fontSize: "11px", color: "#64748b", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.05em" }}>Supplier</p>
+      <h3 style={{ margin: "4px 0 0", fontSize: "16px", color: "#1e293b", fontWeight: "600" }}>
+        {selectedInvoice?.supplier?.supplierName || selectedInvoice?.supplierName}
+      </h3>
+    </div>
+  </div>
 
-              <div>
-                <label style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 600, display: 'block', marginBottom: '4px' }}>
-                  Supplier
-                </label>
-                <div style={{ fontWeight: 600, color: '#334155', fontSize: '14px' }}>
-                  {selectedInvoice?.supplier?.supplierName || selectedInvoice?.supplierName}
-                </div>
-              </div>
+  {/* MIDDLE SECTION: PRIMARY FIGURES */}
+  <div style={{ 
+    background: "#ffffff",
+    borderRadius: "20px",
+    padding: "20px",
+    display: "flex",
+    justifyContent: "space-around",
+    border: "1px solid #e2e8f0",
+    marginBottom: "16px",
+    boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.02)"
+  }}>
+    <div style={{ textAlign: "center" }}>
+      <span style={{ fontSize: "12px", color: "#94a3b8", display: "block", marginBottom: "6px" }}>Invoice Amount
 
-              <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: '16px', marginTop: '4px' }}>
-                <label style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 600, display: 'block', marginBottom: '4px' }}>
-                  Invoice Amount
-                </label>
-                <div style={{ fontWeight: 700, color: '#1e293b', fontSize: '16px' }}>
-                  ₹{selectedInvoice?.invoiceAmount?.toLocaleString()}
-                </div>
-              </div>
+</span>
+      <span style={{ fontSize: "20px", fontWeight: "800", color: "#0f172a" }}>
+        ₹{selectedInvoice?.invoiceAmount?.toLocaleString("en-IN")}
+      </span>
+    </div>
+    <div style={{ width: "1px", background: "#f1f5f9" }}></div>
+    <div style={{ textAlign: "center" }}>
+      <span style={{ fontSize: "12px", color: "#6366f1", display: "block", marginBottom: "6px", fontWeight: "600" }}>Disbursement</span>
+      <span style={{ fontSize: "20px", fontWeight: "800", color: "#6366f1" }}>
+        ₹{selectedInvoice?.disbursementAmount?.toLocaleString("en-IN")}
+      </span>
+    </div>
+  </div>
 
-              <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: '16px', marginTop: '4px' }}>
-                <label style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 600, display: 'block', marginBottom: '4px' }}>
-                  Disbursement
-                </label>
-                <div style={{ fontWeight: 800, color: '#6366f1', fontSize: '16px' }}>
-                  ₹{selectedInvoice?.disbursementAmount?.toLocaleString()}
-                </div>
-              </div>
+  {/* GRID SECTION: PERCENTAGES & LIMITS */}
+  <div style={{
+    display: "grid",
+    gridTemplateColumns: "repeat(3, 1fr)",
+    gap: "12px"
+  }}>
+    {/* Percentage Badges */}
+    {[
+      { label: "ROI", val: selectedInvoice?.roiPercentage, color: "#4f46e5" },
+      { label: "Penal", val: selectedInvoice?.penalCharges, color: "#e11d48" },
+      { label: "Service", val: selectedInvoice?.serviceFee, color: "#10b981" }
+    ].map((item, i) => (
+      <div key={i} style={{ 
+        textAlign: "center", 
+        padding: "12px 8px", 
+        background: "rgba(255, 255, 255, 0.5)", 
+        borderRadius: "16px",
+        border: "1px solid #073768"
+      }}>
+        <div style={{ fontSize: "10px", fontWeight: "700", color: "#94a3b8", marginBottom: "4px" }}>{item.label}</div>
+        <div style={{ fontSize: "14px", fontWeight: "700", color: item.color }}>{item.val}%</div>
+      </div>
+    ))}
 
-              <div style={{ background: '#f5f3ff', padding: '12px', borderRadius: '12px' }}>
-                <label style={{ fontSize: '11px', color: '#6366f1', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>
-                  ROI
-                </label>
-                <div style={{ fontWeight: 700, color: '#4338ca', fontSize: '15px' }}>
-                  {selectedInvoice?.roiPercentage}%
-                </div>
-              </div>
-
-              <div style={{ background: '#fff1f2', padding: '12px', borderRadius: '12px' }}>
-                <label style={{ fontSize: '11px', color: '#e11d48', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>
-                  Penal Charges
-                </label>
-                <div style={{ fontWeight: 700, color: '#be123c', fontSize: '15px' }}>
-                  {selectedInvoice?.penalCharges}%
-                </div>
-              </div>
-
-              <div style={{ background: '#f1fff3', padding: '12px', borderRadius: '12px' }}>
-                <label style={{ fontSize: '11px', color: '#074d31', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>
-                  Service Fee
-                </label>
-                <div style={{ fontWeight: 700, color: '#074d33', fontSize: '15px' }}>
-                  {selectedInvoice?.serviceFee}%
-                </div>
-              </div>
-            </div>
+    {/* Limit Bars (Full Width Spanning) */}
+    <div style={{ 
+      gridColumn: "span 3", 
+      background: "#0c254ae2", 
+      borderRadius: "16px", 
+      padding: "16px",
+      marginTop: "8px",
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "center"
+    }}>
+      <div>
+        <div style={{ fontSize: "10px", color: "#94a3b8", fontWeight: "600" }}>UTILIZED LIMIT</div>
+        <div style={{ fontSize: "15px", color: "#ffffff", fontWeight: "700" }}>
+          ₹{Number(
+  selectedInvoice?.loanAccount?.utilizedLimit || 0
+).toLocaleString("en-IN")}
+        </div>
+      </div>
+      <div style={{ textAlign: "right" }}>
+        <div style={{ fontSize: "10px", color: "#38bdf8", fontWeight: "600" }}>UNUTILIZED</div>
+        <div style={{ fontSize: "15px", color: "#38bdf8", fontWeight: "700" }}>
+       ₹{Number(
+  selectedInvoice?.loanAccount?.unutilizedLimit || 0
+).toLocaleString("en-IN")}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
 
             <div style={{ marginTop: '24px', borderTop: '1px solid #f1f5f9', paddingTop: '20px' }}>
               <label style={{ fontSize: '13px', color: '#475569', fontWeight: 700, display: 'block', marginBottom: '12px' }}>

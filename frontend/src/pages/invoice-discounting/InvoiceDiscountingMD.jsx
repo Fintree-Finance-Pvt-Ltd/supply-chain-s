@@ -512,6 +512,83 @@ const handleViewCustomerInvoices = async (invoice) => {
             </div>
           </div>
 
+
+          {/* UTILIZED LIMIT */}
+<div
+  style={{
+    background: "#fff7ed",
+    padding: "12px",
+    marginBottom: "14px",
+    borderRadius: "12px",
+  }}
+>
+  <label
+    style={{
+      fontSize: "11px",
+      color: "#ea580c",
+      fontWeight: "700",
+      textTransform: "uppercase",
+      display: "block",
+      marginBottom: "2px",
+    }}
+  >
+    Utilized Limit
+  </label>
+
+  <div
+    style={{
+      fontWeight: "700",
+      color: "#c2410c",
+      fontSize: "15px",
+  
+    }}
+  >
+    ₹
+    {Number(
+      selectedInvoice?.utilizedLimit || 0
+    ).toLocaleString("en-IN", {
+      minimumFractionDigits: 2,
+    })}
+  </div>
+</div>
+
+{/* UNUTILIZED LIMIT */}
+<div
+  style={{
+    background: "#ecfeff",
+    padding: "12px",
+    borderRadius: "12px",
+  }}
+>
+  <label
+    style={{
+      fontSize: "11px",
+      color: "#0891b2",
+      fontWeight: "700",
+      textTransform: "uppercase",
+      display: "block",
+      marginBottom: "2px",
+    }}
+  >
+    Unutilized Limit
+  </label>
+
+  <div
+    style={{
+      fontWeight: "700",
+      color: "#0e7490",
+      fontSize: "15px",
+    }}
+  >
+    ₹
+    {Number(
+      selectedInvoice?.unutilizedLimit || 0
+    ).toLocaleString("en-IN", {
+      minimumFractionDigits: 2,
+    })}
+  </div>
+</div>
+
           {/* DOCUMENTS */}
           <div
             style={{
