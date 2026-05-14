@@ -32,6 +32,12 @@ export default function InvoiceDiscountingRM() {
   const [selectedSupplier, setSelectedSupplier] = useState(null);
   const [supplierBankDetails, setSupplierBankDetails] = useState(null);
   const [invoices, setInvoices] = useState([]);
+
+  const [customerLimits, setCustomerLimits] = useState({
+  sectionAmount: 0,
+  utilizedAmount: 0,
+  unutilizedAmount: 0,
+});
   const [formData, setFormData] = useState({
     invoiceNumber: "",
     invoiceDate: "",
@@ -618,6 +624,161 @@ const handleInvoiceUpload = async (e) => {
           Create New Invoice
         </h3>
 
+
+        {/* Customer Limit Details Card */}
+{selectedCustomer && (
+  <div
+    style={{
+      marginBottom: "28px",
+      padding: "24px",
+      borderRadius: "18px",
+      background:
+        "linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)",
+      border: "1px solid #e2e8f0",
+      boxShadow: "0 4px 16px rgba(15, 23, 42, 0.05)",
+    }}
+  >
+    <div
+      style={{
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        marginBottom: "18px",
+      }}
+    >
+      <div>
+        <h4
+          style={{
+            margin: 0,
+            fontSize: "18px",
+            fontWeight: "700",
+            color: "#0f172a",
+          }}
+        >
+          Customer Limit Details
+        </h4>
+
+        <p
+          style={{
+            margin: "4px 0 0",
+            fontSize: "13px",
+            color: "#64748b",
+          }}
+        >
+          {selectedCustomer.companyName || selectedCustomer.name}
+        </p>
+      </div>
+    </div>
+
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: "repeat(3, 1fr)",
+        gap: "18px",
+      }}
+    >
+      {/* Section Amount */}
+      <div
+        style={{
+          padding: "20px",
+          borderRadius: "16px",
+          background: "#eff6ff",
+          border: "1px solid #bfdbfe",
+        }}
+      >
+        <div
+          style={{
+            fontSize: "13px",
+            color: "#1d4ed8",
+            marginBottom: "8px",
+            fontWeight: "600",
+            textTransform: "uppercase",
+            letterSpacing: "0.04em",
+          }}
+        >
+          Section Amount
+        </div>
+
+        <div
+          style={{
+            fontSize: "28px",
+            fontWeight: "800",
+            color: "#1e3a8a",
+          }}
+        >
+          ₹ {formatINR(customerLimits.sectionAmount)}
+        </div>
+      </div>
+
+      {/* Utilized */}
+      <div
+        style={{
+          padding: "20px",
+          borderRadius: "16px",
+          background: "#fef2f2",
+          border: "1px solid #fecaca",
+        }}
+      >
+        <div
+          style={{
+            fontSize: "13px",
+            color: "#dc2626",
+            marginBottom: "8px",
+            fontWeight: "600",
+            textTransform: "uppercase",
+            letterSpacing: "0.04em",
+          }}
+        >
+          Utilized
+        </div>
+
+        <div
+          style={{
+            fontSize: "28px",
+            fontWeight: "800",
+            color: "#991b1b",
+          }}
+        >
+          ₹ {formatINR(customerLimits.utilizedAmount)}
+        </div>
+      </div>
+
+      {/* Unutilized */}
+      <div
+        style={{
+          padding: "20px",
+          borderRadius: "16px",
+          background: "#ecfdf5",
+          border: "1px solid #bbf7d0",
+        }}
+      >
+        <div
+          style={{
+            fontSize: "13px",
+            color: "#059669",
+            marginBottom: "8px",
+            fontWeight: "600",
+            textTransform: "uppercase",
+            letterSpacing: "0.04em",
+          }}
+        >
+          Unutilized
+        </div>
+
+        <div
+          style={{
+            fontSize: "28px",
+            fontWeight: "800",
+            color: "#065f46",
+          }}
+        >
+          ₹ {formatINR(customerLimits.unutilizedAmount)}
+        </div>
+      </div>
+    </div>
+  </div>
+)}
+
         <div
           style={{
             display: "grid",
@@ -1062,6 +1223,8 @@ const handleInvoiceUpload = async (e) => {
               }}
             />
           </div>
+
+
           <div style={{ gridColumn: "1 / -1", marginTop: "24px" }}>
             <label style={{ fontWeight: "600", fontSize: "14px", color: "#334155", display: "block", marginBottom: "12px" }}>
               Upload Invoice Documents
