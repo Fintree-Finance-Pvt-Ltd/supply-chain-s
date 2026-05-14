@@ -590,6 +590,40 @@ const handleInvoiceUpload = async (e) => {
     }
   };
 
+
+  // ✅ LAN wise invoice date validation days
+const getAllowedInvoiceDays = () => {
+
+  // selected LAN object
+  const selectedLanObj = loanAccounts.find(
+    (lan) => String(lan.id) === String(selectedLAN)
+  );
+
+  // LAN name/id
+  const lanName =
+    selectedLanObj?.lanId?.toUpperCase() || "";
+
+  // FFPL → 90 Days
+  if (lanName.includes("FFPL")) {
+    return 90;
+  }
+
+  // KT → 120 Days
+  if (
+    lanName.includes("KT")
+  ) {
+    return 120;
+  }
+
+  // MF → 40 Days
+  if (lanName.includes("MF")) {
+    return 40;
+  }
+
+  // default
+  return 90;
+};
+
  return (
     <div style={{ 
       padding: "30px", 
@@ -1001,35 +1035,98 @@ const handleInvoiceUpload = async (e) => {
               }}
             />
           </div>
+<div>
+  <label
+    style={{
+      display: "flex",
+      alignItems: "center",
+      marginBottom: "8px",
+      fontWeight: "600",
+      fontSize: "16px",
+      color: "#202b3a"
+    }}
+  >
+    <FiCalendar style={{ marginRight: "8px", color: "#6366f1" }} />
+    Invoice Date
+  </label>
 
-          <div>
-            <label
-              style={{
-                display: "flex",
-                alignItems: "center",
-                marginBottom: "8px",
-                fontWeight: "600",
-                fontSize: "16px",
-                color: "#202b3a"
-              }}
-            >
-              <FiCalendar style={{ marginRight: "8px", color: "#6366f1" }} />
-              Invoice Date
-            </label>
-            <input
-              type="date"
-              name="invoiceDate"
-              value={formData.invoiceDate}
-              onChange={handleInputChange}
-              style={{
-                width: "100%",
-                padding: "12px",
-                border: "1px solid #e2e8f0",
-                borderRadius: "10px",
-                fontSize: "16px",
-              }}
-            />
-          </div>
+  <input
+    type="date"
+    name="invoiceDate"
+    value={formData.invoiceDate}
+    onChange={(e) => {
+
+      const selectedDate = new Date(e.target.value);
+
+      const today = new Date();
+
+      // ✅ dynamic days based on LAN
+      const allowedDays = getAllowedInvoiceDays();
+
+      const minDate = new Date();
+
+      minDate.setDate(today.getDate() - allowedDays);
+
+      // remove time
+      selectedDate.setHours(0,0,0,0);
+      today.setHours(0,0,0,0);
+      minDate.setHours(0,0,0,0);
+
+      // ❌ future date
+      if (selectedDate > today) {
+        toast.error(
+          "Future invoice date is not allowed"
+        );
+        return;
+      }
+
+      // ❌ older than allowed days
+      if (selectedDate < minDate) {
+        toast.error(
+          `Invoice date cannot be older than ${allowedDays} days`
+        );
+        return;
+      }
+
+      handleInputChange(e);
+    }}
+
+    // ✅ dynamic calendar restriction
+    min={
+      new Date(
+        new Date().setDate(
+          new Date().getDate() - getAllowedInvoiceDays()
+        )
+      )
+        .toISOString()
+        .split("T")[0]
+    }
+
+    max={new Date().toISOString().split("T")[0]}
+
+    disabled={!selectedLAN}
+
+    style={{
+      width: "100%",
+      padding: "12px",
+      border: "1px solid #e2e8f0",
+      borderRadius: "10px",
+      fontSize: "16px",
+      background: selectedLAN ? "#fff" : "#f1f5f9",
+    }}
+  />
+
+  <p
+    style={{
+      marginTop: "6px",
+      fontSize: "12px",
+      color: "#64748b",
+    }}
+  >
+    Invoice date must be within last{" "}
+    <strong>{getAllowedInvoiceDays()} days</strong>
+  </p>
+</div>
 
           <div>
             <label

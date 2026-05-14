@@ -458,16 +458,76 @@ export class InvoiceDiscountingService {
       throw new Error("Invalid Loan Account Number (LAN) for this customer");
     }
 
-    const existingInvoice = await this.invoiceRepository.findOne({
-      where: { invoiceNumber: data.invoiceNumber },
-    });
-    if (existingInvoice) {
-      throw new Error("Invoice number already exists");
+    // const existingInvoice = await this.invoiceRepository.findOne({
+    //   where: { invoiceNumber: data.invoiceNumber },
+    // });
+    // if (existingInvoice) {
+    //   throw new Error("Invoice number already exists");
+    // }
+
+// ✅ Find all invoices for same supplier
+// starting with same invoice number
+
+const existingInvoices = await this.invoiceRepository
+  .createQueryBuilder("invoice")
+  .where("invoice.supplierId = :supplierId", {
+    supplierId: data.supplierId,
+  })
+  .andWhere(
+    "(invoice.invoiceNumber = :invoiceNumber OR invoice.invoiceNumber LIKE :likeInvoice)",
+    {
+      invoiceNumber: data.invoiceNumber,
+      likeInvoice: `${data.invoiceNumber}_%`,
+    }
+  )
+  .getMany();
+
+let finalInvoiceNumber = data.invoiceNumber;
+
+//  If already exists
+if (existingInvoices.length > 0) {
+
+  let maxSuffix = 0;
+
+  existingInvoices.forEach((inv) => {
+
+    // exact invoice
+    if (inv.invoiceNumber === data.invoiceNumber) {
+
+      if (maxSuffix < 1) {
+        maxSuffix = 1;
+      }
+
+      return;
     }
 
-    const invoice = this.invoiceRepository.create({
-      ...data,
-      
+    // suffix invoice
+    const regex = new RegExp(
+      `^${data.invoiceNumber}_(\\d+)$`
+    );
+
+    const match = inv.invoiceNumber.match(regex);
+
+    if (match) {
+
+      const suffix = parseInt(match[1]);
+
+      if (suffix > maxSuffix) {
+        maxSuffix = suffix;
+      }
+    }
+  });
+
+  // ✅ Generate next invoice number
+  finalInvoiceNumber =
+    `${data.invoiceNumber}_${maxSuffix + 1}`;
+}
+
+   const invoice = this.invoiceRepository.create({
+  ...data,
+
+  // ✅ auto generated invoice number
+  invoiceNumber: finalInvoiceNumber,
         // ✅ save uploaded invoice path
   invoiceFilePath: data.invoiceFilePath,
       invoiceDate: new Date(data.invoiceDate),
