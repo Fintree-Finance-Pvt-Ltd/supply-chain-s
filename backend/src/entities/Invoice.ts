@@ -45,6 +45,13 @@ sanctionAmount: number;
   @Column({ type: 'decimal', precision: 15, scale: 2, nullable: true })
   disbursementAmount: number;
 
+  // Limit utilization tracking (persisted per invoice; utilized counts only after disbursement)
+  @Column({ type: 'decimal', precision: 15, scale: 2, nullable: true })
+  utilizedLimit: number;
+
+  @Column({ type: 'decimal', precision: 15, scale: 2, nullable: true })
+  unutilizedLimit: number;
+
   @Column({ type: 'date', nullable: true })
   dueDate: Date;
 

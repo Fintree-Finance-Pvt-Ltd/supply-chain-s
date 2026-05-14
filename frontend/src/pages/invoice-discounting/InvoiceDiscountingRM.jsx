@@ -38,6 +38,9 @@ export default function InvoiceDiscountingRM() {
   utilizedAmount: 0,
   unutilizedAmount: 0,
 });
+
+  
+
   const [formData, setFormData] = useState({
     invoiceNumber: "",
     invoiceDate: "",
@@ -46,6 +49,7 @@ export default function InvoiceDiscountingRM() {
     roiPercentage: "",
     penalCharges: "",
     serviceFee: "",
+    sanctionAmount: "",
   });
 
   useEffect(() => {
@@ -201,7 +205,8 @@ const handleLANChange = async (lanId) => {
             ...prev,
             roiPercentage: ratesResponse.data.data.roi || '',
               penalCharges: ratesResponse.data.data.penalCharges || '',
-            serviceFee: ratesResponse.data.data.serviceFee || ''
+            serviceFee: ratesResponse.data.data.serviceFee || '',
+            sanctionAmount: ratesResponse.data.data.sanctionAmount || '',
           }));
         }
       } catch (ratesError) {
@@ -342,6 +347,7 @@ const handleLANChange = async (lanId) => {
           roiPercentage: "",
           penalCharges: "",
           serviceFee: "",
+          sanctionAmount: "",
         });
         setSelectedCustomer(null);
         setSelectedLAN("");
@@ -371,6 +377,8 @@ const handleLANChange = async (lanId) => {
           roiPercentage: "",
           penalCharges: "",
           serviceFee: "",
+          sanctionAmount: "",
+
         });
         setSelectedCustomer(null);
         setSelectedLAN("");
@@ -730,7 +738,7 @@ const getAllowedInvoiceDays = () => {
             letterSpacing: "0.04em",
           }}
         >
-          Section Amount
+          Sanction Amount
         </div>
 
         <div
@@ -740,7 +748,8 @@ const getAllowedInvoiceDays = () => {
             color: "#1e3a8a",
           }}
         >
-          ₹ {formatINR(customerLimits.sectionAmount)}
+        
+          ₹ {formatINR(formData.sanctionAmount)}
         </div>
       </div>
 
@@ -1303,6 +1312,7 @@ const getAllowedInvoiceDays = () => {
               <FiDollarSign style={{ marginRight: "8px", color: "#6366f1" }} />
              Service Fee
             </label>
+            
             <input
               type="number"
               name="serviceFee"
