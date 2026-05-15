@@ -282,6 +282,49 @@ const handleLANChange = async (lanId) => {
     }
   };
 
+
+const handleInvoiceNumberChange = async (e) => {
+  const value = e.target.value;
+
+  // set invoice number first
+  setFormData((prev) => ({
+    ...prev,
+    invoiceNumber: value,
+  }));
+
+  if (!value) return;
+
+  try {
+    console.log("Searching invoice:", value);
+
+    // find existing invoice
+    const existingInvoice = invoices.find(
+      (inv) =>
+        inv.invoiceNumber?.toLowerCase().trim() ===
+        value.toLowerCase().trim()
+    );
+
+    console.log("Existing Invoice:", existingInvoice);
+
+    // if invoice exists then auto fill
+    if (existingInvoice) {
+      setFormData((prev) => ({
+        ...prev,
+        invoiceNumber: existingInvoice.invoiceNumber || "",
+        invoiceDate: existingInvoice.invoiceDate
+          ? existingInvoice.invoiceDate.split("T")[0]
+          : "",
+        invoiceAmount: existingInvoice.invoiceAmount || "",
+      }));
+
+      toast.info("Invoice details loaded");
+    }
+  } catch (error) {
+    console.error("Error fetching invoice:", error);
+  }
+};
+
+
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData({ ...formData, [name]: value });
@@ -1072,7 +1115,7 @@ const getAllowedInvoiceDays = () => {
               type="text"
               name="invoiceNumber"
               value={formData.invoiceNumber}
-              onChange={handleInputChange}
+              onChange={handleInvoiceNumberChange}
               placeholder="INV-001"
               style={{
                 width: "100%",
@@ -1316,7 +1359,7 @@ const getAllowedInvoiceDays = () => {
  
       const availableLimit = Number(
 
-        customerLimits.unutilizedAmount || 0
+        formData.unutilizedAmount || 0
 
       );
  
