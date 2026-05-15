@@ -23,6 +23,7 @@ export default function InvoiceDiscountingOPS1() {
   const [showDisbursementModal, setShowDisbursementModal] = useState(false);
   const [actionType, setActionType] = useState("");
   const [remarks, setRemarks] = useState("");
+  const [handledInvoices, setHandledInvoices] = useState([]);
   const [showViewModal, setShowViewModal] = useState(false);
   const [disbursementData, setDisbursementData] = useState({
     disbursementUtr: "",
@@ -35,30 +36,50 @@ export default function InvoiceDiscountingOPS1() {
     loadData();
   }, []);
 
-  const loadData = async () => {
-    try {
-      setLoading(true);
-      const [pendingRes, disbursementRes] = await Promise.all([
-        workflowService.getOPS1PendingInvoices(),
-        workflowService.getDisbursementEntryInvoices(),
-      ]);
-      // Backend returns { success: true, data: [...] }
-      setPendingInvoices(
-        Array.isArray(pendingRes?.data?.data) ? pendingRes.data.data : [],
-      );
-      setDisbursementInvoices(
-        Array.isArray(disbursementRes?.data?.data)
-          ? disbursementRes.data.data
-          : [],
-      );
-    } catch (error) {
-      console.error("Error loading data:", error);
-      setPendingInvoices([]);
-      setDisbursementInvoices([]);
-    } finally {
-      setLoading(false);
-    }
-  };
+const loadData = async () => {
+  try {
+    setLoading(true);
+
+    const [
+      pendingRes,
+      disbursementRes,
+      activeInvoicesResponse,
+    ] = await Promise.all([
+      workflowService.getOPS1PendingInvoices(),
+      workflowService.getDisbursementEntryInvoices(),
+      workflowService.getActiveInvoices(),
+    ]);
+
+    setPendingInvoices(
+      Array.isArray(pendingRes?.data?.data)
+        ? pendingRes.data.data
+        : []
+    );
+
+    setDisbursementInvoices(
+      Array.isArray(disbursementRes?.data?.data)
+        ? disbursementRes.data.data
+        : []
+    );
+
+    // ✅ Active invoices
+    setHandledInvoices(
+      activeInvoicesResponse?.data?.data ||
+      activeInvoicesResponse?.data ||
+      []
+    );
+
+  } catch (error) {
+    console.error("Error loading data:", error);
+
+    setPendingInvoices([]);
+    setDisbursementInvoices([]);
+    setHandledInvoices([]);
+
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleVerify = (invoice, type) => {
     setSelectedInvoice(invoice);
@@ -789,6 +810,51 @@ export default function InvoiceDiscountingOPS1() {
             {disbursementInvoices.length}
           </span>
         </button>
+
+
+        <button
+  onClick={() => setActiveTab("active")}
+  style={{
+    padding: "12px 24px",
+    background: activeTab === "active" ? "#fff" : "transparent",
+    color: activeTab === "active" ? "#6366f1" : "#64748b",
+    border: "1px solid #e2e8f0",
+    borderBottom:
+      activeTab === "active"
+        ? "3px solid #6366f1"
+        : "1px solid transparent",
+    borderRadius: "12px 12px 0 0",
+    cursor: "pointer",
+    fontWeight: "600",
+    fontSize: "14px",
+    transition: "all 0.2s ease",
+    marginBottom: "-1px",
+    zIndex: activeTab === "active" ? 2 : 1,
+    display: "flex",
+    alignItems: "center",
+    gap: "8px",
+  }}
+>
+  Active Invoices
+  <span
+    style={{
+      background:
+        activeTab === "active"
+          ? "#eef2ff"
+          : "#f1f5f9",
+      color:
+        activeTab === "active"
+          ? "#6366f1"
+          : "#94a3b8",
+      padding: "2px 8px",
+      borderRadius: "20px",
+      fontSize: "12px",
+      fontWeight: "700",
+    }}
+  >
+    {handledInvoices.length}
+  </span>
+</button>
       </div>
 
       {/* Content Container */}
@@ -805,9 +871,25 @@ export default function InvoiceDiscountingOPS1() {
         }}
       >
         <div style={{ padding: "24px" }}>
-          {activeTab === "pending"
-            ? renderInvoiceTable(pendingInvoices, true, false)
-            : renderInvoiceTable(disbursementInvoices, true, true)}
+         {activeTab === "pending" ? (
+  renderInvoiceTable(
+    pendingInvoices,
+    true,
+    false
+  )
+) : activeTab === "disbursement" ? (
+  renderInvoiceTable(
+    disbursementInvoices,
+    true,
+    true
+  )
+) : (
+  renderInvoiceTable(
+    handledInvoices,
+    false,
+    false
+  )
+)}
         </div>
       </div>
 

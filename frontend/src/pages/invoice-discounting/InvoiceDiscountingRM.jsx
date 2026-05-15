@@ -1357,11 +1357,53 @@ const getAllowedInvoiceDays = () => {
 
       const enteredAmount = Number(value || 0);
  
-      const availableLimit = Number(
+    const availableLimit = Number(
+  formData.unutilizedAmount || formData.sanctionAmount || 0
+);
 
-        formData.unutilizedAmount || 0
+// ✅ existing utilized disbursement against same invoice
+const existingDisbursement = invoices
+  .filter(
+    (inv) =>
+      (
+        inv.invoiceNumber === formData.invoiceNumber ||
+        inv.invoiceNumber?.startsWith(
+          `${formData.invoiceNumber}_`
+        )
+      ) &&
+      String(inv.supplier?.id || inv.supplierId) ===
+        String(selectedSupplier?.id)
+  )
+  .reduce(
+    (sum, inv) =>
+      sum + Number(inv.disbursementAmount || 0),
+    0
+  );
 
-      );
+// ✅ current invoice amount
+const invoiceAmount = Number(
+  formData.invoiceAmount || 0
+);
+
+// ✅ total after current entry
+const totalDisbursement =
+  existingDisbursement + enteredAmount;
+
+// ❌ invoice amount exceeded
+if (totalDisbursement > invoiceAmount) {
+
+  toast.error(
+    `Total disbursement cannot exceed invoice amount.
+    
+Already Utilized: ₹${formatINR(existingDisbursement)}
+Invoice Amount: ₹${formatINR(invoiceAmount)}
+Remaining Allowed: ₹${formatINR(
+      invoiceAmount - existingDisbursement
+    )}`
+  );
+
+  return;
+}
  
       // ❌ validation
 
