@@ -16,6 +16,7 @@ import { CoApplicant } from '../entities/CoApplicant';
 import { Document } from '../entities/Document';
 import { KycDetail } from '../entities/KycDetail';
 import { CreditSanction } from '../entities/CreditSanction';
+import { CreditNotepad } from '../entities/CreditNotepad';
 import { PostSanction } from '../entities/PostSanction';
 import { OperationsCheck } from '../entities/OperationsCheck';
 import { CaseStatusHistory } from '../entities/CaseStatusHistory';
@@ -56,6 +57,7 @@ const entities = [
   Document,
   KycDetail,
   CreditSanction,
+  CreditNotepad,
   PostSanction,
   OperationsCheck,
   CaseStatusHistory,

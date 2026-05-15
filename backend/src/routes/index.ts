@@ -5,7 +5,7 @@ import roleRoutes from './role.routes';
 import customersRoutes from './customer.routes';
 import customerAPKRoutes from './customerAPK.routes';
 import kycRoutes from './kyc.routes';
-import creditRoutes, { creditController } from './credit.routes';
+import creditRoutes, { creditController, creditNotepadRouter } from './credit.routes';
 import approvalRoutes from './approval.routes';
 import documentRoutes from './document.routes';
 import operationsRoutes from './operations.routes';
@@ -33,6 +33,7 @@ router.use('/lms-customers', customerAPKRoutes);  // Customer APK routes (custom
 
 router.use('/kyc', kycRoutes);
 router.use('/credit', creditRoutes);
+router.use('/credit-notepads', creditNotepadRouter);
 
 // Dedicated API for fetching all sanctions for a customer (for non-CREDIT_L1 roles)
 // This API returns all sanctions without filtering by partner active status

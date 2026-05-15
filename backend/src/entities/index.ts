@@ -9,6 +9,7 @@ export { CoApplicant } from './CoApplicant';
 export { Document } from './Document';
 export { KycDetail } from './KycDetail';
 export { CreditSanction } from './CreditSanction';
+export { CreditNotepad, CREDIT_NOTEPAD_SECTIONS } from './CreditNotepad';
 export { PostSanction } from './PostSanction';
 export { OperationsCheck } from './OperationsCheck';
 export { CaseStatusHistory } from './CaseStatusHistory';

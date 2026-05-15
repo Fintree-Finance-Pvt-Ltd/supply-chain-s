@@ -38,6 +38,38 @@
   .input-field:disabled {
     @apply bg-gray-50 cursor-not-allowed opacity-60;
   }
+
+  .rich-note-editor {
+    @apply min-h-[140px] max-h-[420px] overflow-auto text-sm leading-6;
+  }
+
+  .rich-note-editor:empty::before {
+    content: attr(data-placeholder);
+    @apply text-gray-400;
+  }
+
+  .rich-note-editor table {
+    @apply my-2 border-collapse text-sm;
+    max-width: 100%;
+  }
+
+  .rich-note-editor th,
+  .rich-note-editor td {
+    @apply border border-gray-300 px-2 py-1 align-top;
+    min-width: 80px;
+  }
+
+  .rich-note-editor th {
+    @apply bg-gray-100 font-semibold;
+  }
+
+  .rich-note-editor ul {
+    @apply ml-5 list-disc;
+  }
+
+  .rich-note-editor ol {
+    @apply ml-5 list-decimal;
+  }
   
   /* Cards */
   .card {

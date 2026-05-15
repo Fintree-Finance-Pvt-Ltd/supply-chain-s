@@ -7,6 +7,7 @@ import { customerService } from "../../services/customerService";
 import { partnerService } from "../../services/partnerService";
 import api from "../../services/api";
 import ApprovalTimeline from "../../components/ApprovalTimeline";
+import CreditNotepad from "../../components/CreditNotepad";
 import LoadingSpinner from "../../components/LoadingSpinner";
 import CustomerFullDetails from "../../components/CustomerFullDetails";
 import { formatDate } from "../../utils/format";
@@ -917,6 +918,14 @@ const ApprovalScreen = () => {
               )}
             </div>
           )}
+
+          <CreditNotepad
+            customerId={id}
+            sanctions={partnerSanctions.map((sanction) => ({
+              key: sanction.partner,
+              name: sanction.partner,
+            }))}
+          />
 
           <div className="card">
             <h2 className="text-xl font-semibold text-gray-900 mb-4">

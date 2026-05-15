@@ -5,11 +5,20 @@ import { roleMiddleware } from '../middlewares/role.middleware';
 import { ROLES } from '../config/constants';
 
 const router = Router();
+const creditNotepadRouter = Router();
 const creditController = new CreditController();
 
-export { creditController };
+export { creditController, creditNotepadRouter };
+
+const allowedNotepadRoles = [
+  ROLES.CREDIT_TEAM_L1,
+  ROLES.CREDIT_TEAM_L2,
+  ROLES.CEO,
+];
 
 router.use(authMiddleware);
+creditNotepadRouter.use(authMiddleware);
+creditNotepadRouter.use(roleMiddleware(allowedNotepadRoles));
 
 // Credit team routes
 router.post(
@@ -39,6 +48,16 @@ router.get(
   '/sanctions/:customerId',
   roleMiddleware([ROLES.CREDIT_TEAM_L1, ROLES.CREDIT_TEAM_L2, ROLES.CEO, ROLES.MD, ROLES.RELATIONSHIP_MANAGER]),
   creditController.getSanctionsByCustomerId
+);
+
+creditNotepadRouter.get(
+  '/customers/:customerId',
+  creditController.getCustomerNotepads,
+);
+
+creditNotepadRouter.put(
+  '/customers/:customerId/:section',
+  creditController.updateCustomerNotepad,
 );
 
 export default router;

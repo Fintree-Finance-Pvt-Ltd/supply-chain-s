@@ -25,6 +25,7 @@ import { workflowService } from "../../services/workflowService";
 import { documentService } from "../../services/documentService";
 import StatusBadge from "../../components/StatusBadge";
 import ApprovalTimeline from "../../components/ApprovalTimeline";
+import CreditNotepad from "../../components/CreditNotepad";
 import CustomerFullDetails from "../../components/CustomerFullDetails";
 import { submitCase } from "../../store/slices/caseSlice";
 
@@ -1153,6 +1154,14 @@ const canEditSanctionAmount = () => {
               disabled={readOnly}
             />
           </div>
+
+          <CreditNotepad
+            customerId={id}
+            sanctions={PARTNERS.map((partner) => ({
+              key: normalizePartnerCode(partner.code || partner.id),
+              name: partner.name || partner.code || partner.id,
+            }))}
+          />
         </div>
 
         <div className="space-y-6">

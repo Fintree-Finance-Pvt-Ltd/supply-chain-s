@@ -163,6 +163,70 @@ export class CreditController {
       });
     }
   };
+
+  getCustomerNotepads = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const customerId = Number(req.params.customerId);
+      const notes = await this.creditService.getCustomerNotepads(
+        customerId,
+      );
+
+      res.json({
+        success: true,
+        data: notes,
+      });
+    } catch (error: any) {
+      res.status(error.message === 'Customer not found' ? 404 : 400).json({
+        success: false,
+        message: error.message || 'Failed to fetch credit notepad',
+      });
+    }
+  };
+
+  updateCustomerNotepad = async (
+    req: Request,
+    res: Response,
+  ): Promise<void> => {
+    try {
+      const customerId = Number(req.params.customerId);
+      const userId = req.userId;
+
+      if (!userId) {
+        res.status(401).json({
+          success: false,
+          message: 'Authentication required',
+        });
+        return;
+      }
+
+      const note = await this.creditService.upsertCustomerNotepad(
+        customerId,
+        req.params.section,
+        req.body?.content,
+        req.body?.sanctionKey,
+        userId,
+        req.userRoles || [],
+      );
+
+      res.json({
+        success: true,
+        data: note,
+        message: 'Credit notepad saved',
+      });
+    } catch (error: any) {
+      const statusCode =
+        error.message === 'Customer not found'
+          ? 404
+          : error.message?.includes('permission')
+            ? 403
+            : 400;
+
+      res.status(statusCode).json({
+        success: false,
+        message: error.message || 'Failed to save credit notepad',
+      });
+    }
+  };
 }
 
 
