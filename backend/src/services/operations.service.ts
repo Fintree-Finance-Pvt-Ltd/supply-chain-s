@@ -270,6 +270,40 @@ export class OperationsService {
         record.lmsResponse = JSON.stringify(lmsResponse);
         await this.repaymentUploadRepository.save(record);
 
+await AppDataSource.query(
+  `
+  UPDATE loan_accounts
+  SET
+
+    utilizedLimit =
+      GREATEST(
+        COALESCE(utilizedLimit, 0) - ?,
+        0
+      )
+
+  WHERE lanId = ?
+  `,
+  [
+    Number(record.collectionAmount || 0),
+    record.lan,
+  ]
+);
+
+// ✅ second query
+await AppDataSource.query(
+  `
+  UPDATE loan_accounts
+  SET
+    unutilizedLimit =
+      COALESCE(sanctionedAmount, 0) -
+      COALESCE(utilizedLimit, 0)
+
+  WHERE lanId = ?
+  `,
+  [record.lan]
+);
+
+
         console.log(`[Repayment Upload] Success - LAN: ${record.lan}, UTR: ${record.collectionUtr}, Timestamp: ${timestamp}`);
 
         results.push({
