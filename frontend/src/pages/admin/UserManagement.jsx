@@ -26,6 +26,7 @@ const UserManagement = () => {
     name: '',
     email: '',
     mobile: '',
+    password: '',
     selectedRoles: [],
   })
 
@@ -56,8 +57,21 @@ const UserManagement = () => {
     }
     
     try {
+
       // First, update user basic info (exclude selectedRoles from the data)
       const { selectedRoles, ...userData } = editFormData
+      // ✅ remove empty password
+if (
+  !userData.password ||
+  userData.password.trim() === ""
+) {
+  delete userData.password;
+}
+
+console.log(
+  "FINAL PAYLOAD:",
+  userData
+);
       await dispatch(updateUser({ id: selectedUser.id, data: userData })).unwrap()
       
       // Then handle role changes - compare current roles with selected roles
@@ -117,6 +131,7 @@ const UserManagement = () => {
       name: user.name,
       email: user.email,
       mobile: user.mobile || '',
+      password: "", // Leave password blank for editing
       selectedRoles: currentRoleIds,
     })
     setShowEditModal(true)
@@ -341,6 +356,15 @@ const UserManagement = () => {
                     type="tel"
                     value={editFormData.mobile}
                     onChange={(e) => setEditFormData({ ...editFormData, mobile: e.target.value })}
+                    className="input-field"
+                  />
+                </div>
+                 <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Password</label>
+                  <input
+                    type="password"
+                    value={editFormData.password}
+                    onChange={(e) => setEditFormData({ ...editFormData, password: e.target.value })}
                     className="input-field"
                   />
                 </div>

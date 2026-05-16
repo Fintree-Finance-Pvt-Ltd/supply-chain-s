@@ -92,7 +92,49 @@ export class UserService {
     if (data.isActive !== undefined) user.isActive = data.isActive;
     if (data.defaultRole !== undefined) user.defaultRole = data.defaultRole;
 
-    return await this.userRepository.save(user);
+    if (
+      typeof data.password === 'string' &&
+      data.password.trim() !== ''
+    ) {
+      const nextPasswordTrimmed = data.password.trim();
+      const nextHashedPassword = await hashPassword(nextPasswordTrimmed);
+
+      // Debug: confirm password update path + hashed value is generated
+      console.log('[UserService.updateUser] updating password', {
+        id,
+        passwordLength: nextPasswordTrimmed.length,
+        hashedLength: nextHashedPassword.length,
+        hashedPrefix: nextHashedPassword.slice(0, 10),
+      });
+
+      user.password = nextHashedPassword;
+    } else {
+      console.log('[UserService.updateUser] password not updated (empty/missing)', { id });
+    }
+    // return await this.userRepository.save(user);
+    await this.userRepository.update(
+  { id },
+  {
+    name: user.name,
+    email: user.email,
+    mobile: user.mobile,
+    isActive: user.isActive,
+    defaultRole: user.defaultRole,
+    password: user.password, // ✅ force update
+  }
+);
+
+const updatedUser =
+  await this.userRepository.findOne({
+    where: { id }
+  });
+
+console.log(
+  "UPDATED PASSWORD:",
+  updatedUser?.password
+);
+
+return updatedUser!;
   }
 
   async deleteUser(id: number): Promise<void> {

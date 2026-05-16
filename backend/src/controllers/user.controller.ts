@@ -92,7 +92,7 @@ export class UserController {
   updateUser = async (req: Request, res: Response): Promise<void> => {
     try {
       const { id } = req.params;
-      const { name, email, mobile, isActive, defaultRole } = req.body;
+      const { name, email, mobile, isActive, defaultRole, password } = req.body;
 
       if (!id) {
         res.status(400).json({
@@ -108,6 +108,7 @@ export class UserController {
         mobile,
         isActive,
         defaultRole,
+        password,
       });
 
       const { password: _, ...userWithoutPassword } = user;
