@@ -458,15 +458,6 @@ export class InvoiceDiscountingService {
       throw new Error("Invalid Loan Account Number (LAN) for this customer");
     }
 
-    // const existingInvoice = await this.invoiceRepository.findOne({
-    //   where: { invoiceNumber: data.invoiceNumber },
-    // });
-    // if (existingInvoice) {
-    //   throw new Error("Invoice number already exists");
-    // }
-
-// ✅ Find all invoices for same supplier
-// starting with same invoice number
 
 const existingInvoices = await this.invoiceRepository
   .createQueryBuilder("invoice")
@@ -474,10 +465,17 @@ const existingInvoices = await this.invoiceRepository
     supplierId: data.supplierId,
   })
   .andWhere(
-    "(invoice.invoiceNumber = :invoiceNumber OR invoice.invoiceNumber LIKE :likeInvoice)",
+    `(invoice.invoiceNumber = :invoiceNumber OR invoice.invoiceNumber LIKE :likeInvoice)`,
     {
       invoiceNumber: data.invoiceNumber,
       likeInvoice: `${data.invoiceNumber}_%`,
+    }
+  )
+  // ✅ same invoice date only
+  .andWhere(
+    "DATE(invoice.invoiceDate) = DATE(:invoiceDate)",
+    {
+      invoiceDate: data.invoiceDate,
     }
   )
   .getMany();

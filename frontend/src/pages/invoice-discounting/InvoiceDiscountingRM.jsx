@@ -281,48 +281,123 @@ const handleLANChange = async (lanId) => {
       }
     }
   };
+  const fetchInvoiceDetails = (
+  invoiceNumber,
+  invoiceDate
+) => {
 
+  // ❌ both required
+  if (
+    !invoiceNumber ||
+    !invoiceDate
+  ) {
+    return;
+  }
 
-const handleInvoiceNumberChange = async (e) => {
+  const existingInvoice =
+    invoices.find(
+      (inv) =>
+        // same invoice number
+        inv.invoiceNumber ?.toLowerCase() ?.trim() ===
+        invoiceNumber
+          ?.toLowerCase()
+          ?.trim()
+
+        &&
+
+        // same invoice date
+        inv.invoiceDate
+          ?.split("T")[0] ===
+        invoiceDate
+    );
+
+  console.log(
+    "Existing Invoice:",
+    existingInvoice
+  );
+
+  // ✅ auto fill amount
+  if (existingInvoice) {
+
+    setFormData((prev) => ({
+      ...prev,
+         invoiceAmount:
+        existingInvoice.invoiceAmount || "",
+    }));
+
+    toast.info(
+      "Invoice amount loaded"
+    );
+
+  } else {
+
+    // clear amount
+    setFormData((prev) => ({
+      ...prev,
+
+      invoiceAmount: "",
+    }));
+  }
+};
+
+const handleInvoiceNumberChange = (e) => {
   const value = e.target.value;
 
-  // set invoice number first
   setFormData((prev) => ({
     ...prev,
     invoiceNumber: value,
   }));
 
-  if (!value) return;
-
-  try {
-    console.log("Searching invoice:", value);
-
-    // find existing invoice
-    const existingInvoice = invoices.find(
-      (inv) =>
-        inv.invoiceNumber?.toLowerCase().trim() ===
-        value.toLowerCase().trim()
-    );
-
-    console.log("Existing Invoice:", existingInvoice);
-
-    // if invoice exists then auto fill
-    if (existingInvoice) {
-      setFormData((prev) => ({
-        ...prev,
-        invoiceNumber: existingInvoice.invoiceNumber || "",
-        invoiceDate: existingInvoice.invoiceDate
-          ? existingInvoice.invoiceDate.split("T")[0]
-          : "",
-        invoiceAmount: existingInvoice.invoiceAmount || "",
-      }));
-
-      toast.info("Invoice details loaded");
-    }
-  } catch (error) {
-    console.error("Error fetching invoice:", error);
-  }
+  // ✅ fetch using latest values
+  fetchInvoiceDetails(
+    value,
+    formData.invoiceDate
+  );
 };
+
+// const handleInvoiceNumberChange = async (e) => {
+//   const value = e.target.value;
+
+//   // set invoice number first
+//   setFormData((prev) => ({
+//     ...prev,
+//     invoiceNumber: value,
+//   }));
+
+//   if (!value) return;
+
+//   try {
+//     console.log("Searching invoice:", value);
+
+//     // find existing invoice
+//     // const existingInvoice = invoices.find(
+//     //   (inv) =>
+//     //     inv.invoiceNumber?.toLowerCase().trim() ===
+//     //     value.toLowerCase().trim()
+//     // );
+
+
+
+//     console.log("Existing Invoice:", existingInvoice);
+
+//     // if invoice exists then auto fill
+//     if (existingInvoice) {
+//       setFormData((prev) => ({
+//         ...prev,
+//         invoiceNumber: existingInvoice.invoiceNumber || "",
+//         invoiceDate: existingInvoice.invoiceDate
+//           ? existingInvoice.invoiceDate.split("T")[0]
+//           : "",
+//         invoiceAmount: existingInvoice.invoiceAmount || "",
+//       }));
+
+//       toast.info("Invoice details loaded");
+//     }
+//   } catch (error) {
+//     console.error("Error fetching invoice:", error);
+//   }
+// };
+
 
 
   const handleInputChange = (e) => {
@@ -1146,8 +1221,8 @@ const getAllowedInvoiceDays = () => {
     name="invoiceDate"
     value={formData.invoiceDate}
     onChange={(e) => {
-
-      const selectedDate = new Date(e.target.value);
+      const selectedValue = e.target.value;
+      const selectedDate = new Date(selectedValue);
 
       const today = new Date();
 
@@ -1178,9 +1253,94 @@ const getAllowedInvoiceDays = () => {
         );
         return;
       }
+  // ✅ update state FIRST
+  setFormData((prev) => {
 
-      handleInputChange(e);
-    }}
+    const updatedData = {
+      ...prev,
+
+      invoiceDate: selectedValue,
+    };
+
+    // ✅ fetch invoice after state update
+    const existingInvoice =
+      invoices.find(
+        (inv) =>
+
+          inv.invoiceNumber
+            ?.toLowerCase()
+            ?.trim() ===
+
+          updatedData.invoiceNumber
+            ?.toLowerCase()
+            ?.trim()
+
+          &&
+
+          inv.invoiceDate
+            ?.split("T")[0] ===
+          selectedValue
+      );
+
+    // ✅ auto fill invoice amount
+    if (existingInvoice) {
+
+      updatedData.invoiceAmount =
+        existingInvoice.invoiceAmount || "";
+
+      toast.info(
+        "Invoice amount loaded"
+      );
+
+    } else {
+
+      updatedData.invoiceAmount = "";
+    }
+
+    return updatedData;
+  });
+
+}}
+//     onChange={(e) => {
+//       fetchInvoiceDetails(
+//   formData.invoiceNumber,
+//   e.target.value
+// );
+
+//       const selectedDate = new Date(e.target.value);
+
+//       const today = new Date();
+
+//       // ✅ dynamic days based on LAN
+//       const allowedDays = getAllowedInvoiceDays();
+
+//       const minDate = new Date();
+
+//       minDate.setDate(today.getDate() - allowedDays);
+
+//       // remove time
+//       selectedDate.setHours(0,0,0,0);
+//       today.setHours(0,0,0,0);
+//       minDate.setHours(0,0,0,0);
+
+//       // ❌ future date
+//       if (selectedDate > today) {
+//         toast.error(
+//           "Future invoice date is not allowed"
+//         );
+//         return;
+//       }
+
+//       // ❌ older than allowed days
+//       if (selectedDate < minDate) {
+//         toast.error(
+//           `Invoice date cannot be older than ${allowedDays} days`
+//         );
+//         return;
+//       }
+
+//       handleInputChange(e);
+//     }}
 
     // ✅ dynamic calendar restriction
     min={
@@ -1365,14 +1525,23 @@ const getAllowedInvoiceDays = () => {
 const existingDisbursement = invoices
   .filter(
     (inv) =>
+      // ✅ same invoice number
       (
         inv.invoiceNumber === formData.invoiceNumber ||
         inv.invoiceNumber?.startsWith(
           `${formData.invoiceNumber}_`
         )
       ) &&
+      // ✅ same supplier
       String(inv.supplier?.id || inv.supplierId) ===
         String(selectedSupplier?.id)
+      &&
+      // ✅ same invoice date
+      (
+        inv.invoiceDate
+          ?.split("T")[0] ===
+        formData.invoiceDate
+      )
   )
   .reduce(
     (sum, inv) =>
