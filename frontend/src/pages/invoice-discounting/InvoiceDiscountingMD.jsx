@@ -543,12 +543,11 @@ const handleViewCustomerInvoices = async (invoice) => {
   
     }}
   >
-    ₹
-    {Number(
-      selectedInvoice?.utilizedLimit || 0
-    ).toLocaleString("en-IN", {
-      minimumFractionDigits: 2,
-    })}
+    ₹{Number(
+  inv?.loanAccount?.utilizedLimit || 0
+).toLocaleString("en-IN", {
+  minimumFractionDigits: 2,
+})}
   </div>
 </div>
 
@@ -581,11 +580,11 @@ const handleViewCustomerInvoices = async (invoice) => {
     }}
   >
     ₹
-    {Number(
-      selectedInvoice?.unutilizedLimit || 0
-    ).toLocaleString("en-IN", {
-      minimumFractionDigits: 2,
-    })}
+{Number(
+  inv?.loanAccount?.unutilizedLimit || 0
+).toLocaleString("en-IN", {
+  minimumFractionDigits: 2,
+})}
   </div>
 </div>
 
