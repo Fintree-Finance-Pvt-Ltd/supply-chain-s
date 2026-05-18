@@ -398,7 +398,7 @@ const AllCases = () => {
       {showFilterModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-6">
           <div className="w-full max-w-3xl overflow-hidden rounded-xl bg-white shadow-xl">
-            <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4">
+            <div className="flex items-center justify-between  px-5 py-4">
               <div className="flex items-center gap-2">
                 <MdFilterList className="text-xl text-gray-600" />
                 <h3 className="font-semibold text-gray-900">Filter Cases</h3>
@@ -489,7 +489,7 @@ const AllCases = () => {
                 </div>
               </div>
 
-              <label className="mt-5 flex cursor-pointer items-start gap-3 rounded-lg border border-gray-200 bg-gray-50 p-4">
+              <label className="mt-5 flex cursor-pointer items-start gap-3 rounded-lg">
                 <input
                   type="checkbox"
                   checked={draftFilters.showSanctions}
@@ -497,7 +497,7 @@ const AllCases = () => {
                   className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                 />
                 <span>
-                  <span className="block text-sm font-semibold text-gray-900">Show sanctions in table</span>
+                  <span className="block text-sm font-semibold text-gray-900">Show sanctions</span>
                   <span className="mt-1 block text-sm text-gray-500">
                     Adds customer-wise sanction count, partner names, allocated limit, and disbursed amount.
                   </span>
@@ -505,7 +505,7 @@ const AllCases = () => {
               </label>
             </div>
 
-            <div className="flex flex-col-reverse gap-2 border-t border-gray-200 px-5 py-4 sm:flex-row sm:justify-end">
+            <div className="flex flex-col-reverse gap-2 px-5 py-4 sm:flex-row sm:justify-end">
               <button
                 type="button"
                 onClick={clearFilters}
