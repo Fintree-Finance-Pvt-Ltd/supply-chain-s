@@ -45,7 +45,10 @@ const parseDateQuery = (value: unknown, endOfDay = false): Date | undefined => {
  */
 router.get('/dashboard', roleMiddleware([ROLES.SUPERADMIN]), async (req: Request, res: Response) => {
   try {
-    const analytics = await superAdminAnalyticsService.getCompleteAnalytics();
+    const days = req.query.days
+      ? Math.min(parsePositiveInt(req.query.days, 30), 365)
+      : 30;
+    const analytics = await superAdminAnalyticsService.getCompleteAnalytics(days);
     res.json({
       success: true,
       data: analytics,
@@ -705,7 +708,8 @@ router.get('/cases', roleMiddleware([ROLES.SUPERADMIN]), async (req: Request, re
       endDate,
       limit, 
       page,
-      offset
+      offset,
+      includeSanctions
     } = req.query;
 
     const limitNum = parsePositiveInt(limit, 50);
@@ -723,6 +727,7 @@ router.get('/cases', roleMiddleware([ROLES.SUPERADMIN]), async (req: Request, re
       endDate: parseDateQuery(endDate, true),
       limit: limitNum,
       offset: offsetNum,
+      includeSanctions: includeSanctions === 'true' || includeSanctions === '1',
     };
 
     const result = await userPerformanceService.getAllCasesByUsers(filters);

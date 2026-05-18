@@ -6,6 +6,7 @@ import { UserRole } from '../entities/UserRole';
 import { Role } from '../entities/Role';
 import { CaseWorkflow } from '../entities/CaseWorkflow';
 import { Customer } from '../entities/Customer';
+import { LoanAccount } from '../entities/LoanAccount';
 import { Repository } from 'typeorm';
 
 // Stage/steps mapping based on bucket field
@@ -14,6 +15,9 @@ const STAGE_MAPPING: Record<string, string> = {
   'credit_l2': 'credit_l2',
   'ps_l1': 'ps_l1',
   'ps_l2': 'ps_l2',
+  'ops_l1': 'ops_l1',
+  'ops_l2': 'ops_l2',
+  'ops_head': 'ops_head',
   'rm': 'rm',
 };
 
@@ -118,6 +122,7 @@ export class UserPerformanceService {
   private roleRepository: Repository<Role>;
   private caseWorkflowRepository: Repository<CaseWorkflow>;
   private customerRepository: Repository<Customer>;
+  private loanAccountRepository: Repository<LoanAccount>;
 
   constructor() {
     this.taskTimeTrackingRepository = AppDataSource.getRepository(TaskTimeTracking);
@@ -127,33 +132,36 @@ export class UserPerformanceService {
     this.roleRepository = AppDataSource.getRepository(Role);
     this.caseWorkflowRepository = AppDataSource.getRepository(CaseWorkflow);
     this.customerRepository = AppDataSource.getRepository(Customer);
+    this.loanAccountRepository = AppDataSource.getRepository(LoanAccount);
   }
 
   /**
    * Get overall performance summary for superadmin dashboard
    */
    async getOverallSummary(): Promise<OverallPerformanceSummary> {
-    // Get unique users with task tracking and valid roles
-    const userStats = await this.taskTimeTrackingRepository
-      .createQueryBuilder('tracking')
-      .innerJoin('tracking.user', 'user')
+    // Count eligible active users first, even if they do not have tracking rows yet.
+    const userStats = await this.userRepository
+      .createQueryBuilder('user')
       .innerJoin('user.userRoles', 'ur')
       .innerJoin('ur.role', 'role')
       .where('role.name IN (:...validRoles)', { validRoles: VALID_ROLES })
       .andWhere('ur.isActive = :isActive', { isActive: true })
-      .select('COUNT(DISTINCT tracking.userId)', 'totalUsers')
+      .andWhere('user.isActive = :userActive', { userActive: true })
+      .select('COUNT(DISTINCT user.id)', 'totalUsers')
       .getRawOne();
 
-    // Get total completed cases (with valid roles)
-    const completedStats = await this.taskTimeTrackingRepository
-      .createQueryBuilder('tracking')
-      .innerJoin('tracking.user', 'user')
-      .innerJoin('user.userRoles', 'ur')
-      .innerJoin('ur.role', 'role')
-      .where('role.name IN (:...validRoles)', { validRoles: VALID_ROLES })
-      .andWhere('ur.isActive = :isActive', { isActive: true })
-      .andWhere('tracking.status = :status', { status: 'completed' })
+    // Workflows are the canonical case lifecycle; task tracking is optional timing metadata.
+    const workflowCompletionStats = await this.caseWorkflowRepository
+      .createQueryBuilder('workflow')
       .select('COUNT(*)', 'totalCompleted')
+      .addSelect(
+        'AVG(GREATEST(1, TIMESTAMPDIFF(MINUTE, workflow.createdAt, COALESCE(workflow.completedDate, workflow.updatedAt))))',
+        'avgTime'
+      )
+      .where('(workflow.isCompleted = true OR LOWER(workflow.currentStatus) IN (:...completedStatuses))', {
+        completedStatuses: ['completed', 'disbursed'],
+      })
+      .andWhere('workflow.createdAt IS NOT NULL')
       .getRawOne();
 
     // Get total rewards distributed
@@ -167,8 +175,8 @@ export class UserPerformanceService {
       .select('SUM(reward.points)', 'totalPoints')
       .getRawOne();
 
-    // Get average completion time (with valid roles)
-    const avgTimeStats = await this.taskTimeTrackingRepository
+    // Keep timing rows as a fallback for older records without workflow completion dates.
+    const trackingCompletionStats = await this.taskTimeTrackingRepository
       .createQueryBuilder('tracking')
       .innerJoin('tracking.user', 'user')
       .innerJoin('user.userRoles', 'ur')
@@ -177,7 +185,8 @@ export class UserPerformanceService {
       .andWhere('ur.isActive = :isActive', { isActive: true })
       .andWhere('tracking.status = :status', { status: 'completed' })
       .andWhere('tracking.totalCompletionTimeMinutes IS NOT NULL')
-      .select('AVG(tracking.totalCompletionTimeMinutes)', 'avgTime')
+      .select('COUNT(*)', 'totalCompleted')
+      .addSelect('AVG(tracking.totalCompletionTimeMinutes)', 'avgTime')
       .getRawOne();
 
     // Get top 5 performers
@@ -185,9 +194,17 @@ export class UserPerformanceService {
 
     return {
       totalUsersTracked: parseInt(userStats?.totalUsers) || 0,
-      totalCompletedCases: parseInt(completedStats?.totalCompleted) || 0,
+      totalCompletedCases:
+        parseInt(workflowCompletionStats?.totalCompleted) ||
+        parseInt(trackingCompletionStats?.totalCompleted) ||
+        0,
       totalRewardsDistributed: parseInt(rewardStats?.totalPoints) || 0,
-      avgCompletionTime: avgTimeStats?.avgTime ? parseFloat(avgTimeStats.avgTime) : null,
+      avgCompletionTime:
+        workflowCompletionStats?.avgTime
+          ? parseFloat(workflowCompletionStats.avgTime)
+          : trackingCompletionStats?.avgTime
+          ? parseFloat(trackingCompletionStats.avgTime)
+          : null,
       topPerformers,
     };
   }
@@ -206,124 +223,241 @@ export class UserPerformanceService {
   }> {
     const { startDate, endDate, stage, userId, limit = 20, offset = 0, sortBy = 'efficiencyScore', sortOrder = 'DESC' } = filters;
 
-     // Build base query - only include users with valid roles
-     const baseQuery = this.taskTimeTrackingRepository
-       .createQueryBuilder('tracking')
-       .innerJoin('tracking.user', 'user')
-       .innerJoin('user.userRoles', 'ur')
-       .innerJoin('ur.role', 'role')
-       .where('role.name IN (:...validRoles)', { validRoles: VALID_ROLES })
-       .andWhere('ur.isActive = :isActive', { isActive: true })
-       .select('tracking.userId', 'userId')
-       .addSelect('user.name', 'userName')
-       .addSelect('user.email', 'email');
+    // Start with active users who have performance roles. Tracking rows are optional.
+    const eligibleUsersQuery = this.userRepository
+      .createQueryBuilder('user')
+      .innerJoin('user.userRoles', 'ur')
+      .innerJoin('ur.role', 'role')
+      .select('user.id', 'userId')
+      .addSelect('user.name', 'userName')
+      .addSelect('user.email', 'email')
+      .where('role.name IN (:...validRoles)', { validRoles: VALID_ROLES })
+      .andWhere('ur.isActive = :isActive', { isActive: true })
+      .andWhere('user.isActive = :userActive', { userActive: true });
 
-    // Apply date filters
-    if (startDate) {
-      baseQuery.andWhere('tracking.assignedAt >= :startDate', { startDate });
-    }
-    if (endDate) {
-      baseQuery.andWhere('tracking.assignedAt <= :endDate', { endDate });
-    }
-    if (stage) {
-      baseQuery.andWhere('tracking.bucket = :stage', { stage });
-    }
     if (userId) {
-      baseQuery.andWhere('tracking.userId = :userId', { userId });
+      eligibleUsersQuery.andWhere('user.id = :userId', { userId });
     }
 
-     // Get total count of unique users
-     const countQuery = baseQuery.clone();
-     const totalResult = await countQuery
-       .select('COUNT(DISTINCT tracking.userId)', 'total')
-       .getRawOne();
-     const total = parseInt(totalResult?.total) || 0;
-
-     // Get aggregated stats per user
-     const validSortColumns = ['completedCases', 'totalRewards', 'avgCompletionTime', 'efficiencyScore'];
-     const sortColumn = validSortColumns.includes(sortBy) ? sortBy : 'efficiencyScore';
-
-const userStats = await baseQuery
-       .addSelect('COUNT(*)', 'totalCases')
-       .addSelect('SUM(CASE WHEN tracking.status = \'completed\' THEN 1 ELSE 0 END)', 'completedCases')
-       .addSelect('SUM(CASE WHEN tracking.status = \'pending\' THEN 1 ELSE 0 END)', 'pendingCases')
-       .addSelect('SUM(CASE WHEN tracking.status = \'in_progress\' THEN 1 ELSE 0 END)', 'inProgressCases')
-       .addSelect('SUM(CASE WHEN tracking.status = \'rejected\' THEN 1 ELSE 0 END)', 'rejectedCases')
-       .addSelect('AVG(tracking.totalCompletionTimeMinutes)', 'avgCompletionTime')
-       .addSelect('SUM(tracking.totalCompletionTimeMinutes)', 'totalCompletionTime')
-       .groupBy('tracking.userId')
-       .addGroupBy('user.name')
-       .addGroupBy('user.email')
-      .orderBy(sortColumn === 'efficiencyScore' ? 'completedCases' : sortColumn, sortOrder)
-      .limit(limit)
-      .offset(offset)
+    const eligibleUsers = await eligibleUsersQuery
+      .groupBy('user.id')
+      .addGroupBy('user.name')
+      .addGroupBy('user.email')
       .getRawMany();
 
-    // Get rewards for these users
-    const userIds = userStats.map(u => parseInt(u.userId));
-    let rewardMap: Record<number, number> = {};
-    
-    if (userIds.length > 0) {
-      const rewards = await this.rewardPointRepository
-        .createQueryBuilder('reward')
-        .select('reward.userId', 'userId')
-        .addSelect('SUM(reward.points)', 'totalRewards')
-        .where('reward.userId IN (:...userIds)', { userIds })
-        .groupBy('reward.userId')
-        .getRawMany();
-      
-      rewards.forEach(r => {
-        rewardMap[parseInt(r.userId)] = parseInt(r.totalRewards) || 0;
-      });
+    const userIds = eligibleUsers.map(u => parseInt(u.userId));
+
+    if (userIds.length === 0) {
+      return { data: [], total: 0 };
     }
+
+    const trackingStatsQuery = this.taskTimeTrackingRepository
+      .createQueryBuilder('tracking')
+      .select('tracking.userId', 'userId')
+      .addSelect('COUNT(*)', 'totalCases')
+      .addSelect('SUM(CASE WHEN tracking.status = \'completed\' THEN 1 ELSE 0 END)', 'completedCases')
+      .addSelect('SUM(CASE WHEN tracking.status = \'pending\' THEN 1 ELSE 0 END)', 'pendingCases')
+      .addSelect('SUM(CASE WHEN tracking.status = \'in_progress\' THEN 1 ELSE 0 END)', 'inProgressCases')
+      .addSelect('SUM(CASE WHEN tracking.status = \'rejected\' THEN 1 ELSE 0 END)', 'rejectedCases')
+      .addSelect('AVG(tracking.totalCompletionTimeMinutes)', 'avgCompletionTime')
+      .addSelect('SUM(tracking.totalCompletionTimeMinutes)', 'totalCompletionTime')
+      .where('tracking.userId IN (:...userIds)', { userIds });
+
+    if (startDate) {
+      trackingStatsQuery.andWhere('tracking.assignedAt >= :startDate', { startDate });
+    }
+    if (endDate) {
+      trackingStatsQuery.andWhere('tracking.assignedAt <= :endDate', { endDate });
+    }
+    if (stage) {
+      trackingStatsQuery.andWhere('tracking.bucket = :stage', { stage });
+    }
+
+    const userStats = await trackingStatsQuery
+      .groupBy('tracking.userId')
+      .getRawMany();
+
+    const statsMap: Record<number, any> = {};
+    userStats.forEach(stat => {
+      statsMap[parseInt(stat.userId)] = stat;
+    });
+
+    const workflowRows = await this.caseWorkflowRepository
+      .createQueryBuilder('workflow')
+      .select('workflow.id', 'id')
+      .addSelect('workflow.assignedUserId', 'assignedUserId')
+      .addSelect('workflow.currentStatus', 'currentStatus')
+      .addSelect('workflow.currentApproverRoleName', 'currentApproverRoleName')
+      .addSelect('workflow.assignedStage', 'assignedStage')
+      .addSelect('workflow.isCompleted', 'isCompleted')
+      .addSelect('workflow.isRejected', 'isRejected')
+      .addSelect('workflow.createdAt', 'createdAt')
+      .addSelect('workflow.updatedAt', 'updatedAt')
+      .addSelect('workflow.completedDate', 'completedDate')
+      .where('workflow.assignedUserId IN (:...userIds)', { userIds })
+      .getRawMany();
+
+    const workflowStatsMap: Record<number, {
+      totalCases: number;
+      completedCases: number;
+      pendingCases: number;
+      inProgressCases: number;
+      rejectedCases: number;
+      totalCompletionTime: number;
+      completedWithTime: number;
+    }> = {};
+
+    workflowRows.forEach(row => {
+      const currentUserId = parseInt(row.assignedUserId);
+      const workflowStage = this.getStageFromWorkflowStatus(row.currentStatus, row.currentApproverRoleName) || row.assignedStage || 'unknown';
+      const createdAt = row.createdAt ? new Date(row.createdAt) : null;
+
+      if (!currentUserId || !userIds.includes(currentUserId)) return;
+      if (stage && workflowStage !== stage) return;
+      if (startDate && createdAt && createdAt.getTime() < startDate.getTime()) return;
+      if (endDate && createdAt && createdAt.getTime() > endDate.getTime()) return;
+
+      const isCompleted = this.isWorkflowCompleted(row.currentStatus, Boolean(row.isCompleted));
+      const isRejected = this.isWorkflowRejected(row.currentStatus, Boolean(row.isRejected));
+      const duration = isCompleted
+        ? this.getWorkflowDurationMinutes(row.createdAt, row.completedDate, row.updatedAt)
+        : null;
+
+      if (!workflowStatsMap[currentUserId]) {
+        workflowStatsMap[currentUserId] = {
+          totalCases: 0,
+          completedCases: 0,
+          pendingCases: 0,
+          inProgressCases: 0,
+          rejectedCases: 0,
+          totalCompletionTime: 0,
+          completedWithTime: 0,
+        };
+      }
+
+      workflowStatsMap[currentUserId].totalCases += 1;
+      if (isCompleted) workflowStatsMap[currentUserId].completedCases += 1;
+      else if (isRejected) workflowStatsMap[currentUserId].rejectedCases += 1;
+      else workflowStatsMap[currentUserId].pendingCases += 1;
+
+      if (!isCompleted && !isRejected) {
+        workflowStatsMap[currentUserId].inProgressCases += 1;
+      }
+
+      if (duration !== null) {
+        workflowStatsMap[currentUserId].totalCompletionTime += duration;
+        workflowStatsMap[currentUserId].completedWithTime += 1;
+      }
+
+    });
+
+    let rewardMap: Record<number, number> = {};
+    const rewardQuery = this.rewardPointRepository
+      .createQueryBuilder('reward')
+      .select('reward.userId', 'userId')
+      .addSelect('SUM(reward.points)', 'totalRewards')
+      .where('reward.userId IN (:...userIds)', { userIds });
+
+    if (startDate) {
+      rewardQuery.andWhere('reward.awardedAt >= :startDate', { startDate });
+    }
+    if (endDate) {
+      rewardQuery.andWhere('reward.awardedAt <= :endDate', { endDate });
+    }
+    if (stage) {
+      rewardQuery.andWhere('reward.bucket = :stage', { stage });
+    }
+
+    const rewards = await rewardQuery
+      .groupBy('reward.userId')
+      .getRawMany();
+
+    rewards.forEach(r => {
+      rewardMap[parseInt(r.userId)] = parseInt(r.totalRewards) || 0;
+    });
 
     // Get user roles
     let rolesMap: Record<number, string[]> = {};
-    if (userIds.length > 0) {
-      const userRoles = await this.userRoleRepository
-        .createQueryBuilder('ur')
-        .select('ur.userId', 'userId')
-        .addSelect('r.name', 'roleName')
-        .innerJoin('ur.role', 'r')
-        .where('ur.userId IN (:...userIds)', { userIds })
-        .andWhere('ur.isActive = :isActive', { isActive: true })
-        .getRawMany();
-      
-      userRoles.forEach(ur => {
-        if (!rolesMap[parseInt(ur.userId)]) {
-          rolesMap[parseInt(ur.userId)] = [];
-        }
-        rolesMap[parseInt(ur.userId)].push(ur.roleName);
-      });
-    }
+    const userRoles = await this.userRoleRepository
+      .createQueryBuilder('ur')
+      .select('ur.userId', 'userId')
+      .addSelect('r.name', 'roleName')
+      .innerJoin('ur.role', 'r')
+      .where('ur.userId IN (:...userIds)', { userIds })
+      .andWhere('ur.isActive = :isActive', { isActive: true })
+      .getRawMany();
+
+    userRoles.forEach(ur => {
+      if (!rolesMap[parseInt(ur.userId)]) {
+        rolesMap[parseInt(ur.userId)] = [];
+      }
+      rolesMap[parseInt(ur.userId)].push(ur.roleName);
+    });
 
     // Build final results with performance scores
-    const results: UserPerformanceSummary[] = userStats.map(stat => {
-      const completedCases = parseInt(stat.completedCases) || 0;
-      const totalCases = parseInt(stat.totalCases) || 0;
-      const avgTime = stat.avgCompletionTime ? parseFloat(stat.avgCompletionTime) : null;
-      const rewards = rewardMap[parseInt(stat.userId)] || 0;
+    const results: UserPerformanceSummary[] = eligibleUsers.map(user => {
+      const currentUserId = parseInt(user.userId);
+      const stat = statsMap[currentUserId] || {};
+      const workflowStats = workflowStatsMap[currentUserId];
+      const trackingCompletedCases = parseInt(stat.completedCases) || 0;
+      const trackingTotalCases = parseInt(stat.totalCases) || 0;
+      const trackingPendingCases = parseInt(stat.pendingCases) || 0;
+      const trackingInProgressCases = parseInt(stat.inProgressCases) || 0;
+      const trackingRejectedCases = parseInt(stat.rejectedCases) || 0;
+      const trackingTotalCompletionTime = stat.totalCompletionTime ? parseFloat(stat.totalCompletionTime) : 0;
+      const trackingAvgTime = stat.avgCompletionTime ? parseFloat(stat.avgCompletionTime) : null;
+      const workflowCompletedCases = workflowStats?.completedCases || 0;
+      const workflowTotalCases = workflowStats?.totalCases || 0;
+      const workflowTotalCompletionTime = workflowStats?.totalCompletionTime || 0;
+      const workflowCompletedWithTime = workflowStats?.completedWithTime || 0;
+      const completedCases = workflowCompletedCases || trackingCompletedCases;
+      const totalCases = workflowTotalCases || trackingTotalCases;
+      const totalCompletionTime = workflowTotalCompletionTime || trackingTotalCompletionTime || null;
+      const avgTime = workflowCompletedWithTime > 0
+        ? workflowTotalCompletionTime / workflowCompletedWithTime
+        : trackingAvgTime;
+      const rewards = rewardMap[currentUserId] || 0;
       
       return {
-        userId: parseInt(stat.userId),
-        userName: stat.userName || 'Unknown',
-        email: stat.email || '',
-        roles: rolesMap[parseInt(stat.userId)] || [],
-        primaryRole: (rolesMap[parseInt(stat.userId)]?.[0]) || 'unknown',
+        userId: currentUserId,
+        userName: user.userName || 'Unknown',
+        email: user.email || '',
+        roles: rolesMap[currentUserId] || [],
+        primaryRole: (rolesMap[currentUserId]?.[0]) || 'unknown',
         totalCases,
         completedCases,
-        pendingCases: parseInt(stat.pendingCases) || 0,
-        inProgressCases: parseInt(stat.inProgressCases) || 0,
-        rejectedCases: parseInt(stat.rejectedCases) || 0,
+        pendingCases: workflowStats?.pendingCases ?? trackingPendingCases,
+        inProgressCases: workflowStats?.inProgressCases ?? trackingInProgressCases,
+        rejectedCases: workflowStats?.rejectedCases ?? trackingRejectedCases,
         totalRewards: rewards,
         avgCompletionTime: avgTime,
-        totalCompletionTime: stat.totalCompletionTime ? parseFloat(stat.totalCompletionTime) : null,
+        totalCompletionTime,
         efficiencyScore: this.calculatePerformanceScore(completedCases, totalCases, avgTime, rewards),
-        stagePerformance: [], // Will be populated in detail view
+        stagePerformance: [],
       };
     });
 
-    return { data: results, total };
+    const validSortColumns = ['completedCases', 'totalCases', 'totalRewards', 'avgCompletionTime', 'efficiencyScore', 'userName'];
+    const sortColumn = validSortColumns.includes(sortBy) ? sortBy : 'efficiencyScore';
+    const direction = sortOrder === 'ASC' ? 1 : -1;
+
+    results.sort((a, b) => {
+      const aValue = sortColumn === 'userName'
+        ? a.userName.toLowerCase()
+        : (a as any)[sortColumn] ?? -1;
+      const bValue = sortColumn === 'userName'
+        ? b.userName.toLowerCase()
+        : (b as any)[sortColumn] ?? -1;
+
+      if (aValue < bValue) return -1 * direction;
+      if (aValue > bValue) return 1 * direction;
+      return a.userName.localeCompare(b.userName);
+    });
+
+    return {
+      data: results.slice(offset, offset + limit),
+      total: results.length,
+    };
   }
 
   /**
@@ -493,19 +627,6 @@ let rewardMap: Record<string, number> = {};
    * Only returns users with ops, credit, and rm roles for All Cases view
    */
   async getAllUsersForFilter(): Promise<Array<{ id: number; name: string; email: string }>> {
-    // Get all users from the User entity who have ops, credit, or rm roles
-    // OPS roles: operations_team_l1, operations_team_l2, operations_head
-    // CREDIT roles: credit_team_l1, credit_team_l2
-    // RM roles: relationship_manager
-    const validRoles = [
-      'operations_team_l1',
-      'operations_team_l2',
-      'operations_head',
-      'credit_team_l1',
-      'credit_team_l2',
-      'relationship_manager',
-    ];
-
     const users = await this.userRepository
       .createQueryBuilder('user')
       .innerJoin('user.userRoles', 'ur')
@@ -513,8 +634,9 @@ let rewardMap: Record<string, number> = {};
       .select('user.id', 'id')
       .addSelect('user.name', 'name')
       .addSelect('user.email', 'email')
-      .where('role.name IN (:...validRoles)', { validRoles })
+      .where('role.name IN (:...validRoles)', { validRoles: VALID_ROLES })
       .andWhere('ur.isActive = :isActive', { isActive: true })
+      .andWhere('user.isActive = :userActive', { userActive: true })
       .orderBy('user.name', 'ASC')
       .distinct()
       .getRawMany();
@@ -539,6 +661,7 @@ let rewardMap: Record<string, number> = {};
     endDate?: Date;
     limit?: number;
     offset?: number;
+    includeSanctions?: boolean;
   }): Promise<{
     cases: Array<{
       id: number;
@@ -562,10 +685,16 @@ let rewardMap: Record<string, number> = {};
       l1ProcessingTimeMinutes: number | null;
       l2ProcessingTimeMinutes: number | null;
       createdAt: Date;
+      sanctionCount?: number;
+      sanctionedAmount?: number;
+      disbursedAmount?: number;
+      utilizedLimit?: number;
+      unutilizedLimit?: number;
+      partnerNames?: string[];
     }>;
     total: number;
   }> {
-    const { status, stage, userId, startDate, endDate, limit = 50, offset = 0 } = filters || {};
+    const { status, stage, userId, startDate, endDate, limit = 50, offset = 0, includeSanctions = false } = filters || {};
 
     const toNumber = (value: any): number | null => {
       if (value === null || value === undefined || value === '') return null;
@@ -596,6 +725,23 @@ let rewardMap: Record<string, number> = {};
     };
 
     const normalizeText = (value?: string | null): string => (value || '').toLowerCase();
+    type CustomerSanctionStats = {
+      sanctionCount: number;
+      sanctionedAmount: number;
+      disbursedAmount: number;
+      utilizedLimit: number;
+      unutilizedLimit: number;
+      partnerNames: string[];
+    };
+
+    const emptySanctionStats: CustomerSanctionStats = {
+      sanctionCount: 0,
+      sanctionedAmount: 0,
+      disbursedAmount: 0,
+      utilizedLimit: 0,
+      unutilizedLimit: 0,
+      partnerNames: [],
+    };
 
     // Workflow is the canonical case list. Task tracking is optional timing/user metadata.
     const workflowRows = await this.caseWorkflowRepository
@@ -875,10 +1021,101 @@ let rewardMap: Record<string, number> = {};
     // Apply pagination
     const paginatedCases = allCases.slice(offset, offset + limit);
 
+    if (!includeSanctions) {
+      return {
+        cases: paginatedCases,
+        total,
+      };
+    }
+
+    const customerIds = Array.from(new Set(
+      paginatedCases
+        .map((c) => toNumber(c.customerId))
+        .filter((id): id is number => Boolean(id))
+    ));
+
+    const sanctionStatsMap: Record<number, CustomerSanctionStats> = {};
+
+    if (customerIds.length > 0) {
+      const sanctionRows = await this.loanAccountRepository
+        .createQueryBuilder('loan')
+        .leftJoin('loan.partner', 'partner')
+        .select('loan.customerId', 'customerId')
+        .addSelect('COUNT(loan.id)', 'sanctionCount')
+        .addSelect('SUM(COALESCE(loan.sanctionedAmount, 0))', 'sanctionedAmount')
+        .addSelect('SUM(COALESCE(loan.disbursedAmount, 0))', 'disbursedAmount')
+        .addSelect('SUM(COALESCE(loan.utilizedLimit, 0))', 'utilizedLimit')
+        .addSelect('SUM(COALESCE(loan.unutilizedLimit, 0))', 'unutilizedLimit')
+        .addSelect("GROUP_CONCAT(DISTINCT COALESCE(partner.code, loan.lender) ORDER BY COALESCE(partner.code, loan.lender) SEPARATOR ', ')", 'partnerNames')
+        .where('loan.customerId IN (:...customerIds)', { customerIds })
+        .groupBy('loan.customerId')
+        .getRawMany();
+
+      sanctionRows.forEach((row: any) => {
+        const currentCustomerId = toNumber(row.customerId);
+        if (!currentCustomerId) return;
+
+        sanctionStatsMap[currentCustomerId] = {
+          sanctionCount: toNumber(row.sanctionCount) ?? 0,
+          sanctionedAmount: toNumber(row.sanctionedAmount) ?? 0,
+          disbursedAmount: toNumber(row.disbursedAmount) ?? 0,
+          utilizedLimit: toNumber(row.utilizedLimit) ?? 0,
+          unutilizedLimit: toNumber(row.unutilizedLimit) ?? 0,
+          partnerNames: String(row.partnerNames || '')
+            .split(',')
+            .map((name) => name.trim())
+            .filter(Boolean),
+        };
+      });
+    }
+
+    const enrichedCases = paginatedCases.map((caseItem) => {
+      const customerId = toNumber(caseItem.customerId);
+      const sanctionStats = customerId ? sanctionStatsMap[customerId] : undefined;
+
+      return {
+        ...caseItem,
+        ...(sanctionStats || emptySanctionStats),
+      };
+    });
+
     return {
-      cases: paginatedCases,
+      cases: enrichedCases,
       total,
     };
+  }
+
+  private isWorkflowCompleted(status?: string | null, isCompleted: boolean = false): boolean {
+    const normalizedStatus = (status || '').toLowerCase();
+    return isCompleted || ['completed', 'disbursed'].includes(normalizedStatus);
+  }
+
+  private isWorkflowRejected(status?: string | null, isRejected: boolean = false): boolean {
+    return isRejected || (status || '').toLowerCase() === 'rejected';
+  }
+
+  private getWorkflowDurationMinutes(
+    createdAt?: Date | string | null,
+    completedDate?: Date | string | null,
+    updatedAt?: Date | string | null
+  ): number | null {
+    if (!createdAt) return null;
+
+    const start = new Date(createdAt);
+    if (Number.isNaN(start.getTime())) return null;
+
+    let end = completedDate ? new Date(completedDate) : null;
+    const updated = updatedAt ? new Date(updatedAt) : null;
+
+    if ((!end || Number.isNaN(end.getTime()) || end.getTime() < start.getTime()) && updated && !Number.isNaN(updated.getTime())) {
+      end = updated;
+    }
+
+    if (!end || Number.isNaN(end.getTime()) || end.getTime() < start.getTime()) {
+      return null;
+    }
+
+    return Math.max(1, Math.round((end.getTime() - start.getTime()) / 60000));
   }
 
   private getStageFromWorkflowStatus(status?: string | null, approverRole?: string | null): string | null {
@@ -997,6 +1234,9 @@ let rewardMap: Record<string, number> = {};
       'credit_l2': 'Credit L2',
       'ps_l1': 'PS L1',
       'ps_l2': 'PS L2',
+      'ops_l1': 'Operations L1',
+      'ops_l2': 'Operations L2',
+      'ops_head': 'Operations Head',
       'rm': 'RM',
     };
     return labels[stage] || stage;

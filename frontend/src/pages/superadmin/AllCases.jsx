@@ -6,6 +6,7 @@ import {
   MdWarning,
   MdChevronLeft,
   MdChevronRight,
+  MdClose,
 } from 'react-icons/md';
 
 // Stage options
@@ -44,6 +45,17 @@ const STATUS_OPTIONS = [
   { value: CASE_STATUS.RETURNED_TO_RM, label: CASE_STATUS_LABELS[CASE_STATUS.RETURNED_TO_RM] },
 ];
 
+const DEFAULT_FILTERS = {
+  status: '',
+  stage: '',
+  userId: '',
+  startDate: '',
+  endDate: '',
+  showSanctions: false,
+  limit: 10,
+  page: 1,
+};
+
 const STAGE_LABELS = Object.fromEntries(STAGE_OPTIONS.map((option) => [option.value, option.label]));
 
 const STATUS_BADGE_CLASSES = {
@@ -77,6 +89,31 @@ const formatTime = (minutes) => {
   return `${days}d ${remainingHours}h`;
 };
 
+const toNumber = (value) => {
+  const parsed = Number(value ?? 0);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const formatCurrency = (value) =>
+  new Intl.NumberFormat('en-IN', {
+    style: 'currency',
+    currency: 'INR',
+    maximumFractionDigits: 0,
+    notation: toNumber(value) >= 10000000 ? 'compact' : 'standard',
+  }).format(toNumber(value));
+
+const formatPartnerNames = (partnerNames) => {
+  if (Array.isArray(partnerNames) && partnerNames.length > 0) {
+    return partnerNames.join(', ');
+  }
+
+  if (typeof partnerNames === 'string' && partnerNames.trim()) {
+    return partnerNames;
+  }
+
+  return 'No partner linked';
+};
+
 const formatLabel = (value) => {
   if (!value) return 'N/A';
   return CASE_STATUS_LABELS[value] || value.replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
@@ -89,22 +126,15 @@ const AllCases = () => {
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
   const [users, setUsers] = useState([]);
+  const [showFilterModal, setShowFilterModal] = useState(false);
+  const [draftFilters, setDraftFilters] = useState(DEFAULT_FILTERS);
 
   // Filters
-  const [filters, setFilters] = useState({
-    status: '',
-    stage: '',
-    userId: '',
-    startDate: '',
-    endDate: '',
-    limit: 10,
-    page: 1,
-  });
+  const [filters, setFilters] = useState(DEFAULT_FILTERS);
 
   // Load initial data
   useEffect(() => {
     loadUsers();
-    loadCases();
   }, []);
 
   // Load cases when filters change
@@ -130,6 +160,7 @@ const AllCases = () => {
         userId: filters.userId ? parseInt(filters.userId) : undefined,
         startDate: filters.startDate || undefined,
         endDate: filters.endDate || undefined,
+        includeSanctions: filters.showSanctions ? true : undefined,
         limit: filters.limit,
         page: filters.page,
       };
@@ -144,111 +175,60 @@ const AllCases = () => {
     }
   };
 
-  const handleFilterChange = (key, value) => {
-    setFilters(prev => ({ ...prev, [key]: value, page: 1 }));
+  const openFilterModal = () => {
+    setDraftFilters(filters);
+    setShowFilterModal(true);
+  };
+
+  const handleDraftFilterChange = (key, value) => {
+    setDraftFilters(prev => ({ ...prev, [key]: value, page: 1 }));
+  };
+
+  const applyFilters = () => {
+    setFilters({ ...draftFilters, page: 1 });
+    setShowFilterModal(false);
   };
 
   const clearFilters = () => {
-    setFilters({
-      status: '',
-      stage: '',
-      userId: '',
-      startDate: '',
-      endDate: '',
-      limit: 10,
-      page: 1,
-    });
+    setDraftFilters(DEFAULT_FILTERS);
+    setFilters(DEFAULT_FILTERS);
+    setShowFilterModal(false);
   };
 
   const handlePageChange = (newPage) => {
     setFilters(prev => ({ ...prev, page: newPage }));
   };
 
+  const activeFilterCount = [
+    filters.status,
+    filters.stage,
+    filters.userId,
+    filters.startDate,
+    filters.endDate,
+    filters.showSanctions ? 'showSanctions' : '',
+  ].filter(Boolean).length;
+
   return (
     <div className="p-6 bg-gray-50 min-h-screen">
       {/* Page Header */}
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">All Cases</h1>
-        <p className="text-gray-600 mt-1">Track and view all cases across all users</p>
-      </div>
-
-      {/* Filters Section */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 mb-6">
-        <div className="flex items-center gap-2 mb-4">
-          <MdFilterList className="text-gray-600 text-xl" />
-          <h3 className="font-medium text-gray-900">Filter Cases</h3>
+      <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">All Cases</h1>
+          <p className="text-gray-600 mt-1">Track and view all cases across all users</p>
         </div>
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-            <select
-              value={filters.status}
-              onChange={(e) => handleFilterChange('status', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-            >
-              {STATUS_OPTIONS.map(option => (
-                <option key={option.value} value={option.value}>{option.label}</option>
-              ))}
-            </select>
-          </div>
-          
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Stage</label>
-            <select
-              value={filters.stage}
-              onChange={(e) => handleFilterChange('stage', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-            >
-              {STAGE_OPTIONS.map(option => (
-                <option key={option.value} value={option.value}>{option.label}</option>
-              ))}
-            </select>
-          </div>
-          
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">User</label>
-            <select
-              value={filters.userId}
-              onChange={(e) => handleFilterChange('userId', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-            >
-              <option value="">All Users</option>
-              {users.map(user => (
-                <option key={user.id} value={user.id}>{user.name}</option>
-              ))}
-            </select>
-          </div>
-          
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
-            <input
-              type="date"
-              value={filters.startDate}
-              onChange={(e) => handleFilterChange('startDate', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-            />
-          </div>
-          
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
-            <input
-              type="date"
-              value={filters.endDate}
-              onChange={(e) => handleFilterChange('endDate', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-            />
-          </div>
-        </div>
-        
-        <div className="mt-4 flex justify-end">
-          <button
-            onClick={clearFilters}
-            className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
-          >
-            Clear Filters
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={openFilterModal}
+          className="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm transition-colors hover:bg-gray-50"
+        >
+          <MdFilterList className="text-xl" />
+          Filters
+          {activeFilterCount > 0 && (
+            <span className="ml-1 rounded-full bg-blue-600 px-2 py-0.5 text-xs font-bold text-white">
+              {activeFilterCount}
+            </span>
+          )}
+        </button>
       </div>
 
       {/* Cases Table */}
@@ -291,11 +271,17 @@ const AllCases = () => {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full">
+            <table className={`w-full ${filters.showSanctions ? 'min-w-[1120px]' : 'min-w-[900px]'}`}>
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Case ID</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Company Name</th>
+                  {filters.showSanctions && (
+                    <>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sanctions</th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Allocated Limit</th>
+                    </>
+                  )}
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Stage</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Assigned To</th>
@@ -313,6 +299,31 @@ const AllCases = () => {
                     <td className="px-4 py-3">
                       <span className="text-gray-600">{c.companyName || 'N/A'}</span>
                     </td>
+                    {filters.showSanctions && (
+                      <>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-3">
+                            <span className={`inline-flex h-8 min-w-8 items-center justify-center rounded-full px-2 text-sm font-bold ${
+                              toNumber(c.sanctionCount) > 0 ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-100 text-gray-500'
+                            }`}>
+                              {toNumber(c.sanctionCount)}
+                            </span>
+                            <div className="min-w-0">
+                              <p className="max-w-[180px] truncate text-sm font-medium text-gray-900">
+                                {formatPartnerNames(c.partnerNames)}
+                              </p>
+                              <p className="text-xs text-gray-500">
+                                {toNumber(c.sanctionCount) > 0 ? 'Loan accounts allocated' : 'No sanctions created'}
+                              </p>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <p className="font-semibold text-gray-900">{formatCurrency(c.sanctionedAmount)}</p>
+                          <p className="text-xs text-gray-500">{formatCurrency(c.disbursedAmount)} disbursed</p>
+                        </td>
+                      </>
+                    )}
                     <td className="px-4 py-3">
                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                         c.bucket === 'credit_l1' ? 'bg-blue-100 text-blue-800' :
@@ -383,6 +394,143 @@ const AllCases = () => {
           </div>
         )}
       </div>
+
+      {showFilterModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-6">
+          <div className="w-full max-w-3xl overflow-hidden rounded-xl bg-white shadow-xl">
+            <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4">
+              <div className="flex items-center gap-2">
+                <MdFilterList className="text-xl text-gray-600" />
+                <h3 className="font-semibold text-gray-900">Filter Cases</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowFilterModal(false)}
+                className="rounded-lg p-2 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700"
+                aria-label="Close filters"
+              >
+                <MdClose className="text-xl" />
+              </button>
+            </div>
+
+            <div className="max-h-[70vh] overflow-y-auto px-5 py-5">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                  <select
+                    value={draftFilters.status}
+                    onChange={(e) => handleDraftFilterChange('status', e.target.value)}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-primary-500 focus:ring-2 focus:ring-primary-500"
+                  >
+                    {STATUS_OPTIONS.map(option => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Stage</label>
+                  <select
+                    value={draftFilters.stage}
+                    onChange={(e) => handleDraftFilterChange('stage', e.target.value)}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-primary-500 focus:ring-2 focus:ring-primary-500"
+                  >
+                    {STAGE_OPTIONS.map(option => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">User</label>
+                  <select
+                    value={draftFilters.userId}
+                    onChange={(e) => handleDraftFilterChange('userId', e.target.value)}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-primary-500 focus:ring-2 focus:ring-primary-500"
+                  >
+                    <option value="">All Users</option>
+                    {users.map(user => (
+                      <option key={user.id} value={user.id}>{user.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Rows Per Page</label>
+                  <select
+                    value={draftFilters.limit}
+                    onChange={(e) => handleDraftFilterChange('limit', parseInt(e.target.value))}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-primary-500 focus:ring-2 focus:ring-primary-500"
+                  >
+                    {[10, 25, 50, 100].map((limit) => (
+                      <option key={limit} value={limit}>{limit} rows</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
+                  <input
+                    type="date"
+                    value={draftFilters.startDate}
+                    onChange={(e) => handleDraftFilterChange('startDate', e.target.value)}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-primary-500 focus:ring-2 focus:ring-primary-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
+                  <input
+                    type="date"
+                    value={draftFilters.endDate}
+                    onChange={(e) => handleDraftFilterChange('endDate', e.target.value)}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-primary-500 focus:ring-2 focus:ring-primary-500"
+                  />
+                </div>
+              </div>
+
+              <label className="mt-5 flex cursor-pointer items-start gap-3 rounded-lg border border-gray-200 bg-gray-50 p-4">
+                <input
+                  type="checkbox"
+                  checked={draftFilters.showSanctions}
+                  onChange={(e) => handleDraftFilterChange('showSanctions', e.target.checked)}
+                  className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                />
+                <span>
+                  <span className="block text-sm font-semibold text-gray-900">Show sanctions in table</span>
+                  <span className="mt-1 block text-sm text-gray-500">
+                    Adds customer-wise sanction count, partner names, allocated limit, and disbursed amount.
+                  </span>
+                </span>
+              </label>
+            </div>
+
+            <div className="flex flex-col-reverse gap-2 border-t border-gray-200 px-5 py-4 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={clearFilters}
+                className="rounded-lg bg-gray-100 px-4 py-2 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-200"
+              >
+                Clear Filters
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowFilterModal(false)}
+                className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={applyFilters}
+                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-700"
+              >
+                Apply Filters
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
