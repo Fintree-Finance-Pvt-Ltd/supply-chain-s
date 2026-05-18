@@ -75,13 +75,24 @@ const RMCaseDetail = () => {
       partner: partner.code,
       sanctionAmount:
         parseFloat(partnerSanctions[partner.code].sanctionAmount) || 0,
+        
       tenure: parseInt(partnerSanctions[partner.code].tenure) || 0,
+
       interestRate:
         parseFloat(partnerSanctions[partner.code].interestRate) || 0,
+
       penalCharges:
-        parseFloat(partnerSanctions[partner.code].penalCharges) || 0,
+      (parseFloat(partnerSanctions[partner.code].penalCharges) || 0) / 12,
+
       processingFees:
         parseFloat(partnerSanctions[partner.code].processingFees) || 0,
+
+         legalCharges:
+      parseFloat(partnerSanctions[partner.code].legalCharges) || 0,
+
+    serviceFee:
+      parseFloat(partnerSanctions[partner.code].serviceFee) || 0,
+      
       conditions: partnerSanctions[partner.code].conditions || "",
     }));
 
@@ -631,7 +642,7 @@ const handleSaveBankDetails = async () => {
                             },
                           })
                         }
-                        className="w-full bg-transparent border-none p-0 text-lg font-bold focus:ring-0"
+                      className="w-full border border-indigo-300 rounded-md px-3 py-2 bg-white text-lg font-bold focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
                         readOnly={
                           isReadOnly ||
                           isStage2 ||
@@ -672,7 +683,7 @@ const handleSaveBankDetails = async () => {
                             },
                           })
                         }
-                        className="w-full bg-transparent border-none p-0 text-lg font-bold focus:ring-0"
+                       className="w-full border border-indigo-300 rounded-md px-3 py-2 bg-white text-lg font-bold focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
                         readOnly={
                           isReadOnly ||
                           isStage2 ||
@@ -700,7 +711,7 @@ const handleSaveBankDetails = async () => {
                             },
                           })
                         }
-                        className="w-full bg-transparent border-none p-0 text-lg font-bold focus:ring-0"
+                        className="w-full border border-indigo-300 rounded-md px-3 py-2 bg-white text-lg font-bold focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
                         readOnly={
                           isReadOnly ||
                           isStage2 ||
@@ -710,7 +721,7 @@ const handleSaveBankDetails = async () => {
                     </div>
                     <div className="p-3 bg-indigo-50 rounded-lg">
                       <label className="block text-[10px] text-indigo-600 uppercase font-bold mb-1">
-                        Penal Charges (%)
+                       Penal Charges (%) (Yearly)
                       </label>
                       <input
                         type="number"
@@ -728,7 +739,7 @@ const handleSaveBankDetails = async () => {
                             },
                           })
                         }
-                        className="w-full bg-transparent border-none p-0 text-lg font-bold focus:ring-0"
+                        className="w-full border border-indigo-300 rounded-md px-3 py-2 bg-white text-lg font-bold focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
                         readOnly={
                           isReadOnly ||
                           isStage2 ||
@@ -756,7 +767,7 @@ const handleSaveBankDetails = async () => {
                             },
                           })
                         }
-                        className="w-full bg-transparent border-none p-0 text-lg font-bold focus:ring-0"
+                        className="w-full border border-indigo-300 rounded-md px-3 py-2 bg-white text-lg font-bold focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
                         readOnly={
                           isReadOnly ||
                           isStage2 ||
@@ -782,7 +793,7 @@ const handleSaveBankDetails = async () => {
         },
       })
     }
-    className="w-full bg-transparent border-none p-0 text-lg font-bold focus:ring-0"
+    className="w-full border border-indigo-300 rounded-md px-3 py-2 bg-white text-lg font-bold focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
     readOnly={isReadOnly || isStage2}
   />
 </div>
@@ -805,10 +816,12 @@ const handleSaveBankDetails = async () => {
         },
       })
     }
-    className="w-full bg-transparent border-none p-0 text-lg font-bold focus:ring-0"
+    className="w-full border border-indigo-300 rounded-md px-3 py-2 bg-white text-lg font-bold focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
     readOnly={isReadOnly || isStage2}
   />
 </div>
+
+
                   </div>
                 </div>
               ))
@@ -1193,34 +1206,63 @@ const handleSaveBankDetails = async () => {
         <div className="space-y-6">
           <div className="card">
             <h2 className="text-xl font-semibold text-gray-900 mb-4">
-              Submission to Operations
+              {currentCase.status === "ceo_approved" ? "Submit Final Terms to MD" : "Submission to Operations"}
             </h2>
-            {!isReadOnly ? (
+            {!isReadOnly && (currentCase.status === "ceo_approved" || currentCase.status === "md_approved") ? (
               <>
                 <textarea
                   value={remarks}
                   onChange={(e) => setRemarks(e.target.value)}
                   className="w-full input-field mb-4"
                   rows={4}
-                  placeholder="Final submission remarks..."
+                  placeholder={currentCase.status === "ceo_approved" ? "Remarks for MD..." : "Final submission remarks..."}
                 />
-                <button
-                  disabled={
-                    isSubmitting ||
-                    currentCase.eNachStatus !== "completed" ||
-                    currentCase.eSignStatus !== "completed"
-                  }
-                  onClick={handleSubmitToOps}
-                  className="w-full btn-primary flex items-center justify-center space-x-2 py-3"
-                >
-                  <FiSend />
-                  <span>Final Submit to Ops</span>
-                </button>
-                {(currentCase.eNachStatus !== "completed" ||
-                  currentCase.eSignStatus !== "completed") && (
-                  <p className="text-xs text-red-500 mt-2 text-center">
-                    Complete digital journey before submission
-                  </p>
+                
+                {currentCase.status === "ceo_approved" ? (
+                  <button
+                    disabled={isSubmitting}
+                    onClick={async () => {
+                      if (!remarks.trim()) {
+                        toast.error("Please add submission remarks");
+                        return;
+                      }
+                      setIsSubmitting(true);
+                      try {
+                        await workflowService.submitTermsToMD(id, remarks, { partnerSanctions: buildUnlockedSanctionsArray() });
+                        toast.success("Final terms submitted to MD successfully");
+                        navigate("/rm/dashboard");
+                      } catch (error) {
+                        toast.error("Submission failed: " + (error.response?.data?.message || error.message));
+                      } finally {
+                        setIsSubmitting(false);
+                      }
+                    }}
+                    className="w-full btn-primary flex items-center justify-center space-x-2 py-3"
+                  >
+                    <FiSend />
+                    <span>Submit to MD</span>
+                  </button>
+                ) : (
+                  <>
+                    <button
+                      disabled={
+                        isSubmitting ||
+                        currentCase.eNachStatus !== "completed" ||
+                        currentCase.eSignStatus !== "completed"
+                      }
+                      onClick={handleSubmitToOps}
+                      className="w-full btn-primary flex items-center justify-center space-x-2 py-3"
+                    >
+                      <FiSend />
+                      <span>Final Submit to Ops</span>
+                    </button>
+                    {(currentCase.eNachStatus !== "completed" ||
+                      currentCase.eSignStatus !== "completed") && (
+                      <p className="text-xs text-red-500 mt-2 text-center">
+                        Complete digital journey before submission
+                      </p>
+                    )}
+                  </>
                 )}
               </>
             ) : (
@@ -1229,7 +1271,7 @@ const handleSaveBankDetails = async () => {
                   Read Only Mode
                 </p>
                 <p className="text-xs text-gray-400 mt-1">
-                  Case has been submitted to Operations.
+                  Case is not pending your action.
                 </p>
               </div>
             )}

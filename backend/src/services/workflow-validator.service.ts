@@ -19,9 +19,6 @@ export class WorkflowValidatorService {
   // Define valid workflow transitions
   private static workflowTransitionMap: Record<string, string[]> = {
     'draft': ['submitted'],
-    // 'submitted': ['credit_l1_approved'],
-    // 'credit_l1_approved': ['credit_l2_approved'],
-    // 'credit_l2_approved': ['ceo_approved'],
       'submitted': [
     'credit_l1_approved',
     'returned_to_rm' // ✅ NEW
@@ -36,7 +33,8 @@ export class WorkflowValidatorService {
     'ceo_approved',
     'returned_to_rm' // ✅ NEW
   ],
-    'ceo_approved': ['md_approved'],
+    'ceo_approved': ['md_terms_submitted', 'rejected'],
+    'md_terms_submitted': ['md_approved', 'rejected'],
     'md_approved': ['ops_l1_review'],
     'ops_l1_review': ['ops_l1_approved'],
     'ops_l1_approved': ['ops_head_approved'],
@@ -149,7 +147,8 @@ export class WorkflowValidatorService {
       'submitted': 'CREDIT_TEAM_L1',
       'credit_l1_approved': 'CREDIT_TEAM_L2',
       'credit_l2_approved': 'CEO',
-      'ceo_approved': 'MD',
+      'ceo_approved': 'RELATIONSHIP_MANAGER',
+      'md_terms_submitted': 'MD',
         'returned_to_rm': 'RELATIONSHIP_MANAGER', // ✅ NEW
 
       'md_approved': 'RELATIONSHIP_MANAGER',

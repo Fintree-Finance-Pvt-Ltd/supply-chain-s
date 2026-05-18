@@ -163,6 +163,7 @@ const RMDashboard = () => {
     { id: 'all', label: 'All Cases' },
     { id: CASE_STATUS.DRAFT, label: 'Draft' },
     { id: CASE_STATUS.SUBMITTED, label: 'Submitted' },
+     { id: CASE_STATUS.CEO_APPROVED, label: 'Ready for MD' },
     { id: CASE_STATUS.MD_APPROVED, label: 'Ready for Ops' },
     { id: CASE_STATUS.OPS_L1_REVIEW, label: 'Ops Review' },
     { id: CASE_STATUS.COMPLETED, label: 'Completed' },

@@ -295,39 +295,15 @@ const ApprovalScreen = () => {
           partnerSanctions: ceoSanctionData.partnerSanctions,
         });
       } else if (userRole === "md") {
-        const editablePartnerSanctions = partnerSanctions.filter(
-          (ps) => !isPartnerLocked(ps),
-        );
-        if (editablePartnerSanctions.length === 0) {
-          throw new Error(
-            "No new or pending partner sanction request is available",
-          );
-        }
-        // MD can modify all fields
-        const mdSanctionData = {
-          partnerSanctions: editablePartnerSanctions.map((ps) => ({
-            partner: ps.partner,
-            sanctionAmount: ps.sanctionAmount || 0,
-            tenure: ps.tenure || 0,
-            interestRate: ps.interestRate || 0,
-            penalCharges:
-              ps.penalCharges !== "" &&
-              ps.penalCharges !== null &&
-              ps.penalCharges !== undefined
-                ? Number(ps.penalCharges) / 12
-                : 0,
-            processingFees: ps.processingFees || 0,
-            legalCharges: ps.legalCharges || 0,
-            serviceFee: ps.serviceFee || 0,
-            cashCollateral: ps.cashCollateral || 0,
-            conditions: ps.conditions || "",
-          })),
-        };
-        await workflowService.approveMD(id, true, comments, {
-          partnerSanctions: mdSanctionData.partnerSanctions,
-        });
+        // MD should approve/reject ONLY. Sanction terms must be pre-filled by RM.
+      const lockedPartnerSanctions = partnerSanctions.map((ps) => ({
+  ...ps,
+  status: "approved",
+}));
 
-        console.log("MD PAYLOAD:", partnerSanctions);
+await workflowService.approveMD(id, true, comments, {
+  partnerSanctions: lockedPartnerSanctions,
+});
       } else {
         throw new Error("Unauthorized role for this action");
       }
@@ -356,6 +332,7 @@ const ApprovalScreen = () => {
       if (userRole === "ceo") {
         await workflowService.approveCEO(id, false, comments);
       } else if (userRole === "md") {
+        // MD rejection should return case to RM for sanction re-review/edit.
         await workflowService.approveMD(id, false, comments);
       } else {
         throw new Error("Unauthorized role for this action");
@@ -469,7 +446,14 @@ const ApprovalScreen = () => {
     customer.status === "completed" ||
     customer.status.includes("ops") ||
     (role === "ceo" && customer.status !== "credit_l2_approved") ||
-    (role === "md" && customer.status !== "ceo_approved");
+  (
+  role === "md" &&
+  ![
+    "ceo_approved",
+    "md_terms_submitted",
+    "pending",
+  ].includes(customer.status)
+);
 
   const visibleDocuments = customer.documents || [];
   // Management (CEO/MD) can approve even without viewing documents as per new request
@@ -656,15 +640,11 @@ const ApprovalScreen = () => {
                             }}
                             onWheel={(e) => e.target.blur()}
                             onChange={(e) => {
-                              const updated = [...partnerSanctions];
-                              updated[index].sanctionAmount =
-                                e.target.value === ""
-                                  ? ""
-                                  : parseFloat(e.target.value);
-                              setPartnerSanctions(updated);
+                              // MD should not edit sanction terms
+                              e.preventDefault();
                             }}
                             className="input-field text-sm"
-                            readOnly={isReadOnly || isPartnerLocked(ps)}
+                            readOnly={true}
                           />
 
                           {ps.sanctionAmount && (
@@ -685,15 +665,10 @@ const ApprovalScreen = () => {
                             value={ps.tenure || ""}
                             onWheel={(e) => e.target.blur()}
                             onChange={(e) => {
-                              const updated = [...partnerSanctions];
-                              updated[index].tenure =
-                                e.target.value === ""
-                                  ? ""
-                                  : parseInt(e.target.value);
-                              setPartnerSanctions(updated);
+                              e.preventDefault();
                             }}
                             className="input-field text-sm"
-                            readOnly={isReadOnly || isPartnerLocked(ps)}
+                            readOnly={true}
                           />
                         </div>
                         <div>
@@ -706,19 +681,13 @@ const ApprovalScreen = () => {
                             value={ps.interestRate || ""}
                             onWheel={(e) => e.target.blur()}
                             onChange={(e) => {
-                              const updated = [...partnerSanctions];
-                              updated[index].interestRate =
-                                e.target.value === ""
-                                  ? ""
-                                  : parseFloat(e.target.value);
-                              setPartnerSanctions(updated);
+                              e.preventDefault();
                             }}
                             className="input-field text-sm"
-                            readOnly={isReadOnly || isPartnerLocked(ps)}
+                            readOnly={true}
                           />
                         </div>
                       </div>
-                      {/* MD can also edit penal charges, processing fees, and conditions */}
                       <div className="grid grid-cols-3 gap-3 mt-3">
                         <div>
                           <label className="block text-xs text-gray-500 mb-1">
@@ -727,7 +696,6 @@ const ApprovalScreen = () => {
                           <input
                             type="number"
                             step="0.01"
-                            // value={ps.penalCharges ?? ""}
                             value={
                               ps.penalCharges === 0
                                 ? ""
@@ -736,15 +704,10 @@ const ApprovalScreen = () => {
                             placeholder="Enter Penal Charges (%)"
                             onWheel={(e) => e.target.blur()}
                             onChange={(e) => {
-                              const updated = [...partnerSanctions];
-                              updated[index].penalCharges =
-                                e.target.value === ""
-                                  ? ""
-                                  : parseFloat(e.target.value);
-                              setPartnerSanctions(updated);
+                              e.preventDefault();
                             }}
                             className="input-field text-sm"
-                            readOnly={isReadOnly || isPartnerLocked(ps)}
+                            readOnly={true}
                           />
                         </div>
                         <div>
@@ -754,7 +717,6 @@ const ApprovalScreen = () => {
                           <input
                             type="number"
                             step="0.01"
-                            // value={ps.processingFees ?? ""}
                             value={
                               ps.processingFees === 0
                                 ? ""
@@ -762,15 +724,10 @@ const ApprovalScreen = () => {
                             }
                             onWheel={(e) => e.target.blur()}
                             onChange={(e) => {
-                              const updated = [...partnerSanctions];
-                              updated[index].processingFees =
-                                e.target.value === ""
-                                  ? ""
-                                  : parseFloat(e.target.value);
-                              setPartnerSanctions(updated);
+                              e.preventDefault();
                             }}
                             className="input-field text-sm"
-                            readOnly={isReadOnly || isPartnerLocked(ps)}
+                            readOnly={true}
                           />
                         </div>
 
@@ -790,15 +747,10 @@ const ApprovalScreen = () => {
                             placeholder="Enter Legal Charges"
                             onWheel={(e) => e.target.blur()}
                             onChange={(e) => {
-                              const updated = [...partnerSanctions];
-                              updated[index].legalCharges =
-                                e.target.value === ""
-                                  ? ""
-                                  : parseFloat(e.target.value);
-                              setPartnerSanctions(updated);
+                              e.preventDefault();
                             }}
                             className="input-field text-sm"
-                            readOnly={isReadOnly || isPartnerLocked(ps)}
+                            readOnly={true}
                           />
                         </div>
                         <div>
@@ -810,20 +762,17 @@ const ApprovalScreen = () => {
                             type="number"
                             step="0.01"
                             value={
-                              ps.serviceFee === 0 ? "" : (ps.serviceFee ?? "")
+                              ps.serviceFee === 0
+                                ? ""
+                                : (ps.serviceFee ?? "")
                             }
                             placeholder="Service Fee Charges"
                             onWheel={(e) => e.target.blur()}
                             onChange={(e) => {
-                              const updated = [...partnerSanctions];
-                              updated[index].serviceFee =
-                                e.target.value === ""
-                                  ? ""
-                                  : parseFloat(e.target.value);
-                              setPartnerSanctions(updated);
+                              e.preventDefault();
                             }}
                             className="input-field text-sm"
-                            readOnly={isReadOnly || isPartnerLocked(ps)}
+                            readOnly={true}
                           />
                         </div>
                         <div>
@@ -842,15 +791,10 @@ const ApprovalScreen = () => {
                             placeholder="Cash Collateral"
                             onWheel={(e) => e.target.blur()}
                             onChange={(e) => {
-                              const updated = [...partnerSanctions];
-                              updated[index].cashCollateral =
-                                e.target.value === ""
-                                  ? ""
-                                  : parseFloat(e.target.value);
-                              setPartnerSanctions(updated);
+                              e.preventDefault();
                             }}
                             className="input-field text-sm"
-                            readOnly={isReadOnly || isPartnerLocked(ps)}
+                            readOnly={true}
                           />
                         </div>
 
@@ -862,12 +806,10 @@ const ApprovalScreen = () => {
                             type="text"
                             value={ps.conditions || ""}
                             onChange={(e) => {
-                              const updated = [...partnerSanctions];
-                              updated[index].conditions = e.target.value;
-                              setPartnerSanctions(updated);
+                              e.preventDefault();
                             }}
                             className="input-field text-sm"
-                            readOnly={isReadOnly || isPartnerLocked(ps)}
+                            readOnly={true}
                           />
                         </div>
                       </div>
@@ -875,6 +817,7 @@ const ApprovalScreen = () => {
                   ))}
                 </div>
               )}
+
 
               {/* RM sees read-only view */}
               {role === "relationship_manager" && (

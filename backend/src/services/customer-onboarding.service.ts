@@ -1389,55 +1389,28 @@ Fintree Finance Pvt. Ltd.
       const customerName =
         customer?.companyName || customer?.customerName || `ID ${customerId}`;
 
-      // Step 1: Get roleId from roles table
-      const role = await this.roleRepository.findOne({
-        where: { name: "md" }, // change if column name differs
-        select: ["id"], // primary key column
-      });
+      // Notify RM that CEO has approved and case is pending final terms
+      const rmId = customer.rmId;
+      if (rmId) {
+        const rmUser = await this.userRepository.findOne({
+          where: { id: rmId },
+          select: ["email"],
+        });
 
-      if (!role) {
-        throw new Error("md role not found");
-      }
-
-      // Step 2: Get all userIds mapped to this roleId from user_roles table
-      const userRoles = await this.userRoleRepository.find({
-        where: { roleId: role.id, isActive:true}, // IMPORTANT: use role.id unless schema differs
-        select: ["userId"],
-      });
-
-      if (!userRoles.length) {
-        console.log("No users assigned to md role");
-        return;
-      }
-
-      // Step 3: Extract userIds
-      const userIds = userRoles.map((ur) => ur.userId);
-
-      // Step 4: Fetch emails from users table
-      const creditUsers = await this.userRepository.find({
-        where: {
-          id: In(userIds),
-        },
-        select: ["id", "email"],
-      });
-
-      // Step 5: Send email to each user
-      for (const user of creditUsers) {
-        if (user.email) {
+        if (rmUser?.email) {
           await sendMail({
-            to: user.email,
-            subject: "Case Pending for MD Approval",
-            // text: `Customer case ${customerName} approved by Credit L1 and pending your review.`,
+            to: rmUser.email,
+            subject: "Case Pending for RM Final Sanction Terms",
             text: `
 Dear Team,
 
-The credit case for customer ${customerName} has been approved by CEO and is now pending your review and approval at the MD stage.
+The credit case for customer ${customerName} has been approved by CEO and is now pending your submission of final sanction terms to MD.
 
 Please log in to the LMS and take the necessary action.
 
 Customer Name : ${customerName}
 Case ID       : ${customerId}
-Current Stage : MD Approval
+Current Stage : RM Final Terms Submission
 
 Regards,
 Credit Workflow System
@@ -1557,7 +1530,7 @@ Fintree Finance Pvt. Ltd.
     }
 
     workflow.currentStatus = approved ? "ceo_approved" : "rejected";
-    workflow.currentApproverRoleName = approved ? "MD" : "RM";
+    workflow.currentApproverRoleName = approved ? "RM" : "RM";
     if (!approved) workflow.isRejected = true;
     workflow.remarks = remarks;
     await this.workflowRepository.save(workflow);
@@ -1586,23 +1559,15 @@ Fintree Finance Pvt. Ltd.
     remarks: string,
     sanctionData?: any,
   ) {
-    throw new Error(
-      "RM-to-MD final terms flow is disabled. MD approval is final.",
-    );
-
-    /*
     const workflow = await this.getOrCreateWorkflow(customerId);
 
-    // RM can modify final terms only when status is md_pending_terms (after MD reviewed and sent back to RM)
-    if (workflow.currentStatus.toLowerCase() !== "md_pending_terms") {
+    if (workflow.currentStatus.toLowerCase() !== "ceo_approved") {
       throw new Error(
-        "Case must be MD pending terms before RM can modify final terms",
+        "Case must be CEO approved before RM can submit final terms",
       );
     }
 
     const previousStatus = workflow.currentStatus;
-
-
 
     // Handle partner-specific sanctions (new format for multi-partner support)
     if (
@@ -1744,66 +1709,41 @@ Fintree Finance Pvt. Ltd.
     workflow.remarks = remarks;
     await this.workflowRepository.save(workflow);
 
-    await this.workflowRepository.save(workflow);
+    // Notify MD
+    const customer = await this.customerRepository.findOne({
+      where: { id: customerId },
+      select: ["id", "customerName", "companyName"],
+    });
 
+    const customerName = customer?.companyName || customer?.customerName || `ID ${customerId}`;
 
+    const role = await this.roleRepository.findOne({
+      where: { name: "md" },
+      select: ["id"],
+    });
 
-    
-  if ( workflow.currentStatus === "md_terms_submitted") {
-
-      // // Step 1: Get RM id from customer table
-      const customer = await this.customerRepository.findOne({
-        where: { id: customerId },
-        select: ["id", "rmId","customerName","companyName"],
-      });
-
-
-    if (workflow.currentStatus = "md_terms_submitted") {
-      const customerName = customer?.companyName || customer?.customerName || `ID ${customerId}`;
-
-      // Step 1: Get roleId from roles table
-      const role = await this.roleRepository.findOne({
-        where: { name: "md" }, // change if column name differs
-        select: ["id"], // primary key column
-      });
-
-      if (!role) {
-        throw new Error("md role not found");
-      }
-
-      // Step 2: Get all userIds mapped to this roleId from user_roles table
+    if (role) {
       const userRoles = await this.userRoleRepository.find({
-        where: { roleId: role.id }, // IMPORTANT: use role.id unless schema differs
+        where: { roleId: role.id, isActive: true },
         select: ["userId"],
       });
 
-      if (!userRoles.length) {
-        console.log("No users assigned to md role");
-        return;
-      }
+      if (userRoles.length > 0) {
+        const userIds = userRoles.map((ur) => ur.userId);
+        const mdUsers = await this.userRepository.find({
+          where: { id: In(userIds) },
+          select: ["id", "email"],
+        });
 
-      // Step 3: Extract userIds
-      const userIds = userRoles.map((ur) => ur.userId);
-
-      // Step 4: Fetch emails from users table
-      const creditUsers = await this.userRepository.find({
-        where: {
-          id: In(userIds),
-        },
-        select: ["id", "email"],
-      });
-
-      // Step 5: Send email to each user
-      for (const user of creditUsers) {
-        if (user.email) {
-          await sendMail({
-            to: user.email,
-            subject: "Case Pending for MD Approval",
-            // text: `Customer case ${customerName} approved by Credit L1 and pending your review.`,
-            text: `
+        for (const user of mdUsers) {
+          if (user.email) {
+            await sendMail({
+              to: user.email,
+              subject: "Case Pending for MD Approval",
+              text: `
 Dear Team,
 
-The credit case for customer ${customerName} has been approved by CEO and is now pending your review and approval at the MD stage.
+The final sanction terms for customer ${customerName} have been submitted by the RM and are now pending your review and approval.
 
 Please log in to the LMS and take the necessary action.
 
@@ -1815,32 +1755,12 @@ Regards,
 Credit Workflow System
 Fintree Finance Pvt. Ltd.
 `,
-          });
+            });
+          }
         }
       }
     }
-  }
-    
-    // Notify MD after RM submits final terms
-    
-    // if (workflow.currentStatus === "md_terms_submitted") {
-    //   const mdUsers = await this.userRepository.find({
-    //     where: {
-    //       defaultRole: "MD",
-    //     },
-    //     select: ["id", "email"],
-    //   });
 
-    //   for (const user of mdUsers) {
-    //     if (user.email) {
-    //       await sendMail({
-    //         to: user.email,
-    //         subject: "Case Pending for MD Approval",
-    //         text: `Customer case ${customerId} final terms submitted by RM and pending your approval.`,
-    //       });
-    //     }
-    //   }
-    // }
     // Sync customer status
     await this.customerRepository.update(customerId, {
       status: workflow.currentStatus as any,
@@ -1857,7 +1777,6 @@ Fintree Finance Pvt. Ltd.
     });
 
     return workflow;
-    */
   }
 
   // async mdApprove(customerId: number, userId: number, remarks: string, approved: boolean, sanctionData?: any) {
@@ -2016,7 +1935,7 @@ Fintree Finance Pvt. Ltd.
     const workflow = await this.getOrCreateWorkflow(customerId);
     const status = workflow.currentStatus.toLowerCase();
 
-    if (status !== "ceo_approved") {
+    if (status !== "md_terms_submitted") {
       throw new Error("Case not pending at MD for final approval");
     }
 
@@ -3128,7 +3047,8 @@ Fintree Finance Pvt. Ltd.
 
   async getExecutivePending(role: string, userId?: number) {
     const r = role.toUpperCase();
-    let statusFilter: any = r === "MD" ? "ceo_approved" : "credit_l2_approved";
+    let statusFilter: any =
+      r === "MD" ? "md_terms_submitted" : "credit_l2_approved";
 
     // Pending cases
     const pendingWorkflows = await this.workflowRepository.find({
