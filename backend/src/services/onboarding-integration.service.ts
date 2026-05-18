@@ -80,6 +80,7 @@ export class OnboardingIntegrationService {
         identifier: mobileNumber,
         identifierType: OtpIdentifierType.MOBILE,
         status: OtpSessionStatus.VERIFIED,
+        consentAccepted: false,
         expiresAt: MoreThan(new Date()),
         ownerType,
         applicantId:
@@ -289,6 +290,8 @@ export class OnboardingIntegrationService {
     coApplicantId?: number,
     companyInfo?: { companyType: string; companyName: string; rmId: number },
     skipOtpValidation?: boolean,
+    consentAccepted?: boolean,
+    consentText?: string,
   ): Promise<{ success: boolean; customerId: number; coApplicantId?: number }> {
     const otpRepo = AppDataSource.getRepository(OtpSession);
     const customerRepo = AppDataSource.getRepository(Customer);
@@ -371,13 +374,21 @@ export class OnboardingIntegrationService {
             expiresAt: otpSession.expiresAt,
             attempts: otpSession.attempts,
             lastSentAt: otpSession.createdAt,
+            
           },
           otp,
         );
+        // await otpRepo.update(
+        //   { id: otpSession.id },
+        //   { status: OtpSessionStatus.VERIFIED },
+        // );
 
         await otpRepo.update(
           { id: otpSession.id },
-          { status: OtpSessionStatus.VERIFIED },
+          {status: OtpSessionStatus.VERIFIED,
+            consentAccepted: consentAccepted || false,
+            consentText: consentText || "",
+            },
         );
       } catch (error: any) {
         await otpRepo.update(
@@ -843,7 +854,7 @@ export class OnboardingIntegrationService {
 
         // Extract name fields from PAN API response
         if (result?.details) {
-          kycStatus.firstName = result.details.firstName || null;
+          kycStatus.firstName = result.details.firstName || result.details.name||null;
           kycStatus.middleName = result.details.middleName || null;
           kycStatus.lastName = result.details.lastName || null;
         }

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { toast } from "react-toastify";
 import kycService from "../services/kycService";
-
+import MobileConsentModal, {MOBILE_OTP_CONSENT,} from "../components/MobileConsentModal";
 export function useVerificationStatusesState() {
   return useState([]);
 }
@@ -91,7 +91,9 @@ export default function useOtpFlow({
   ownerType: otpData.ownerType,
   applicantId: otpData.applicantId,
   coApplicantId: otpData.coApplicantId,
-  companyInfo
+  companyInfo,
+  consentAccepted: true,
+  consentText: MOBILE_OTP_CONSENT,
 });
 
 

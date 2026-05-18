@@ -39,7 +39,10 @@ export class OnboardingController {
 
   verifyMobileOtp = async (req: Request, res: Response): Promise<void> => {
     try {
-      const { customerId, otp, mobileNumber, ownerType, applicantId, coApplicantId, companyType, companyName, skipOtpValidation } = req.body;
+      const { customerId, otp, mobileNumber, ownerType, applicantId, coApplicantId, companyType, companyName, skipOtpValidation,
+      consentAccepted,
+      consentText,
+      } = req.body;
 
       if (!skipOtpValidation && (!otp || !mobileNumber || !ownerType)) {
         res.status(400).json({ success: false, message: "otp, mobileNumber and ownerType are required" });
@@ -59,8 +62,10 @@ export class OnboardingController {
         ownerType,
         applicantId ? Number(applicantId) : undefined,
         coApplicantId ? Number(coApplicantId) : undefined,
-        customerId ? undefined : { companyType, companyName, rmId: currentUserId },
-        skipOtpValidation
+        customerId ? undefined : { companyType, companyName, rmId: currentUserId } ,
+        skipOtpValidation,
+        consentAccepted,
+        consentText,
       );
 
       res.json({

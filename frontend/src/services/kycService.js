@@ -1,6 +1,6 @@
 import api from './api'
 import { API_ENDPOINTS } from '../constants/api'
-
+import MobileConsentModal, {MOBILE_OTP_CONSENT,} from "../components/MobileConsentModal";
 export const kycService = {
     // Create KYC entry
     createKyc: async (customerId, data) => {
@@ -117,7 +117,9 @@ verifyMobileOtp: async ({
   applicantId,
   coApplicantId,
   companyInfo,
-  skipOtpValidation
+  skipOtpValidation,
+  consentAccepted,
+  consentText,
 }) => {
 
   const payload = {
@@ -128,6 +130,8 @@ verifyMobileOtp: async ({
     applicantId,
     coApplicantId,
     skipOtpValidation,
+    consentAccepted,
+    consentText,
     ...(companyInfo || {})
   };
 

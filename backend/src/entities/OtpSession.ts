@@ -83,6 +83,12 @@ export class OtpSession {
     @UpdateDateColumn()
     updatedAt: Date;
 
+    @Column({ default: false })
+    consentAccepted: boolean;
+
+    @Column({ type: "text", nullable: true })
+    consentText: string;
+
     // --------------------------------------------------
     // RELATIONS
     // --------------------------------------------------

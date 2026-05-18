@@ -27,6 +27,9 @@ import useOtpFlow from "../../../hooks/useOtpFlow";
 
 import { validateMobile, validateEmail } from "../../../utils/validation";
 import { useLocation } from "react-router-dom";
+import MobileConsentModal, {
+  MOBILE_OTP_CONSENT,
+} from "../../../components/MobileConsentModal";
 
 const ONBOARDING_SECTIONS = ["kyc", "coApplicants", "addresses", "contactPersons", "history"];
 
@@ -41,6 +44,9 @@ const isFreshCustomer = location.state?.isFreshCustomer;
   const customerId = searchParams.get("id") ? Number(searchParams.get("id")) : null;
 
   const { currentCase, isLoading } = useSelector((s) => s.cases);
+  const [showConsent, setShowConsent] = useState(false);
+  const [consentAccepted, setConsentAccepted] = useState(false);
+  const [pendingOtpData, setPendingOtpData] = useState({});
 
   const {
     activeTab, setActiveTab,
@@ -538,6 +544,50 @@ if (isFreshCustomer && currentCase?.status === "draft"  && !currentCase?.applica
   // };
 
 
+  const handleConsentAccept = async () => {
+
+  try {
+
+    setConsentAccepted(true);
+    setShowConsent(false);
+
+    if (!pendingOtpData) {
+      toast.error("Missing OTP data");
+      return;
+    }
+
+    console.log("pendingOtpData", pendingOtpData);
+
+    const res = await kycService.sendMobileOtp({
+      customerId: pendingOtpData.customerId,
+      mobileNumber: pendingOtpData.mobileNumber,
+      ownerType: pendingOtpData.ownerType,
+      applicantId: pendingOtpData.applicantId,
+      coApplicantId: pendingOtpData.coApplicantId,
+    });
+
+    if (res?.success) {
+
+      openOtpFor({
+        type: "mobile",
+        target: pendingOtpData.field,
+        value: pendingOtpData.mobileNumber,
+        ownerType: pendingOtpData.ownerType,
+        applicantId: pendingOtpData.applicantId,
+        coApplicantId: pendingOtpData.coApplicantId,
+      });
+    }
+
+  } catch (error) {
+
+    console.error(error);
+
+    toast.error(
+      error?.response?.data?.message ||
+      "Failed to send OTP"
+    );
+  }
+};
   
   const handleVerify = async (
     field,
@@ -701,27 +751,44 @@ if (
     // ✅ COMPANY MOBILE → OTP ONLY FOR EXTERNAL USERS
     if (field === "companyMobile" && !isInternalUser) {
 
-      const res = await kycService.sendMobileOtp({
+      setPendingOtpData({
         customerId,
         mobileNumber: value,
-        ownerType,
+        ownerType: "COMPANY",
         applicantId,
         coApplicantId,
+        field,
       });
 
-      if (res?.success) {
-        openOtpFor({
-          type: "mobile",
-          target: field,
-          value,
-          ownerType,
-          applicantId,
-          coApplicantId,
-        });
-      }
+      setShowConsent(true);
+      setLoading(loadingKey, false);
 
-      return res;
+      return;
     }
+    // ✅ COMPANY MOBILE → OTP ONLY FOR EXTERNAL USERS
+    // if (field === "companyMobile" && !isInternalUser) {
+
+    //   const res = await kycService.sendMobileOtp({
+    //     customerId,
+    //     mobileNumber: value,
+    //     ownerType,
+    //     applicantId,
+    //     coApplicantId,
+    //   });
+
+    //   if (res?.success) {
+    //     openOtpFor({
+    //       type: "mobile",
+    //       target: field,
+    //       value,
+    //       ownerType,
+    //       applicantId,
+    //       coApplicantId,
+    //     });
+    //   }
+
+    //   return res;
+    // }
 
       if (field === "coApplicantMobile" && !isInternalUser) {
 
@@ -754,6 +821,8 @@ if (
       ownerType,
       applicantId,
       coApplicantId,
+      consentAccepted: true,
+      consentText: MOBILE_OTP_CONSENT,
       companyInfo,
       skipOtpValidation: true,
     });
@@ -1591,7 +1660,7 @@ if (!formData.applicantAadhaarAddress?.trim()) {
 
 
       // female co-app rule (keep if your business wants)
-      if (formData.companyType === COMPANY_TYPES.PROPRIETORSHIP || formData.companyType === COMPANY_TYPES.PVT_LTD) {
+      if (formData.companyType === COMPANY_TYPES.PROPRIETORSHIP ) {
         const hasFemale = coApplicants.some((c) => c.gender === "Female");
         if (!hasFemale) newErrors.coApplicants = "At least one female co-applicant is mandatory for this company type";
       }
@@ -1991,6 +2060,11 @@ return (
         isVerifying={isVerifying}
         onCancel={closeOtpModal}
         onVerify={() => handleOtpVerify()}
+      />
+      <MobileConsentModal
+        open={showConsent}
+        onClose={() => setShowConsent(false)}
+        onAccept={handleConsentAccept}
       />
 
       {/* Camera */}
