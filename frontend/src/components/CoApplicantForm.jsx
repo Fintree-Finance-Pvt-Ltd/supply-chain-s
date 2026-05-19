@@ -485,8 +485,6 @@ const isAnyLoading =
   //   safeVerify('coApplicantEmail', data.email, data.localKey);
 const handleEmailVerify = async () => {
 
-
-
   if (!data.email) {
     notify("error", "Please enter email");
     return;
