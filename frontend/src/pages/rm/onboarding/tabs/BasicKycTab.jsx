@@ -410,47 +410,74 @@ const BasicKycTab = ({
               </p>
             )}
           </div>
+
+             <div>
+  <label className="block text-sm font-medium text-gray-700 mb-2">
+    Authorized Person Email
+  </label>
+
+  <div className="flex items-center space-x-2">
+    <input
+      value={formData.applicantEmail}
+      onChange={(e) =>
+        setFormData((p) => ({
+          ...p,
+          applicantEmail: e.target.value,
+        }))
+      }
+      className="input-field flex-1"
+      placeholder="Email"
+      disabled={applicantVerified.email}
+    />
+
+    <button
+      type="button"
+      onClick={() =>
+        onVerify("applicantEmail", formData.applicantEmail)
+      }
+      disabled={
+        loadingStates["applicantEmail_main"] ||
+        applicantVerified.email
+      }
+      className={`
+        min-w-[110px]
+        h-[48px]
+        px-4
+        rounded-lg
+        font-medium
+        whitespace-nowrap
+        flex
+        items-center
+        justify-center
+        transition-all
+        ${
+          applicantVerified.email
+            ? "bg-green-600 text-white"
+            : "bg-gray-200 hover:bg-gray-300 text-gray-800"
+        }
+      `}
+    >
+      {loadingStates["applicantEmail_main"] ? (
+        <LoadingSpinner size="sm" />
+      ) : applicantVerified.email ? (
+        "✓ Verified"
+      ) : (
+        "Register"
+      )}
+    </button>
+  </div>
+
+  {errors.applicantEmail && (
+    <p className="text-red-500 text-xs mt-1">
+      {errors.applicantEmail}
+    </p>
+  )}
+</div>
+          
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Authorized Person Email
-            </label>
-            <input
-              value={formData.applicantEmail}
-              onChange={(e) =>
-                setFormData((p) => ({ ...p, applicantEmail: e.target.value }))
-              }
-              className="input-field"
-              placeholder="Email"
-              disabled={applicantVerified.email}
-            />
-            <button
-              type="button"
-              onClick={() =>
-                onVerify("applicantEmail", formData.applicantEmail)
-              }
-              disabled={
-                loadingStates["applicantEmail_main"] || applicantVerified.email
-              }
-              className={`btn-${applicantVerified.email ? "success" : "secondary"} min-w-[110px]`}
-            >
-              {loadingStates["applicantEmail_main"] ? (
-                <LoadingSpinner size="sm" />
-              ) : applicantVerified.email ? (
-                "✓ Verified"
-              ) : (
-                "Register"
-              )}
-            </button>
-
-            {errors.applicantEmail && (
-              <p className="text-red-500 text-xs mt-1">
-                {errors.applicantEmail}
-              </p>
-            )}
-          </div>
+       
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
