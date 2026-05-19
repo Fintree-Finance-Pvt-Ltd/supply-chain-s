@@ -133,15 +133,35 @@ const handleViewCustomerInvoices = async (invoice) => {
       .filter((d) => d.documentType === "INVOICE")
       .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
 
-    // ✅ map invoice → doc
-    const map = {};
-    customerInvoices
-      .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
-      .forEach((inv, index) => {
-        map[inv.id] = invoiceDocs[index] ? [invoiceDocs[index]] : [];
-      });
+// ✅ map invoice docs using invoiceFilePath
+const map = {};
 
-    setSelectedCustomerDocs(map); 
+customerInvoices.forEach((inv) => {
+
+  const matchedDocs = invoiceDocs.filter((doc) => {
+
+    // normalize path
+    const docPath = doc.filePath
+      ?.replace(/\\/g, "/")
+      ?.trim();
+
+    const invoicePath = inv.invoiceFilePath
+      ?.replace(/\\/g, "/")
+      ?.trim();
+
+    return (
+      docPath &&
+      invoicePath &&
+      docPath === invoicePath
+    );
+  });
+
+  map[inv.id] = matchedDocs;
+});
+
+setSelectedCustomerDocs(map);
+
+
   } catch (err) {
     console.error(err);
   } finally {
@@ -152,6 +172,8 @@ const handleViewCustomerInvoices = async (invoice) => {
 
   const handleCustomerChange = async (customerId) => {
     // Convert string to number for comparison
+     setInvoiceFiles([]);
+
     const customerIdNum = parseInt(customerId);
     const customer = customers.find((c) => c.id === customerIdNum);
     setSelectedCustomer(customer || null);
@@ -175,9 +197,7 @@ const handleViewCustomerInvoices = async (invoice) => {
         setLoading(false);
       }
     }
-    if (customerId) {
-      await loadInvoiceDocument(customerId);
-    }
+    
   };
 
 
@@ -410,6 +430,8 @@ const handleInvoiceNumberChange = (e) => {
       toast.info("Please select Customer, LAN, and Supplier");
       return;
     }
+
+    setInvoiceFiles([]);
     if (
       !formData.invoiceNumber ||
       !formData.invoiceDate ||
@@ -419,6 +441,11 @@ const handleInvoiceNumberChange = (e) => {
       toast.info("Please fill all invoice details");
       return;
     }
+    // ✅ Invoice document required
+if (invoiceFiles.length === 0) {
+  toast.error("Upload Invoice Documents is required");
+  return;
+}
 
     try {
       setLoading(true);
@@ -467,6 +494,11 @@ const handleInvoiceNumberChange = (e) => {
         toast.info("Please fill all invoice details");
         return;
       }
+      // ✅ Invoice document required
+if (invoiceFiles.length === 0) {
+  toast.error("Upload Invoice Documents is required");
+  return;
+}
 
       try {
         setLoading(true);
@@ -496,6 +528,7 @@ const handleInvoiceNumberChange = (e) => {
         toast.success(
           "Invoice submitted successfully - Pending Customer Approval",
         );
+        setInvoiceFiles([]);
         setFormData({
           invoiceNumber: "",
           invoiceDate: "",
@@ -676,8 +709,8 @@ const handleInvoiceNumberChange = (e) => {
   };
 
   if (loading) return <LoadingSpinner />;
-
 const handleInvoiceUpload = async (e) => {
+
   const files = Array.from(e.target.files || []);
 
   if (!files.length) return;
@@ -688,33 +721,44 @@ const handleInvoiceUpload = async (e) => {
   }
 
   try {
-    const uploaded = [];
+
+    setLoading(true);
+
+    // ✅ only latest upload
+    const uploadedDocs = [];
 
     for (const file of files) {
 
-      // ONLY upload document
-      const res = await documentService.uploadDocument(
-        selectedCustomer.id,
-        file,
-        "INVOICE",
-        "applicant",
-        0,
-        null,
-        {}
-      );
+      const res =
+        await documentService.uploadDocument(
+          selectedCustomer.id,
+          file,
+          "INVOICE",
+          "applicant",
+          0,
+          null,
+          {}
+        );
 
-      uploaded.push(res.data);
+      uploadedDocs.push(res.data);
     }
 
-    // store uploaded docs in state
-    setInvoiceFiles((prev) => [...prev, ...uploaded]);
+    // ✅ replace old docs
+    setInvoiceFiles(uploadedDocs);
 
-    toast.success("Invoice uploaded successfully");
+    toast.success(
+      "Invoice uploaded successfully"
+    );
 
   } catch (err) {
+
     console.error(err);
 
     toast.error("Upload failed");
+
+  } finally {
+
+    setLoading(false);
   }
 };
 
@@ -730,30 +774,6 @@ const handleInvoiceUpload = async (e) => {
     }
   };
 
-  const loadInvoiceDocument = async (customerId) => {
-    try {
-      const res = await documentService.getDocumentsByCustomer(customerId);
-
-      const docs = res?.data || [];
-
-      const invoiceDocs = docs.filter((d) => d.documentType === "INVOICE");
-
-      setInvoiceFiles(invoiceDocs);
-
-      if (invoiceDoc) {
-        setInvoiceFile({
-          name: invoiceDoc.fileName,
-        });
-        setInvoiceFileUrl(invoiceDoc.filePath);
-        setInvoiceDocId(invoiceDoc.id);
-        setIsInvoiceUploaded(true);
-      } else {
-        setIsInvoiceUploaded(false);
-      }
-    } catch (err) {
-      console.error("Failed to load invoice doc", err);
-    }
-  };
 
 
   // ✅ LAN wise invoice date validation days
@@ -1793,72 +1813,128 @@ Remaining Allowed: ₹${formatINR(
 
 
           <div style={{ gridColumn: "1 / -1", marginTop: "24px" }}>
-            <label style={{ fontWeight: "600", fontSize: "14px", color: "#334155", display: "block", marginBottom: "12px" }}>
-              Upload Invoice Documents
-            </label>
+           <label
+  style={{
+    fontWeight: "600",
+    fontSize: "14px",
+    color: "#334155",
+    display: "block",
+    marginBottom: "12px",
+  }}
+>
+  Upload Invoice Documents
+  <span style={{ color: "#ef4444", marginLeft: "4px" }}>
+    *
+  </span>
+</label>
+{/* SHOW UPLOADED FILES ONLY AFTER SUBMIT */}
+{savedInvoiceId && invoiceFiles.length > 0 && (
+  <div
+    style={{
+      marginBottom: "16px",
+      display: "grid",
+      gridTemplateColumns: "1fr 1fr",
+      gap: "12px",
+    }}
+  >
+    {invoiceFiles.map((doc) => (
+      <div
+        key={doc.id}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "12px",
+          padding: "12px 16px",
+          background: "#fff",
+          border: "1px solid #e2e8f0",
+          borderRadius: "12px",
+        }}
+      >
+        <FiFileText color="#10b981" size={18} />
 
-            {/* SHOW UPLOADED FILES */}
-            {invoiceFiles.length > 0 && (
-              <div style={{ marginBottom: "16px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-                {invoiceFiles.map((doc) => (
-                  <div
-                    key={doc.id}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "12px",
-                      padding: "12px 16px",
-                      background: "#fff",
-                      border: "1px solid #e2e8f0",
-                      borderRadius: "12px",
-                    }}
-                  >
-                    <FiFileText color="#10b981" size={18} />
+        <span
+          style={{
+            flex: 1,
+            fontSize: "13px",
+            fontWeight: "500",
+            color: "#475569",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {doc.fileName}
+        </span>
 
-                    <span style={{ flex: 1, fontSize: "13px", fontWeight: "500", color: "#475569", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {doc.fileName}
-                    </span>
+        <div style={{ display: "flex", gap: "8px" }}>
+          <button
+            style={{
+              border: "none",
+              background: "#f1f5f9",
+              padding: "6px",
+              borderRadius: "6px",
+              cursor: "pointer",
+              color: "#202b3a",
+            }}
+            onClick={() => {
+              const baseUrl =
+                import.meta.env.VITE_API_BASE_URL?.replace("/api", "") ||
+                "http://localhost:4000";
 
-                    <div style={{ display: "flex", gap: "8px" }}>
-                      <button
-                        style={{ border: "none", background: "#f1f5f9", padding: "6px", borderRadius: "6px", cursor: "pointer", color: "#202b3a" }}
-                        onClick={() => {
-                          const baseUrl = import.meta.env.VITE_API_BASE_URL?.replace("/api", "") || "http://localhost:4000";
-                          const fileUrl = doc.filePath?.startsWith("http") ? doc.filePath : `${baseUrl}/${doc.filePath?.replace(/\\/g, "/")}`;
-                          window.open(fileUrl, "_blank");
-                        }}
-                      >
-                        <FiEye size={14} />
-                      </button>
+              const fileUrl = doc.filePath?.startsWith("http")
+                ? doc.filePath
+                : `${baseUrl}/${doc.filePath?.replace(/\\/g, "/")}`;
 
-                      <button 
-                        style={{ border: "none", background: "#fef2f2", padding: "6px", borderRadius: "6px", cursor: "pointer", color: "#ef4444" }}
-                        onClick={() => handleRemoveInvoice(doc.id)}
-                      >
-                        <FiX size={14} />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+              window.open(fileUrl, "_blank");
+            }}
+          >
+            <FiEye size={14} />
+          </button>
 
-            {/* ALWAYS SHOW UPLOAD BUTTON */}
-            <label
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                justifyContent: "center",
-                border: "2px dashed #6366f1",
-                padding: "30px",
-                textAlign: "center",
-                borderRadius: "16px",
-                cursor: "pointer",
-                background: "#f5f3ff",
-                transition: "all 0.2s ease",
-              }}
-            >
+          <button
+            style={{
+              border: "none",
+              background: "#fef2f2",
+              padding: "6px",
+              borderRadius: "6px",
+              cursor: "pointer",
+              color: "#ef4444",
+            }}
+            onClick={() => handleRemoveInvoice(doc.id)}
+          >
+            <FiX size={14} />
+          </button>
+        </div>
+      </div>
+    ))}
+  </div>
+)}
+            {/* SHOW UPLOAD FIELD ONLY BEFORE SUCCESSFUL UPLOAD */}
+<div
+  style={{
+    border: "2px dashed #cbd5e1",
+    borderRadius: "16px",
+    padding: "24px",
+    background: "#f8fafc",
+  }}
+>
+  {invoiceFiles.length === 0 ? (
+
+    <label
+    style={{
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "center",
+      justifyContent: "center",
+      border: "2px dashed #6366f1",
+      padding: "30px",
+      textAlign: "center",
+      borderRadius: "16px",
+      cursor: "pointer",
+      background: "#f5f3ff",
+      transition: "all 0.2s ease",
+    }}
+  >
               <input
                 type="file"
                 multiple
@@ -1874,7 +1950,77 @@ Remaining Allowed: ₹${formatINR(
               <p style={{ color: "#6366f1", fontSize: "12px", marginTop: "4px" }}>
                 PDF, JPG or PNG (Max 10MB)
               </p>
-            </label>
+    </label>
+
+  ) : (
+
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        padding: "14px 18px",
+        background: "#ecfdf5",
+        border: "1px solid #bbf7d0",
+        borderRadius: "12px",
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "12px",
+        }}
+      >
+        <FiFileText
+          color="#059669"
+          size={22}
+        />
+
+        <div>
+          <p
+            style={{
+              margin: 0,
+              fontSize: "14px",
+              fontWeight: "600",
+              color: "#065f46",
+            }}
+          >
+            Invoice Uploaded Successfully
+          </p>
+
+          <p
+            style={{
+              margin: "4px 0 0",
+              fontSize: "12px",
+              color: "#047857",
+            }}
+          >
+            {invoiceFiles?.[0]?.fileName}
+          </p>
+        </div>
+      </div>
+
+      <button
+        onClick={() =>
+          handleRemoveInvoice(
+            invoiceFiles?.[0]?.id
+          )
+        }
+        style={{
+          border: "none",
+          background: "#fef2f2",
+          color: "#dc2626",
+          padding: "8px",
+          borderRadius: "8px",
+          cursor: "pointer",
+        }}
+      >
+        <FiX size={16} />
+      </button>
+    </div>
+  )}
+</div>
           </div>
         </div>
 
