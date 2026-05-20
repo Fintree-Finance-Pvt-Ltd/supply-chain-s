@@ -43,30 +43,30 @@ const BasicKycTab = ({
   };
 
 
-  const getAuthorizedPersonLabel = () => {
-  switch (formData.companyType) {
-    case COMPANY_TYPES.PROPRIETORSHIP:
-      return "Proprietor Details";
+  // const getAuthorizedPersonLabel = () => {
+  // switch (formData.companyType) {
+  //   case COMPANY_TYPES.PROPRIETORSHIP:
+  //     return "Proprietor Details";
 
-    case COMPANY_TYPES.PRIVATE_LIMITED:
-      return "Director Details";
+  //   case COMPANY_TYPES.PRIVATE_LIMITED:
+  //     return "Director Details";
 
-    case COMPANY_TYPES.PARTNERSHIP:
-      return "Partner Details";
+  //   case COMPANY_TYPES.PARTNERSHIP:
+  //     return "Partner Details";
 
-    case COMPANY_TYPES.LLP:
-      return "Designated Partner Details";
+  //   case COMPANY_TYPES.LLP:
+  //     return "Designated Partner Details";
 
-    case COMPANY_TYPES.OPC:
-      return "Director Details";
+  //   case COMPANY_TYPES.OPC:
+  //     return "Director Details";
 
-    case COMPANY_TYPES.HUF:
-      return "Karta Details";
+  //   case COMPANY_TYPES.HUF:
+  //     return "Karta Details";
 
-    default:
-      return "Authorized Person Details";
-  }
-};
+  //   default:
+  //     return "Authorized Person Details";
+  // }
+// };
   return (
     <div className="space-y-8">
       {/* Company */}
@@ -315,11 +315,11 @@ const BasicKycTab = ({
       <div className="space-y-6 border-t pt-6">
         {/* <h3 className="text-xl font-bold text-gray-900 border-b pb-2">Applicant (Same as Company Details)</h3> */}
         <h3 className="text-xl font-bold text-gray-900 border-b pb-2">
-          {/* Applicant{" "} */}
-          Authorized Person Details{" "}
-          {/* <span className="text-blue-500">(Same as Company Details)</span> */}
-                    <span className="text-blue-500">  ({getAuthorizedPersonLabel()})
-</span>
+          Applicant{" "}
+          {/* Authorized Person Details{" "} */}
+          <span className="text-blue-500">(Same as Company Details)</span>
+                    {/* <span className="text-blue-500">  ({getAuthorizedPersonLabel()}) */}
+{/* </span> */}
 
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -328,7 +328,7 @@ const BasicKycTab = ({
               Applicant Name
             </label>
             <input
-              value={formData.companyName}
+              value={formData.applicantName}
               onChange={(e) =>
                 setFormData((p) => ({ ...p, applicantName: e.target.value }))
               }
@@ -343,7 +343,7 @@ const BasicKycTab = ({
             )}
           </div>
 
-
+{/* 
            <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Authorized Person Full Name 
@@ -362,12 +362,12 @@ const BasicKycTab = ({
                 {errors.applicantName}
               </p>
             )}
-          </div>
+          </div> */}
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              {/* Applicant Mobile */}
-              Authorized Person mobile number
+              Applicant Mobile
+       
             </label>
             <div className="flex space-x-2">
               <input
@@ -413,7 +413,7 @@ const BasicKycTab = ({
 
              <div>
   <label className="block text-sm font-medium text-gray-700 mb-2">
-    Authorized Person Email
+   Applicant Email
   </label>
 
   <div className="flex items-center space-x-2">
@@ -481,7 +481,7 @@ const BasicKycTab = ({
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Authorized Person PAN Upload
+            Applicant PAN Upload
             </label>
             <div className="flex items-center space-x-2">
               <input
@@ -569,7 +569,7 @@ const BasicKycTab = ({
           {/* Applicant Aadhaar Number */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Authorized Person Aadhaar Number <span className="text-red-500">*</span>
+          Applicant Aadhaar Number <span className="text-red-500">*</span>
             </label>
 
             <input
@@ -599,7 +599,7 @@ const BasicKycTab = ({
           {/* Applicant Address */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Authorized Person Aadhaar Address <span className="text-red-500">*</span>
+              Applicant Aadhaar Address <span className="text-red-500">*</span>
             </label>
 
             <textarea
@@ -627,7 +627,7 @@ const BasicKycTab = ({
         {applicantVerified.pan && (
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Authorized Person Aadhaar KYC
+              Applicant Aadhaar KYC
             </label>
 
             {/* Show info message if Aadhaar is initiated but not verified */}
