@@ -305,6 +305,7 @@ if (isFreshCustomer && currentCase?.status === "draft"  && !currentCase?.applica
           id: a.id,
           localKey: a.id,
           type: a.type || "",
+           ownership: a.ownership || "", 
           fullAddress: a.fullAddress || "",
           pincode: a.pincode || "",
           state: a.state || "",
