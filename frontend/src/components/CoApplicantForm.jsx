@@ -379,7 +379,7 @@ const isAnyLoading =
 
   try {
     // ✅ OCR
-    const result = await kycService.runOcr(file, 'PAN')
+const result = await kycService.processPanOcr(file)
 
     if (!result?.success) {
       notify('error', result?.message || 'OCR failed')
