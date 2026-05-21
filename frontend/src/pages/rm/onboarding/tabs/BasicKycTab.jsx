@@ -43,29 +43,29 @@ const BasicKycTab = ({
   };
 
 
-  // const getAuthorizedPersonLabel = () => {
-  // switch (formData.companyType) {
-  //   case COMPANY_TYPES.PROPRIETORSHIP:
-  //     return "Proprietor Details";
+//   const getAuthorizedPersonLabel = () => {
+//   switch (formData.companyType) {
+//     case COMPANY_TYPES.PROPRIETORSHIP:
+//       return "Proprietor Details";
 
-  //   case COMPANY_TYPES.PRIVATE_LIMITED:
-  //     return "Director Details";
+//     case COMPANY_TYPES.PRIVATE_LIMITED:
+//       return "Director Details";
 
-  //   case COMPANY_TYPES.PARTNERSHIP:
-  //     return "Partner Details";
+//     case COMPANY_TYPES.PARTNERSHIP:
+//       return "Partner Details";
 
-  //   case COMPANY_TYPES.LLP:
-  //     return "Designated Partner Details";
+//     case COMPANY_TYPES.LLP:
+//       return "Designated Partner Details";
 
-  //   case COMPANY_TYPES.OPC:
-  //     return "Director Details";
+//     case COMPANY_TYPES.OPC:
+//       return "Director Details";
 
-  //   case COMPANY_TYPES.HUF:
-  //     return "Karta Details";
+//     case COMPANY_TYPES.HUF:
+//       return "Karta Details";
 
-  //   default:
-  //     return "Authorized Person Details";
-  // }
+//     default:
+//       return "Authorized Person Details";
+//   }
 // };
   return (
     <div className="space-y-8">
@@ -315,25 +315,28 @@ const BasicKycTab = ({
       <div className="space-y-6 border-t pt-6">
         {/* <h3 className="text-xl font-bold text-gray-900 border-b pb-2">Applicant (Same as Company Details)</h3> */}
         <h3 className="text-xl font-bold text-gray-900 border-b pb-2">
-          Applicant{" "}
-          {/* Authorized Person Details{" "} */}
-          <span className="text-blue-500">(Same as Company Details)</span>
-                    {/* <span className="text-blue-500">  ({getAuthorizedPersonLabel()}) */}
-{/* </span> */}
+          {/* Applicant{" "} */}
+          Primary Applicant Details{" "}
+          <span className="text-red-500">
+              (Enter individual applicant details not company details)
+            {/* (Enter person details — not company details) */}
+            </span>
+                    {/* <span className="text-blue-500">  ({getAuthorizedPersonLabel()})</span> */}
 
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Applicant Name
+              Applicant Name (Same as company) 
             </label>
             <input
-              value={formData.applicantName}
+              value={formData.companyName}
               onChange={(e) =>
                 setFormData((p) => ({ ...p, applicantName: e.target.value }))
               }
               className="input-field"
               placeholder="Applicant name"
+              disabled="true"
               // disabled={applicantVerified.pan}
             />
             {errors.applicantName && (
@@ -343,10 +346,10 @@ const BasicKycTab = ({
             )}
           </div>
 
-{/* 
-           <div>
+
+          <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Authorized Person Full Name 
+               Primary Applicant Full Name 
             </label>
             <input
               value={formData.applicantName}
@@ -355,6 +358,7 @@ const BasicKycTab = ({
               }
               className="input-field"
               placeholder="Applicant name"
+              disabled={true}
               // disabled={applicantVerified.pan}
             />
             {errors.applicantName && (
@@ -362,12 +366,12 @@ const BasicKycTab = ({
                 {errors.applicantName}
               </p>
             )}
-          </div> */}
+          </div>
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Applicant Mobile
-       
+              {/* Applicant Mobile */}
+              Primary Applicant mobile number 
             </label>
             <div className="flex space-x-2">
               <input
@@ -410,78 +414,51 @@ const BasicKycTab = ({
               </p>
             )}
           </div>
-
-             <div>
-  <label className="block text-sm font-medium text-gray-700 mb-2">
-   Applicant Email
-  </label>
-
-  <div className="flex items-center space-x-2">
-    <input
-      value={formData.applicantEmail}
-      onChange={(e) =>
-        setFormData((p) => ({
-          ...p,
-          applicantEmail: e.target.value,
-        }))
-      }
-      className="input-field flex-1"
-      placeholder="Email"
-      disabled={applicantVerified.email}
-    />
-
-    <button
-      type="button"
-      onClick={() =>
-        onVerify("applicantEmail", formData.applicantEmail)
-      }
-      disabled={
-        loadingStates["applicantEmail_main"] ||
-        applicantVerified.email
-      }
-      className={`
-        min-w-[110px]
-        h-[48px]
-        px-4
-        rounded-lg
-        font-medium
-        whitespace-nowrap
-        flex
-        items-center
-        justify-center
-        transition-all
-        ${
-          applicantVerified.email
-            ? "bg-green-600 text-white"
-            : "bg-gray-200 hover:bg-gray-300 text-gray-800"
-        }
-      `}
-    >
-      {loadingStates["applicantEmail_main"] ? (
-        <LoadingSpinner size="sm" />
-      ) : applicantVerified.email ? (
-        "✓ Verified"
-      ) : (
-        "Register"
-      )}
-    </button>
-  </div>
-
-  {errors.applicantEmail && (
-    <p className="text-red-500 text-xs mt-1">
-      {errors.applicantEmail}
-    </p>
-  )}
-</div>
-          
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-       
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+             Primary Applicant Email
+            </label>
+            <input
+              value={formData.applicantEmail}
+              onChange={(e) =>
+                setFormData((p) => ({ ...p, applicantEmail: e.target.value }))
+              }
+              className="input-field"
+              placeholder="Email"
+              disabled={applicantVerified.email}
+            />
+            <button
+              type="button"
+              onClick={() =>
+                onVerify("applicantEmail", formData.applicantEmail)
+              }
+              disabled={
+                loadingStates["applicantEmail_main"] || applicantVerified.email
+              }
+              className={`btn-${applicantVerified.email ? "success" : "secondary"} min-w-[110px]`}
+            >
+              {loadingStates["applicantEmail_main"] ? (
+                <LoadingSpinner size="sm" />
+              ) : applicantVerified.email ? (
+                "✓ Verified"
+              ) : (
+                "Register"
+              )}
+            </button>
+
+            {errors.applicantEmail && (
+              <p className="text-red-500 text-xs mt-1">
+                {errors.applicantEmail}
+              </p>
+            )}
+          </div>
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-            Applicant PAN Upload
+              Primary Applicant PAN Upload
             </label>
             <div className="flex items-center space-x-2">
               <input
@@ -569,7 +546,7 @@ const BasicKycTab = ({
           {/* Applicant Aadhaar Number */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-          Applicant Aadhaar Number <span className="text-red-500">*</span>
+             Primary Applicant Aadhaar Number <span className="text-red-500">*</span>
             </label>
 
             <input
@@ -599,7 +576,7 @@ const BasicKycTab = ({
           {/* Applicant Address */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Applicant Aadhaar Address <span className="text-red-500">*</span>
+              Primary Applicant Aadhaar Address <span className="text-red-500">*</span>
             </label>
 
             <textarea
@@ -627,7 +604,7 @@ const BasicKycTab = ({
         {applicantVerified.pan && (
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Applicant Aadhaar KYC
+              Primary Applicant Aadhaar KYC
             </label>
 
             {/* Show info message if Aadhaar is initiated but not verified */}

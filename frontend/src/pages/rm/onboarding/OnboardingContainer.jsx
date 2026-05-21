@@ -1743,7 +1743,9 @@ const validateDocumentsTab = async ({ strict }) => {
 
   // ----- Build payload
   const getCustomerPayload = () => ({
-    name: formData.applicantName,
+    // name: formData.applicantName,
+        name: formData.companyName ,
+
     mobile: formData.applicantMobile,
     email: formData.applicantEmail,
     companyType: formData.companyType,

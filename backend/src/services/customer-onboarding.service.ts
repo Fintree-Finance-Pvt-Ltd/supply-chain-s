@@ -3493,7 +3493,7 @@ async updateBankDetails(customerId: number, data: any) {
       const payload: LMSSupplyChainPayload = {
         partner_loan_id: String(customerId),
         applicant: {
-          name: customer.name,
+          name: customer.name || applicant?.name || "",
           pan: applicantPan ?? customer.pan,
           aadhaar: applicantAadhaar,
           mobile: customer.mobile,
