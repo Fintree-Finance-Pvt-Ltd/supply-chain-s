@@ -77,19 +77,13 @@ const MAKER_CHECKER_PAIRS: Record<string, string> = {
 };
 
 /**
- * DEFAULT WORKLOAD THRESHOLD
- * Maximum pending cases a user can have before being skipped in distribution
- */
-const DEFAULT_WORKLOAD_THRESHOLD = 50;
-
-/**
  * Task Distribution Service
  * 
  * Implements automatic case distribution between users based on workflow stages:
  * RM → Credit L1 → Credit L2 → Ops L1 → Ops L2 → Continue sequentially
  * 
  * Features:
- * - Round-robin distribution with workload balancing
+ * - Round-robin distribution
  * - Maker-Checker validation (same user cannot handle consecutive stages)
  * - Case history validation (prevent re-assignment to previous handlers)
  * - Role-based assignment with eligibility checks
@@ -364,14 +358,51 @@ export class TaskDistributionService {
   }
 
   /**
+   * Get the next round-robin start index from persisted assignment history.
+   * This keeps rotation intact even when TaskDistributionService is recreated.
+   */
+  private async getRoundRobinStartIndex(
+    workflowStage: string,
+    eligibleUsers: UserWorkloadInfo[]
+  ): Promise<number> {
+    if (eligibleUsers.length === 0) {
+      return 0;
+    }
+
+    const userIds = eligibleUsers.map((user) => user.userId);
+
+    const latestAssignment = await this.taskTimeTrackingRepository
+      .createQueryBuilder('tracking')
+      .where('tracking.bucket = :workflowStage', { workflowStage })
+      .andWhere('tracking.userId IN (:...userIds)', { userIds })
+      .orderBy('tracking.assignedAt', 'DESC')
+      .addOrderBy('tracking.createdAt', 'DESC')
+      .getOne();
+
+    if (!latestAssignment) {
+      return this.roundRobinState[workflowStage] || 0;
+    }
+
+    const lastAssignedIndex = eligibleUsers.findIndex(
+      (user) => user.userId === latestAssignment.userId
+    );
+
+    if (lastAssignedIndex === -1) {
+      return this.roundRobinState[workflowStage] || 0;
+    }
+
+    return (lastAssignedIndex + 1) % eligibleUsers.length;
+  }
+
+  /**
    * Assign a single case to an eligible user
    * 
    * Algorithm:
    * 1. Get all eligible users for the current workflow stage role
-   * 2. Sort by pending workload (ascending) - workload balancing
-   * 3. Apply round-robin from last position
+   * 2. Sort users by stable id order
+   * 3. Apply round-robin from the last assigned user for this stage
    * 4. Validate maker-checker (skip if user was handler in previous stage)
-   * 5. Validate user is active and below threshold
+   * 5. Validate user is active
    */
   async assignCase(
     caseId: string,
@@ -404,11 +435,11 @@ export class TaskDistributionService {
       };
     }
 
-    // Sort by pending count (workload balancing)
-    eligibleUsers.sort((a, b) => a.pendingCount - b.pendingCount);
+    // Keep a deterministic rotation order. Pending workload must not affect assignment.
+    eligibleUsers.sort((a, b) => a.userId - b.userId);
 
     // Get round-robin position for this stage
-    const lastPosition = this.roundRobinState[workflowStage] || 0;
+    const lastPosition = await this.getRoundRobinStartIndex(workflowStage, eligibleUsers);
 
     // Try to find the best user
     let assignedUser: UserWorkloadInfo | null = null;
@@ -421,7 +452,6 @@ export class TaskDistributionService {
 
       // Check eligibility conditions
       if (!user.isActive) continue;
-      if (user.pendingCount >= DEFAULT_WORKLOAD_THRESHOLD) continue;
 
       // Maker-Checker validation
       const isValid = await this.validateMakerChecker(caseId, caseType, user.userId, workflowStage);
