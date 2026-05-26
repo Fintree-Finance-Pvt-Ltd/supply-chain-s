@@ -478,48 +478,61 @@ const existingInvoices = await this.invoiceRepository
       invoiceDate: data.invoiceDate,
     }
   )
+    .andWhere("invoice.loanAccountId = :loanAccountId", { loanAccountId: data.loanAccountId })
+
   .getMany();
 
 let finalInvoiceNumber = data.invoiceNumber;
-
-//  If already exists
 if (existingInvoices.length > 0) {
-
   let maxSuffix = 0;
-
   existingInvoices.forEach((inv) => {
-
-    // exact invoice
-    if (inv.invoiceNumber === data.invoiceNumber) {
-
-      if (maxSuffix < 1) {
-        maxSuffix = 1;
-      }
-
-      return;
-    }
-
-    // suffix invoice
-    const regex = new RegExp(
-      `^${data.invoiceNumber}_(\\d+)$`
-    );
-
+    const regex = new RegExp(`^${data.invoiceNumber}_(\\d+)$`);
     const match = inv.invoiceNumber.match(regex);
-
     if (match) {
-
       const suffix = parseInt(match[1]);
-
-      if (suffix > maxSuffix) {
-        maxSuffix = suffix;
-      }
+      if (suffix > maxSuffix) maxSuffix = suffix;
     }
   });
-
-  // ✅ Generate next invoice number
-  finalInvoiceNumber =
-    `${data.invoiceNumber}_${maxSuffix + 1}`;
+  finalInvoiceNumber = `${data.invoiceNumber}_${maxSuffix + 1}`;
 }
+//  If already exists
+// if (existingInvoices.length > 0) {
+
+//   let maxSuffix = 0;
+
+//   existingInvoices.forEach((inv) => {
+
+//     // exact invoice
+//     if (inv.invoiceNumber === data.invoiceNumber) {
+
+//       if (maxSuffix < 1) {
+//         maxSuffix = 1;
+//       }
+
+//       return;
+//     }
+
+//     // suffix invoice
+//     const regex = new RegExp(
+//       `^${data.invoiceNumber}_(\\d+)$`
+//     );
+
+//     const match = inv.invoiceNumber.match(regex);
+
+//     if (match) {
+
+//       const suffix = parseInt(match[1]);
+
+//       if (suffix > maxSuffix) {
+//         maxSuffix = suffix;
+//       }
+//     }
+//   });
+
+//   // ✅ Generate next invoice number
+//   finalInvoiceNumber =
+//     `${data.invoiceNumber}_${maxSuffix + 1}`;
+// }
 
    const invoice = this.invoiceRepository.create({
   ...data,
@@ -692,7 +705,7 @@ await loanAccountRepository.save(
     await this.sendCustomerNotification(invoice.customerId, invoice.id);
     return { invoice, workflow };
   }
-
+ 
   private async sendCustomerNotification(
     customerId: number,
     invoiceId: number,
