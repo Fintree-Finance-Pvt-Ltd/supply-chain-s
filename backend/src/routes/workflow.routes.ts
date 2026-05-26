@@ -47,6 +47,22 @@ const checkRole = (allowedRoles: string[]) => {
   };
 };
 
+const getRequestRoleNames = (req: Request): string[] => {
+  const user = (req as any).user;
+  const roles = [
+    ...(req.userRoles || []),
+    ...(user?.roles || []).map((role: any) => role?.name || role),
+    req.userRole,
+  ]
+    .filter(Boolean)
+    .map((role: any) => String(role).toLowerCase());
+
+  return Array.from(new Set(roles));
+};
+
+const uniqueWorkflows = (workflows: any[]) =>
+  Array.from(new Map(workflows.map((workflow) => [workflow.id, workflow])).values());
+
 
 const supplierUploadStorage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, path.join(__dirname, '../../uploads')),
@@ -1010,8 +1026,17 @@ router.get('/customers/dashboard/credit/:level', checkRole(['credit_team_l1', 'c
  */
 router.get('/customers/dashboard/executive', checkRole(['ceo', 'md', 'credit_head']), async (req: Request, res: Response) => {
   try {
-    const userRole = req.userRole || 'ceo';
-    const dashboard = await customerOnboardingService.getExecutivePending(userRole, (req as any).user?.id);
+    const user = (req as any).user;
+    const userRoles = getRequestRoleNames(req);
+    const executiveRoles = ['ceo', 'md'].filter((role) => userRoles.includes(role));
+    const rolesToLoad = executiveRoles.length > 0 ? executiveRoles : [req.userRole || 'ceo'];
+    const dashboards = await Promise.all(
+      rolesToLoad.map((role) => customerOnboardingService.getExecutivePending(role, user?.id)),
+    );
+    const dashboard = {
+      pending: uniqueWorkflows(dashboards.flatMap((item) => item.pending || [])),
+      handled: uniqueWorkflows(dashboards.flatMap((item) => item.handled || [])),
+    };
 
     res.json({
       success: true,

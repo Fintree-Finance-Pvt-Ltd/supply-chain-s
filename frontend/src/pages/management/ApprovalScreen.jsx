@@ -23,6 +23,34 @@ const DETAIL_SECTIONS = [
   "sanctions",
 ];
 
+const normalizeRole = (role) => (role || "").toString().toLowerCase();
+
+const getUserRoleNames = (user) => {
+  const roles = [
+    ...(user?.roles || []).map((role) => role?.name || role),
+    user?.role,
+    user?.defaultRole,
+  ]
+    .map(normalizeRole)
+    .filter(Boolean);
+
+  return Array.from(new Set(roles));
+};
+
+const getApprovalRoleForStatus = (roles, primaryRole, status) => {
+  const normalizedStatus = normalizeRole(status);
+
+  if (normalizedStatus === "credit_l2_approved" && roles.includes("ceo")) {
+    return "ceo";
+  }
+
+  if (normalizedStatus === "md_terms_submitted" && roles.includes("md")) {
+    return "md";
+  }
+
+  return primaryRole;
+};
+
 const ApprovalScreen = () => {
   const { id } = useParams(); // This is now customerId
   const navigate = useNavigate();
@@ -56,8 +84,15 @@ const ApprovalScreen = () => {
   // For CEO/MD roles: they don't fetch from API, so use fallback
   const PARTNERS = partners.length > 0 ? partners : ["FFPL"];
 
-  // Get user role (lowercase for comparison)
-  const userRole = (user?.role || "").toLowerCase();
+  const userRoles = getUserRoleNames(user);
+  const roleListLabel = userRoles.join(",");
+  const primaryRole = normalizeRole(user?.role || user?.defaultRole || userRoles[0]);
+  const hasCreditTeamL1Role = userRoles.includes("credit_team_l1");
+  const approvalRole = getApprovalRoleForStatus(
+    userRoles,
+    primaryRole,
+    customer?.status,
+  );
 
   // Fetch partners from API - role-based logic
   // credit_l1: fetch from partners table (for new sanctions)
@@ -65,10 +100,10 @@ const ApprovalScreen = () => {
   useEffect(() => {
     // EARLY RETURN: Only credit_team_l1 should fetch from partners table
     // All other roles (ceo, md, credit_l2, etc.) should get partners from sanction records
-    if (userRole !== "credit_team_l1") {
+    if (!hasCreditTeamL1Role) {
       console.log(
-        "fetchPartners: Skipping - userRole is",
-        userRole,
+        "fetchPartners: Skipping - userRoles are",
+        roleListLabel,
         "(not credit_team_l1)",
       );
       setPartnersLoading(false);
@@ -89,7 +124,7 @@ const ApprovalScreen = () => {
     };
 
     fetchPartners();
-  }, [userRole]);
+  }, [hasCreditTeamL1Role, roleListLabel]);
 
   // Track if initial data load is done (useRef to persist across renders)
   const dataLoadedRef = useRef(false);
@@ -107,7 +142,7 @@ const ApprovalScreen = () => {
       }
 
       // For credit_team_l1, wait for partners to load first (they come from partners table)
-      if (userRole === "credit_team_l1" && partnersLoading) {
+      if (hasCreditTeamL1Role && partnersLoading) {
         console.log("loadData: credit_team_l1 waiting for partners to load");
         return;
       }
@@ -259,7 +294,7 @@ const ApprovalScreen = () => {
     if (id) {
       loadData();
     }
-  }, [id, partnersLoading]);
+  }, [id, partnersLoading, hasCreditTeamL1Role]);
 
   const handleApprove = async () => {
     if (!comments.trim()) {
@@ -269,10 +304,8 @@ const ApprovalScreen = () => {
 
     setIsSubmitting(true);
     try {
-      const userRole = (user?.role || "").toLowerCase();
-
       // For CEO and MD: use partnerSanctions format
-      if (userRole === "ceo") {
+      if (approvalRole === "ceo") {
         const editablePartnerSanctions = partnerSanctions.filter(
           (ps) => !isPartnerLocked(ps),
         );
@@ -294,16 +327,16 @@ const ApprovalScreen = () => {
         await workflowService.approveCEO(id, true, comments, {
           partnerSanctions: ceoSanctionData.partnerSanctions,
         });
-      } else if (userRole === "md") {
+      } else if (approvalRole === "md") {
         // MD should approve/reject ONLY. Sanction terms must be pre-filled by RM.
-      const lockedPartnerSanctions = partnerSanctions.map((ps) => ({
-  ...ps,
-  status: "approved",
-}));
+        const lockedPartnerSanctions = partnerSanctions.map((ps) => ({
+          ...ps,
+          status: "approved",
+        }));
 
-await workflowService.approveMD(id, true, comments, {
-  partnerSanctions: lockedPartnerSanctions,
-});
+        await workflowService.approveMD(id, true, comments, {
+          partnerSanctions: lockedPartnerSanctions,
+        });
       } else {
         throw new Error("Unauthorized role for this action");
       }
@@ -328,10 +361,9 @@ await workflowService.approveMD(id, true, comments, {
 
     setIsSubmitting(true);
     try {
-      const userRole = (user?.role || "").toLowerCase();
-      if (userRole === "ceo") {
+      if (approvalRole === "ceo") {
         await workflowService.approveCEO(id, false, comments);
-      } else if (userRole === "md") {
+      } else if (approvalRole === "md") {
         // MD rejection should return case to RM for sanction re-review/edit.
         await workflowService.approveMD(id, false, comments);
       } else {
@@ -431,11 +463,15 @@ await workflowService.approveMD(id, true, comments, {
   const handlePreviewClick = (doc) => handlePreview(doc, "inline");
   const handleDownloadClick = (doc) => handlePreview(doc, "attachment");
 
-  const role = (user?.role || "").toLowerCase();
+  const role = approvalRole;
 
   // RM, MD, and CEO can access sanction details
   const canAccessSanctionDetails = () => {
-    return role === "relationship_manager" || role === "md" || role === "ceo";
+    return (
+      userRoles.includes("relationship_manager") ||
+      role === "md" ||
+      role === "ceo"
+    );
   };
 
   const isReadOnly =
