@@ -610,7 +610,7 @@ const SupplierDetail = () => {
           )}
 
           {/* RM: Submit for Operations */}
-          {isRMUser && normalizeStatus(supplier.status) === 'DRAFT' && (
+          {/* {isRMUser && normalizeStatus(supplier.status) === 'DRAFT' && (
             <div className="bg-white shadow rounded-lg p-6">
               <h3 className="font-semibold mb-3">Submit for Operations</h3>
               <textarea
@@ -626,7 +626,7 @@ const SupplierDetail = () => {
                 Submit to Operations
               </button>
             </div>
-          )}
+          )} */}
 
           {/* Ops L1: Upload Cheque - only show for DRAFT status */}
           {isOpsL1Draft && (
