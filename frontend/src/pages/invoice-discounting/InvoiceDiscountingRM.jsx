@@ -329,6 +329,8 @@ const handleLANChange = async (lanId) => {
         inv.invoiceDate
           ?.split("T")[0] ===
         invoiceDate
+        &&
+    String(inv.loanAccountId) === String(selectedLAN) // ✅ ensure type match
     );
 
   console.log(
@@ -1562,6 +1564,9 @@ const existingDisbursement = invoices
           ?.split("T")[0] ===
         formData.invoiceDate
       )
+      &&
+            inv.loanAccountId === selectedLAN // ✅ include LAN check
+
   )
   .reduce(
     (sum, inv) =>
