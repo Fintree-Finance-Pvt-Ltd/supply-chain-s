@@ -132,7 +132,7 @@ const AddressForm = ({
   errors = {},
   readOnly = false
 }) => {
-  const addressTypes = ['Residence', 'Shop', 'Godown', 'Rented', 'Owned']
+  const addressTypes = ['Residence', 'Shop', 'Godown']
 
   // Stable identity (DO NOT use index)
   const stableKey = useMemo(() => data?.id || data?.localKey, [
@@ -150,6 +150,8 @@ const AddressForm = ({
     const clean = value.replace(/\D/g, '').slice(0, 6)
     handleChange({ pincode: clean })
   }
+
+  // console.log("AddressForm Data:", data)
 
   return (
     <div className="border border-gray-300 rounded-lg p-6 mb-4 bg-gray-50 relative">
@@ -203,28 +205,28 @@ const AddressForm = ({
 
   <div className="flex gap-6">
     <label className="flex items-center gap-2">
-      <input
-        type="radio"
-        name={`ownership-${stableKey}`}
-        value="Owned"
-        checked={data.ownership === 'Owned'}
-        onChange={(e) => handleChange({ ownership: e.target.value })}
-        disabled={readOnly}
-      />
-      Owned
-    </label>
+<input
+  type="radio"
+  name={`ownership-${stableKey}`}
+  value="Owned"
+  checked={String(data?.ownership || '').trim() === 'Owned'}
+  onChange={(e) => handleChange({ ownership: e.target.value })}
+  disabled={readOnly}
+/>
+  Owned
+</label>
 
-    <label className="flex items-center gap-2">
-      <input
-        type="radio"
-        name={`ownership-${stableKey}`}
-        value="Rented"
-        checked={data.ownership === 'Rented'}
-        onChange={(e) => handleChange({ ownership: e.target.value })}
-        disabled={readOnly}
-      />
-      Rented
-    </label>
+<label className="flex items-center gap-2">
+<input
+  type="radio"
+  name={`ownership-${stableKey}`}
+  value="Rented"
+  checked={String(data?.ownership || '').trim() === 'Rented'}
+  onChange={(e) => handleChange({ ownership: e.target.value })}
+  disabled={readOnly}
+/>
+  Rented
+</label>
   </div>
 
   {errors.ownership && (

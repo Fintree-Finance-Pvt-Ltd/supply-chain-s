@@ -305,6 +305,7 @@ if (isFreshCustomer && currentCase?.status === "draft"  && !currentCase?.applica
           id: a.id,
           localKey: a.id,
           type: a.type || "",
+           ownership: a.ownership || "", 
           fullAddress: a.fullAddress || "",
           pincode: a.pincode || "",
           state: a.state || "",
@@ -1693,23 +1694,59 @@ if (strict) {
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
+const validateDocumentsTab = async ({ strict }) => {
+  if (!strict) return true;
 
-  const validateDocumentsTab = ({ strict }) => {
-    if (!strict) return true;
-    if (!formData.companyType) return true;
+  if (!formData.companyType) return true;
+
+  try {
+    // ALWAYS FETCH LATEST DOCS
+    const docsRes = await documentService.getDocumentsByCustomer(customerId);
+
+    const latestDocs = docsRes?.data || [];
+
+    // update UI state also
+    setDocuments(latestDocs);
+
     const mandatoryDocs = checklist.filter((d) => d.mandatory);
-    const uploadedTypes = new Set((documents || []).map((d) => d.documentType));
-    const missing = mandatoryDocs.filter((d) => !uploadedTypes.has(d.documentType));
+
+    // normalize lowercase
+    const uploadedTypes = new Set(
+      latestDocs.map((d) =>
+        d.documentType?.toLowerCase()?.trim()
+      )
+    );
+
+    const missing = mandatoryDocs.filter(
+      (d) =>
+        !uploadedTypes.has(
+          d.documentType?.toLowerCase()?.trim()
+        )
+    );
+
     if (missing.length) {
-      toast.info("Upload mandatory documents:\n" + missing.map((m) => m.label).join("\n"));
+      toast.info(
+        "Upload mandatory documents:\n" +
+          missing.map((m) => m.label).join("\n")
+      );
+
       return false;
     }
+
     return true;
-  };
+
+  } catch (error) {
+    console.error("Document validation failed", error);
+    toast.error("Failed to validate documents");
+    return false;
+  }
+};
 
   // ----- Build payload
   const getCustomerPayload = () => ({
-    name: formData.applicantName,
+    // name: formData.applicantName,
+        name: formData.companyName ,
+
     mobile: formData.applicantMobile,
     email: formData.applicantEmail,
     companyType: formData.companyType,
@@ -1852,7 +1889,7 @@ if (strict) {
       return;
     }
 
-    const ok2 = validateDocumentsTab({ strict: true });
+   const ok2 = await validateDocumentsTab({ strict: true });
     if (!ok2) {
       setActiveTab("documents");
       return;

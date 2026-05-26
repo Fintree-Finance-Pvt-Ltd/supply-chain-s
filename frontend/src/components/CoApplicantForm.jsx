@@ -379,7 +379,7 @@ const isAnyLoading =
 
   try {
     // ✅ OCR
-    const result = await kycService.runOcr(file, 'PAN')
+const result = await kycService.processPanOcr(file)
 
     if (!result?.success) {
       notify('error', result?.message || 'OCR failed')
@@ -484,8 +484,6 @@ const isAnyLoading =
   // const handleEmailVerify = () =>
   //   safeVerify('coApplicantEmail', data.email, data.localKey);
 const handleEmailVerify = async () => {
-
-
 
   if (!data.email) {
     notify("error", "Please enter email");

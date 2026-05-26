@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+// import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { useDispatch, useSelector } from 'react-redux'
 import { fetchWorkflowDashboard } from '../../store/slices/caseSlice'
 import DataTable from '../../components/DataTable'
@@ -27,6 +28,14 @@ const formatAction = (value) => {
 
 const CreditDashboard = () => {
   const navigate = useNavigate()
+  const location = useLocation()
+
+// Route checks
+const isDashboardPage =
+  location.pathname === '/credit/dashboard'
+
+const isPendingPage =
+  location.pathname === '/credit/pending'
   const dispatch = useDispatch()
   const { user } = useSelector((state) => state.auth)
   const { dashboardData, isLoading } = useSelector((state) => state.cases)
@@ -242,28 +251,63 @@ const CreditDashboard = () => {
         <h1 className="text-3xl font-bold text-gray-900">Credit Team Dashboard</h1>
         <p className="text-gray-600 mt-2">Manage customer credit applications</p>
       </div>
+{/* =========================
+    PENDING PAGE ONLY
+========================= */}
+{isPendingPage && (
+  <div className="card">
+    <h2 className="text-xl font-bold text-gray-800 mb-4">
+      Pending Review
+    </h2>
 
-      <div className="card">
-        <h2 className="text-xl font-bold text-gray-800 mb-4">Pending Review</h2>
-        {isLoading ? (
-          <LoadingSpinner />
-        ) : (
-          <DataTable
-            data={dashboardData?.pending || []}
-            columns={columns}
-            onRowClick={handleRowClick}
-          />
-        )}
-      </div>
+    {isLoading ? (
+      <LoadingSpinner />
+    ) : (
+      <DataTable
+        data={dashboardData?.pending || []}
+        columns={columns}
+        onRowClick={handleRowClick}
+      />
+    )}
+  </div>
+)}
 
-      <div className="card border-t-4 border-gray-300">
-        <h2 className="text-xl font-bold text-gray-500 mb-4">Previously Handled (Read-Only)</h2>
-        {isLoading ? (
-          <LoadingSpinner />
-        ) : (
-          renderHandledCases()
-        )}
-      </div>
+{/* =========================
+    DASHBOARD PAGE
+========================= */}
+{isDashboardPage && (
+  <>
+    {/* PENDING */}
+    <div className="card">
+      <h2 className="text-xl font-bold text-gray-800 mb-4">
+        Pending Review
+      </h2>
+
+      {isLoading ? (
+        <LoadingSpinner />
+      ) : (
+        <DataTable
+          data={dashboardData?.pending || []}
+          columns={columns}
+          onRowClick={handleRowClick}
+        />
+      )}
+    </div>
+
+    {/* HANDLED */}
+    <div className="card border-t-4 border-gray-300">
+      <h2 className="text-xl font-bold text-gray-500 mb-4">
+        Previously Handled (Read-Only)
+      </h2>
+
+      {isLoading ? (
+        <LoadingSpinner />
+      ) : (
+        renderHandledCases()
+      )}
+    </div>
+  </>
+)}
     </div>
   )
 }

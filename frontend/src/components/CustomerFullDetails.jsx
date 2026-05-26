@@ -118,6 +118,20 @@ const CustomerFullDetails = ({ customer }) => {
                 </div>
             )}
 
+         
+            {/* Applicants */}
+                <div className="card">
+                    <h2 className="text-xl font-semibold text-gray-900 mb-4">Applicants</h2>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="p-3 bg-gray-50 rounded border border-gray-200">
+                                <p className="font-medium text-gray-900">{customer.applicant?.name}</p>
+                                <p className="text-sm text-gray-600">Mobile: {customer.applicant?.mobile}</p>
+                                <p className="text-sm text-gray-600">Email: {customer.applicant?.email || 'N/A'}</p>
+                                <p className="text-sm text-gray-600">Gender: {customer.applicant?.pan}</p>
+                            </div>
+                    </div>
+                </div>
+            
             {/* Co-Applicants */}
             {customer.coApplicants && customer.coApplicants.length > 0 && (
                 <div className="card">
