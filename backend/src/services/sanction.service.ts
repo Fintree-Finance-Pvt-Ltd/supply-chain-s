@@ -516,7 +516,6 @@ if (existing) {
       'CREDIT_TEAM_L1': 'credit_l1_approved',
       'CREDIT_L2': 'credit_l2_approved',
       'CREDIT_TEAM_L2': 'credit_l2_approved',
-      'CEO': 'ceo_approved',
       'MD': 'md_approved',
     };
 
@@ -531,8 +530,9 @@ if (existing) {
       'draft': 'RELATIONSHIP_MANAGER',
       'submitted': 'CREDIT_TEAM_L1',
       'credit_l1_approved': 'CREDIT_TEAM_L2',
-      'credit_l2_approved': 'CEO',
-      'ceo_approved': 'MD',
+      'credit_l2_approved': 'RELATIONSHIP_MANAGER',
+      'ceo_approved': 'RELATIONSHIP_MANAGER',
+      'md_terms_submitted': 'MD',
       'md_approved': 'RELATIONSHIP_MANAGER',
       'ops_l1_review': 'OPERATIONS_TEAM_L1',
       'ops_l1_approved': 'OPERATIONS_HEAD',
@@ -576,13 +576,8 @@ if (existing) {
           to: 'credit_l2_approved',
           description: 'Credit L2 approved the case'
         },
-        'ceo_approve': {
-          from: 'credit_l2_approved',
-          to: 'ceo_approved',
-          description: 'CEO approved the case'
-        },
         'md_approve': {
-          from: 'ceo_approved',
+          from: 'md_terms_submitted',
           to: 'md_approved',
           description: 'MD approved and sanctioned the case'
         },

@@ -40,10 +40,6 @@ const getUserRoleNames = (user) => {
 const getApprovalRoleForStatus = (roles, primaryRole, status) => {
   const normalizedStatus = normalizeRole(status);
 
-  if (normalizedStatus === "credit_l2_approved" && roles.includes("ceo")) {
-    return "ceo";
-  }
-
   if (normalizedStatus === "md_terms_submitted" && roles.includes("md")) {
     return "md";
   }
@@ -58,7 +54,7 @@ const ApprovalScreen = () => {
 
   const [customer, setCustomer] = useState(null);
   const [workflow, setWorkflow] = useState(null);
-  // For CEO: support multiple partner sanctions
+  // Supports multiple partner sanctions for management approval.
   const [partnerSanctions, setPartnerSanctions] = useState([]);
   const [sanctionData, setSanctionData] = useState({
     sanctionAmount: "",
@@ -81,7 +77,7 @@ const ApprovalScreen = () => {
   const [partnersLoading, setPartnersLoading] = useState(true);
 
   // Fallback to default if API fails or for non-credit_team_l1 roles
-  // For CEO/MD roles: they don't fetch from API, so use fallback
+  // For MD role: fallback is used until sanction records are loaded.
   const PARTNERS = partners.length > 0 ? partners : ["FFPL"];
 
   const userRoles = getUserRoleNames(user);
@@ -96,10 +92,10 @@ const ApprovalScreen = () => {
 
   // Fetch partners from API - role-based logic
   // credit_l1: fetch from partners table (for new sanctions)
-  // other roles (ceo, md, credit_l2, etc.): DO NOT fetch from partners table - use partners from sanction records
+  // other roles (md, credit_l2, etc.): DO NOT fetch from partners table - use partners from sanction records
   useEffect(() => {
     // EARLY RETURN: Only credit_team_l1 should fetch from partners table
-    // All other roles (ceo, md, credit_l2, etc.) should get partners from sanction records
+    // All other roles (md, credit_l2, etc.) should get partners from sanction records
     if (!hasCreditTeamL1Role) {
       console.log(
         "fetchPartners: Skipping - userRoles are",
@@ -165,7 +161,7 @@ const ApprovalScreen = () => {
           ? sanctionsData
           : sanctionsData.sanctions || [];
 
-        // For CEO: load all partner sanctions from credit_sanctions table
+        // Load all partner sanctions from credit_sanctions table
         // This is the correct source of truth - use partner field for mapping
         if (sanctions.length > 0) {
           // Build partner map from credit_sanctions using 'partner' field
@@ -304,30 +300,7 @@ const ApprovalScreen = () => {
 
     setIsSubmitting(true);
     try {
-      // For CEO and MD: use partnerSanctions format
-      if (approvalRole === "ceo") {
-        const editablePartnerSanctions = partnerSanctions.filter(
-          (ps) => !isPartnerLocked(ps),
-        );
-        if (editablePartnerSanctions.length === 0) {
-          throw new Error(
-            "No new or pending partner sanction request is available",
-          );
-        }
-        const ceoSanctionData = {
-          partnerSanctions: editablePartnerSanctions.map((ps) => ({
-            partner: ps.partner,
-            sanctionAmount: ps.sanctionAmount || 0,
-            legalCharges: ps.legalCharges || 0,
-            serviceFee: ps.serviceFee || 0,
-            cashCollateral: ps.cashCollateral || 0,
-            // CEO can only modify sanctionAmount
-          })),
-        };
-        await workflowService.approveCEO(id, true, comments, {
-          partnerSanctions: ceoSanctionData.partnerSanctions,
-        });
-      } else if (approvalRole === "md") {
+      if (approvalRole === "md") {
         // MD should approve/reject ONLY. Sanction terms must be pre-filled by RM.
         const lockedPartnerSanctions = partnerSanctions.map((ps) => ({
           ...ps,
@@ -361,9 +334,7 @@ const ApprovalScreen = () => {
 
     setIsSubmitting(true);
     try {
-      if (approvalRole === "ceo") {
-        await workflowService.approveCEO(id, false, comments);
-      } else if (approvalRole === "md") {
+      if (approvalRole === "md") {
         // MD rejection should return case to RM for sanction re-review/edit.
         await workflowService.approveMD(id, false, comments);
       } else {
@@ -465,12 +436,11 @@ const ApprovalScreen = () => {
 
   const role = approvalRole;
 
-  // RM, MD, and CEO can access sanction details
+  // RM and MD can access sanction details
   const canAccessSanctionDetails = () => {
     return (
       userRoles.includes("relationship_manager") ||
-      role === "md" ||
-      role === "ceo"
+      role === "md"
     );
   };
 
@@ -481,7 +451,6 @@ const ApprovalScreen = () => {
     customer.status === "rejected" ||
     customer.status === "completed" ||
     customer.status.includes("ops") ||
-    (role === "ceo" && customer.status !== "credit_l2_approved") ||
   (
   role === "md" &&
   ![
@@ -492,7 +461,7 @@ const ApprovalScreen = () => {
 );
 
   const visibleDocuments = customer.documents || [];
-  // Management (CEO/MD) can approve even without viewing documents as per new request
+  // Management can approve even without viewing documents as per new request
   const allDocsPreviewed = true;
 
   const formatINR = (num) => {
@@ -579,8 +548,7 @@ const ApprovalScreen = () => {
                 Sanction Details (Review & Revise)
               </h2>
 
-              {/* CEO sees only sanction amount, MD sees all fields */}
-              {role === "ceo" && (
+              {false && (
                 <div className="space-y-4 mb-4">
                   {partnerSanctions.map((ps, index) => (
                     <div
@@ -637,7 +605,7 @@ const ApprovalScreen = () => {
                 </div>
               )}
 
-              {/*  MD sees all fields */}
+              {/* MD sees all fields */}
 
               {role === "md" && (
                 <div className="space-y-4 mb-4">

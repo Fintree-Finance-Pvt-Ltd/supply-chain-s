@@ -13,7 +13,6 @@ export { creditController, creditNotepadRouter };
 const allowedNotepadRoles = [
   ROLES.CREDIT_TEAM_L1,
   ROLES.CREDIT_TEAM_L2,
-  ROLES.CEO,
 ];
 
 router.use(authMiddleware);
@@ -40,13 +39,13 @@ router.put('/sanction/:id', creditController.updateSanction);
 // Available at both /api/credit/customer/:customerId/sanctions and /api/sanctions/:customerId
 router.get(
   '/customer/:customerId/sanctions',
-  roleMiddleware([ROLES.CREDIT_TEAM_L1, ROLES.CREDIT_TEAM_L2, ROLES.CEO, ROLES.MD, ROLES.RELATIONSHIP_MANAGER]),
+  roleMiddleware([ROLES.CREDIT_TEAM_L1, ROLES.CREDIT_TEAM_L2, ROLES.MD, ROLES.RELATIONSHIP_MANAGER]),
   creditController.getSanctionsByCustomerId
 );
 
 router.get(
   '/sanctions/:customerId',
-  roleMiddleware([ROLES.CREDIT_TEAM_L1, ROLES.CREDIT_TEAM_L2, ROLES.CEO, ROLES.MD, ROLES.RELATIONSHIP_MANAGER]),
+  roleMiddleware([ROLES.CREDIT_TEAM_L1, ROLES.CREDIT_TEAM_L2, ROLES.MD, ROLES.RELATIONSHIP_MANAGER]),
   creditController.getSanctionsByCustomerId
 );
 

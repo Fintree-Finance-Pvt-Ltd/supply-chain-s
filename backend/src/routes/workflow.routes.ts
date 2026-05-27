@@ -248,8 +248,7 @@ router.patch('/customers/:customerId/bank-details', checkRole(['relationship_man
  * Credit Team L1 reviews and approves/rejects
  * Now supports multiple partner sanction limits (dynamically loaded from partners table)
  * NOTE: Credit L1/L2 can only edit sanctionAmount.
- * CEO can edit tenure and interestRate.
- * Only MD can edit all fields.
+ * RM captures final terms after Credit L2 approval; MD gives final approval.
  */
 router.post('/customers/:customerId/credit-l1', checkRole(['credit_team_l1', 'credit_team_l2', 'credit_head']), async (req: Request, res: Response) => {
   try {
@@ -347,14 +346,14 @@ router.post('/customers/:customerId/credit-l1', checkRole(['credit_team_l1', 'cr
 /**
  * GET /api/workflows/customers/:customerId/sanction-limits
  * Get all sanction limits for a customer (all partner sanctions)
- * Restricted to RM, MD, and CEO roles
+ * Restricted to RM and MD roles
  */
 router.get('/customers/:customerId/sanction-limits', async (req: Request, res: Response) => {
   try {
-    // Check if user has RM, MD, or CEO role
+    // Check if user has RM or MD role
     const user = (req as any).user;
     const userRoles = user.roles.map((r: any) => r.name);
-    if (!userRoles.includes('relationship_manager') && !userRoles.includes('md') && !userRoles.includes('ceo')) {
+    if (!userRoles.includes('relationship_manager') && !userRoles.includes('md')) {
       return res.status(403).json({
         success: false,
         message: 'Unauthorized to access sanction details',
@@ -382,8 +381,7 @@ router.get('/customers/:customerId/sanction-limits', async (req: Request, res: R
  * POST /api/workflows/customers/:customerId/credit-l2
  * Credit Team L2 reviews and approves/rejects (generates LAN ID if approved)
  * NOTE: Credit L2 can only edit sanctionAmount for each partner.
- * CEO can edit tenure and interestRate.
- * Only MD can edit all fields.
+ * RM captures final terms after Credit L2 approval; MD gives final approval.
  */
 router.post('/customers/:customerId/credit-l2', checkRole(['credit_team_l1', 'credit_team_l2', 'credit_head']), async (req: Request, res: Response) => {
   try {
@@ -509,67 +507,13 @@ router.post('/customers/:customerId/credit-l2', checkRole(['credit_team_l1', 'cr
 
 /**
  * POST /api/workflows/customers/:customerId/ceo-approve
- * CEO reviews and approves/rejects
- * NOTE: CEO can edit sanctionAmount, tenure and interestRate for all partners.
- * Only MD can edit all fields including penalCharges, processingFees, conditions.
+ * Deprecated: CEO approval has been removed from the customer case flow.
  */
 router.post('/customers/:customerId/ceo-approve', checkRole(['ceo']), async (req: Request, res: Response) => {
-  try {
-    const { customerId } = req.params;
-    const { approved, remarks, partnerSanctions, sanctionAmount, tenure, interestRate, conditions, penalCharges, processingFees } = req.body;
-    const user = (req as any).user;
-    const userRole = (user?.roles?.[0]?.name || '').toLowerCase();
-
-    // Check if user is trying to modify sanction data
-    const isModifyingSanctions = approved && (sanctionAmount || partnerSanctions);
-    
-    // CEO can ONLY modify sanctionAmount (not tenure, ROI, etc.)
-    // These fields should not be sent by frontend for CEO role
-    const userRolesForCheck = (user?.roles || []).map((r: any) => r.name.toLowerCase());
-    if (isModifyingSanctions && userRolesForCheck.includes('ceo')) {
-      // If using old format (single sanction), check for forbidden fields
-      if (sanctionAmount && (tenure || interestRate || penalCharges || processingFees || conditions)) {
-        res.status(403).json({
-          success: false,
-          message: 'CEO can only modify sanctionAmount. Tenor, ROI, penal charges, processing fees, and conditions can only be edited by MD.',
-        });
-        return;
-      }
-      // If using partnerSanctions format, validate CEO can only edit sanctionAmount
-      if (partnerSanctions && Array.isArray(partnerSanctions)) {
-        for (const ps of partnerSanctions) {
-          if (ps.tenure || ps.interestRate || ps.penalCharges || ps.processingFees || ps.conditions) {
-            res.status(403).json({
-              success: false,
-              message: 'CEO can only modify sanctionAmount for each partner. Tenor, ROI, penal charges, processing fees, and conditions can only be edited by MD.',
-            });
-            return;
-          }
-        }
-      }
-    }
-
-    const sanctionData = partnerSanctions ? { partnerSanctions } : (sanctionAmount ? { sanctionAmount } : undefined);
-
-    const workflow = await customerOnboardingService.ceoApprove(
-      parseInt(customerId),
-      user.id,
-      remarks || '',
-      approved,
-      sanctionData
-    );
-
-    res.json({
-      success: true,
-      message: approved ? 'Customer approved by CEO' : 'Customer rejected by CEO',
-      data: workflow,
-    });
-  } catch (error: any) {
-    res.status(400).json({
-      success: false,
-      message: error.message,
-    });
-  }
+  res.status(410).json({
+    success: false,
+    message: 'CEO approval has been removed from the customer case flow. Credit L2 approved cases now go to RM for final terms.',
+  });
 });
 
 /**
@@ -1028,8 +972,7 @@ router.get('/customers/dashboard/executive', checkRole(['ceo', 'md', 'credit_hea
   try {
     const user = (req as any).user;
     const userRoles = getRequestRoleNames(req);
-    const executiveRoles = ['ceo', 'md'].filter((role) => userRoles.includes(role));
-    const rolesToLoad = executiveRoles.length > 0 ? executiveRoles : [req.userRole || 'ceo'];
+    const rolesToLoad = userRoles.includes('md') ? ['md'] : [];
     const dashboards = await Promise.all(
       rolesToLoad.map((role) => customerOnboardingService.getExecutivePending(role, user?.id)),
     );

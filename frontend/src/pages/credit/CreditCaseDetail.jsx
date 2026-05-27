@@ -154,7 +154,7 @@ const CreditCaseDetail = () => {
   // other roles: DO NOT fetch from partners table - use partners from sanction records
   useEffect(() => {
     // EARLY RETURN: Only credit_team_l1 (or both L1+L2) should fetch from partners table
-    // All other roles (ceo, md, credit_l2 only, etc.) should get partners from sanction records
+    // All other roles (md, credit_l2 only, etc.) should get partners from sanction records
     if (!hasL1Role) {
       console.log(
         "fetchPartners: Skipping - user has no L1 role, userRoles:",
@@ -220,7 +220,7 @@ const CreditCaseDetail = () => {
         );
 
         // For CREDIT_L1 roles (including users with both L1+L2), use the standard sanctions API
-        // For non-L1 roles (L2 only, CEO, MD), use the dedicated sanctions API
+        // For non-L1 roles (L2 only, MD), use the dedicated sanctions API
         // This API returns all sanctions without filtering by partner active status
         const apiEndpoint = hasL1Role
           ? `/sanctions/${id}`
@@ -440,7 +440,6 @@ const CreditCaseDetail = () => {
     "credit_team_l1",
     "credit_team_l2",
     "credit_head",
-    "ceo",
     "md",
   ];
 
@@ -452,7 +451,7 @@ const CreditCaseDetail = () => {
   // Role-based field visibility helpers for sanction fields
   const canViewSanctionAmount = () => {
     return userRoles.some((role) =>
-      ["credit_team_l1", "credit_team_l2", "credit_head", "ceo", "md"].includes(role),
+      ["credit_team_l1", "credit_team_l2", "credit_head", "md"].includes(role),
     );
   };
 
@@ -479,18 +478,10 @@ const canEditSanctionAmount = () => {
     return true;
   }
 
-  // CEO can edit in credit_l2_approved or ceo_review status
-  if (
-    hasRole("ceo") &&
-    (status === "credit_l2_approved" || status === "ceo_review")
-  ) {
-    return true;
-  }
-
   // MD can edit during final approval
   if (
     hasRole("md") &&
-    (status === "ceo_approved" || status === "md_review")
+    (status === "md_terms_submitted" || status === "ceo_approved" || status === "md_review")
   ) {
     return true;
   }
@@ -506,7 +497,7 @@ const canEditSanctionAmount = () => {
 
   const canViewROI = () => {
     const role = (user?.role || "").toLowerCase();
-    // Only MD can view ROI - credit_l1, credit_l2, and CEO should only see sanction amount
+    // Only MD can view ROI - credit_l1 and credit_l2 should only see sanction amount
     return ["md"].includes(role);
   };
 
@@ -515,14 +506,14 @@ const canEditSanctionAmount = () => {
     if (!currentCase) return false;
     const status = currentCase.status;
     // Only MD can edit ROI
-    if (role === "md" && (status === "ceo_approved" || status === "md_review"))
+    if (role === "md" && (status === "md_terms_submitted" || status === "ceo_approved" || status === "md_review"))
       return true;
     return false;
   };
 
   const canViewTenure = () => {
     const role = (user?.role || "").toLowerCase();
-    // Only MD can view tenure - credit_l1, credit_l2, and CEO should only see sanction amount
+    // Only MD can view tenure - credit_l1 and credit_l2 should only see sanction amount
     return ["md"].includes(role);
   };
 
@@ -531,7 +522,7 @@ const canEditSanctionAmount = () => {
     if (!currentCase) return false;
     const status = currentCase.status;
     // Only MD can edit tenor
-    if (role === "md" && (status === "ceo_approved" || status === "md_review"))
+    if (role === "md" && (status === "md_terms_submitted" || status === "ceo_approved" || status === "md_review"))
       return true;
     return false;
   };
@@ -546,8 +537,6 @@ const canEditSanctionAmount = () => {
     // For Credit L2 - can edit sanction amount in credit_l1_approved or credit_l2_review status
     // Also allow credit_l2 to edit in other statuses for modification
     if (hasL2Role) return true;
-    // For CEO - can edit all sanction terms
-    if (userRoles.includes("ceo")) return true;
     // For RM - can edit in draft status
     if (
       userRoles.includes("relationship_manager") &&
@@ -557,7 +546,7 @@ const canEditSanctionAmount = () => {
     // For MD - can edit during final approval.
     if (
       userRoles.includes("md") &&
-      (status === "ceo_approved" || status === "md_review")
+      (status === "md_terms_submitted" || status === "ceo_approved" || status === "md_review")
     )
       return true;
 
@@ -579,16 +568,10 @@ const canEditSanctionAmount = () => {
       (status === "credit_l1_approved" || status === "credit_l2_review")
     )
       return true;
-    // CEO role
-    if (
-      userRoles.includes("ceo") &&
-      (status === "credit_l2_approved" || status === "ceo_review")
-    )
-      return true;
     // MD role
     if (
       userRoles.includes("md") &&
-      (status === "ceo_approved" || status === "md_review")
+      (status === "md_terms_submitted" || status === "ceo_approved" || status === "md_review")
     )
       return true;
     // Operations roles
@@ -756,10 +739,6 @@ const canEditSanctionAmount = () => {
         } else {
           throw new Error("You do not have L2 role to approve this case");
         }
-      } else if (userRoles.includes("ceo")) {
-        await workflowService.approveCEO(id, true, remarks, {
-          partnerSanctions: sanctionsArray,
-        });
       } else if (userRoles.includes("md")) {
         const mdPartner = PARTNERS[0]?.code || "FFPL";
         await workflowService.approveMD(
@@ -1171,7 +1150,7 @@ const canEditSanctionAmount = () => {
                 Sanction Details
               </h2>
 
-              {(hasL1Role || hasL2Role || userRoles.includes("ceo")) && (
+              {(hasL1Role || hasL2Role) && (
                 <div className="mb-4">
                   <p className="text-sm text-gray-600 mb-2">
                     {hasL1Role

@@ -8,8 +8,8 @@ import { CASE_STATUS } from '../config/constants';
  * DRAFT → SUBMITTED
  * SUBMITTED → CREDIT_L1
  * CREDIT_L1 → CREDIT_L2
- * CREDIT_L2 → CEO
- * CEO → MD
+ * CREDIT_L2 → RM final terms
+ * RM final terms → MD
  * MD → OPS_L1
  * OPS_L1 → OPS_HEAD
  * OPS_HEAD → COMPLETED
@@ -30,9 +30,10 @@ export class WorkflowValidatorService {
   ],
 
   'credit_l2_approved': [
-    'ceo_approved',
+    'md_terms_submitted',
     'returned_to_rm' // ✅ NEW
   ],
+    // Legacy status kept so older cases can still move forward.
     'ceo_approved': ['md_terms_submitted', 'rejected'],
     'md_terms_submitted': ['md_approved', 'rejected'],
     'md_approved': ['ops_l1_review'],
@@ -146,7 +147,7 @@ export class WorkflowValidatorService {
       'draft': 'RELATIONSHIP_MANAGER',
       'submitted': 'CREDIT_TEAM_L1',
       'credit_l1_approved': 'CREDIT_TEAM_L2',
-      'credit_l2_approved': 'CEO',
+      'credit_l2_approved': 'RELATIONSHIP_MANAGER',
       'ceo_approved': 'RELATIONSHIP_MANAGER',
       'md_terms_submitted': 'MD',
         'returned_to_rm': 'RELATIONSHIP_MANAGER', // ✅ NEW

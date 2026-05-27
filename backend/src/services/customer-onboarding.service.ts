@@ -126,9 +126,9 @@ export class CustomerOnboardingService {
       case "credit_l1_approved":
         return "CREDIT_TEAM_L2";
       case "credit_l2_approved":
-        return "CEO";
+        return "RM";
       case "ceo_approved":
-        return "MD";
+        return "RM";
       case "md_approved":
         return "RM";
       case "ops_l1_review":
@@ -1140,60 +1140,31 @@ Fintree Finance Pvt. Ltd.
 
     const previousStatus = workflow.currentStatus;
 
-    //correct one with role based email notification to CEO
+    // Credit L2 approval now sends the case straight back to RM for final terms.
     if (approved) {
       const customerName =
         customer?.companyName || customer?.customerName || `ID ${customerId}`;
 
-      // Step 1: Get roleId from roles table
-      const role = await this.roleRepository.findOne({
-        where: { name: "CEO" }, // change if column name differs
-        select: ["id"], // primary key column
-      });
+      if (customer.rmId) {
+        const rmUser = await this.userRepository.findOne({
+          where: { id: customer.rmId },
+          select: ["email"],
+        });
 
-      if (!role) {
-        throw new Error("CEO role not found");
-      }
-
-      // Step 2: Get all userIds mapped to this roleId from user_roles table
-      const userRoles = await this.userRoleRepository.find({
-        where: { roleId: role.id ,isActive:true}, // IMPORTANT: use role.id unless schema differs
-        select: ["userId"],
-      });
-
-      if (!userRoles.length) {
-        console.log("No users assigned to CREDIT_TEAM_L2 role");
-        return;
-      }
-
-      // Step 3: Extract userIds
-      const userIds = userRoles.map((ur) => ur.userId);
-
-      // Step 4: Fetch emails from users table
-      const creditUsers = await this.userRepository.find({
-        where: {
-          id: In(userIds),
-        },
-        select: ["id", "email"],
-      });
-
-      // Step 5: Send email to each user
-      for (const user of creditUsers) {
-        if (user.email) {
+        if (rmUser?.email) {
           await sendMail({
-            to: user.email,
-            subject: "Case Pending for CEO Approval",
-            // text: `Customer case ${customerName} approved by Credit L1 and pending your review.`,
+            to: rmUser.email,
+            subject: "Case Pending for RM Final Sanction Terms",
             text: `
 Dear Team,
 
-The credit case for customer ${customerName} has been approved by Credit L2 and is now pending your review and approval at the CEO stage.
+The credit case for customer ${customerName} has been approved by Credit L2 and is now pending your submission of final sanction terms to MD.
 
 Please log in to the LMS and take the necessary action.
 
 Customer Name : ${customerName}
 Case ID       : ${customerId}
-Current Stage : CEO Approval
+Current Stage : RM Final Terms Submission
 
 Regards,
 Credit Workflow System
@@ -1204,24 +1175,6 @@ Fintree Finance Pvt. Ltd.
       }
     }
 
-    // if (approved) {
-    //   const creditUsers = await this.userRepository.find({
-    //     where: {
-    //       defaultRole: "CEO",
-    //     },
-    //     select: ["id", "email"],
-    //   });
-
-    //   for (const user of creditUsers) {
-    //     if (user.email) {
-    //       await sendMail({
-    //         to: user.email,
-    //         subject: "Case Pending for CEO Approval",
-    //         text: `Customer case ${customerId} approved by Credit L2 and pending your review.`,
-    //       });
-    //     }
-    //   }
-    // }
     if (approved && sanctionData) {
       // Get existing sanction values for comparison
       const existingSanction = await this.sanctionRepository.findOne({
@@ -1326,7 +1279,7 @@ Fintree Finance Pvt. Ltd.
     }
 
     workflow.currentStatus = approved ? "credit_l2_approved" : "rejected";
-    workflow.currentApproverRoleName = approved ? "CEO" : "RM";
+    workflow.currentApproverRoleName = "RM";
     if (!approved) workflow.isRejected = true;
     workflow.remarks = remarks;
     await this.workflowRepository.save(workflow);
@@ -1356,201 +1309,9 @@ Fintree Finance Pvt. Ltd.
     approved: boolean,
     sanctionData?: any,
   ) {
-    const customer = await this.customerRepository.findOne({
-      where: { id: customerId },
-    });
-    if (!customer) throw new Error("Customer not found");
-    const workflow = await this.getOrCreateWorkflow(customerId);
-    if (workflow.currentStatus.toLowerCase() !== "credit_l2_approved")
-      throw new Error("Cannot approve: Pending at CEO");
-
-    const previousStatus = workflow.currentStatus;
-    //correct one with role based email notification to MD
-    // if (approved) {
-    //   const creditUsers = await this.userRepository.find({
-    //     where: {
-    //       defaultRole: "MD",
-    //     },
-    //     select: ["id", "email"],
-    //   });
-
-    //   for (const user of creditUsers) {
-    //     if (user.email) {
-    //       await sendMail({
-    //         to: user.email,
-    //         subject: "Case Pending for MD Approval",
-    //         text: `Customer case ${customerId} approved by Ceo and pending your review.`,
-    //       });
-    //     }
-    //   }
-    // }
-
-    if (approved) {
-      const customerName =
-        customer?.companyName || customer?.customerName || `ID ${customerId}`;
-
-      // Notify RM that CEO has approved and case is pending final terms
-      const rmId = customer.rmId;
-      if (rmId) {
-        const rmUser = await this.userRepository.findOne({
-          where: { id: rmId },
-          select: ["email"],
-        });
-
-        if (rmUser?.email) {
-          await sendMail({
-            to: rmUser.email,
-            subject: "Case Pending for RM Final Sanction Terms",
-            text: `
-Dear Team,
-
-The credit case for customer ${customerName} has been approved by CEO and is now pending your submission of final sanction terms to MD.
-
-Please log in to the LMS and take the necessary action.
-
-Customer Name : ${customerName}
-Case ID       : ${customerId}
-Current Stage : RM Final Terms Submission
-
-Regards,
-Credit Workflow System
-Fintree Finance Pvt. Ltd.
-`,
-          });
-        }
-      }
-    }
-
-    if (approved && sanctionData) {
-      // Get existing sanction values for comparison
-      const existingSanction = await this.sanctionRepository.findOne({
-        where: { customerId },
-      });
-      const oldValues = existingSanction || {};
-
-      // Check if partnerSanctions array is provided (new format for multi-partner support)
-      // CEO can edit: sanctionAmount, tenure, interestRate
-      if (
-        sanctionData.partnerSanctions &&
-        Array.isArray(sanctionData.partnerSanctions)
-      ) {
-        const editablePartnerSanctions = await this.getEditablePartnerSanctions(
-          customerId,
-          sanctionData.partnerSanctions,
-        );
-
-        if (editablePartnerSanctions.length === 0) {
-          throw new Error(
-            "No new or pending partner sanction request found for CEO approval",
-          );
-        }
-
-        // Save sanctions for each partner
-        for (const partnerSanction of editablePartnerSanctions) {
-          const partner = partnerSanction.partner;
-
-          // Get or create credit sanction for this customer+partner
-          let sanction = await this.sanctionRepository.findOne({
-            where: { customerId, partner },
-          });
-          if (!sanction) {
-            const newSanction = this.sanctionRepository.create({
-              customerId,
-              partner,
-              creditOfficerId: userId,
-              sanctionAmount: partnerSanction.sanctionAmount,
-              tenure: partnerSanction.tenure || 0,
-              interestRate: partnerSanction.interestRate || 0,
-              penalCharges: 0,
-              processingFees: 0,
-              conditions: "",
-              status: "pending",
-            });
-            await this.sanctionRepository.save(newSanction);
-          } else {
-            // CEO can update: sanctionAmount, tenure, interestRate
-            await this.sanctionRepository.update(sanction.id, {
-              sanctionAmount: partnerSanction.sanctionAmount,
-              tenure: partnerSanction.tenure || 0,
-              interestRate: partnerSanction.interestRate || 0,
-              creditOfficerId: userId,
-            });
-          }
-        }
-
-        // Insert into sanction_limit_history ONLY if financial values changed
-        const firstPartner = editablePartnerSanctions[0];
-        await this.insertSanctionHistoryIfChanged(
-          customerId,
-          oldValues,
-          firstPartner,
-          userId,
-          "CEO",
-          remarks,
-        );
-      } else {
-        // Legacy format: single sanction (backward compatibility)
-        // CEO can edit: sanctionAmount, tenure, interestRate
-        const lender = sanctionData.lender || "FFPL";
-
-        let sanction = await this.sanctionRepository.findOne({
-          where: { customerId, partner: lender },
-        });
-        if (!sanction) {
-          const newSanction = this.sanctionRepository.create({
-            customerId,
-            partner: lender,
-            creditOfficerId: userId,
-            sanctionAmount: sanctionData.sanctionAmount,
-            tenure: sanctionData.tenure || 0,
-            interestRate: sanctionData.interestRate || 0,
-            status: "pending",
-          });
-          await this.sanctionRepository.save(newSanction);
-        } else {
-          // CEO can update: sanctionAmount, tenure, interestRate
-          await this.sanctionRepository.update(sanction.id, {
-            sanctionAmount: sanctionData.sanctionAmount,
-            tenure: sanctionData.tenure || 0,
-            interestRate: sanctionData.interestRate || 0,
-            creditOfficerId: userId,
-          });
-        }
-
-        // Insert history only if financial values changed
-        await this.insertSanctionHistoryIfChanged(
-          customerId,
-          oldValues,
-          sanctionData,
-          userId,
-          "CEO",
-          remarks,
-        );
-      }
-    }
-
-    workflow.currentStatus = approved ? "ceo_approved" : "rejected";
-    workflow.currentApproverRoleName = approved ? "RM" : "RM";
-    if (!approved) workflow.isRejected = true;
-    workflow.remarks = remarks;
-    await this.workflowRepository.save(workflow);
-
-    // Sync customer status
-    await this.customerRepository.update(customerId, {
-      status: workflow.currentStatus as any,
-    });
-
-    await this.logHistory({
-      customerId,
-      caseWorkflowId: workflow.id,
-      status: workflow.currentStatus,
-      previousStatus,
-      changedBy: userId,
-      remarks,
-      sanctionData,
-    });
-
-    return workflow;
+    throw new Error(
+      "CEO approval has been removed from the customer case flow. Credit L2 approved cases now go to RM for final terms.",
+    );
   }
 
   async rmSubmitToMD(
@@ -1561,9 +1322,10 @@ Fintree Finance Pvt. Ltd.
   ) {
     const workflow = await this.getOrCreateWorkflow(customerId);
 
-    if (workflow.currentStatus.toLowerCase() !== "ceo_approved") {
+    const currentStatus = workflow.currentStatus.toLowerCase();
+    if (!["credit_l2_approved", "ceo_approved"].includes(currentStatus)) {
       throw new Error(
-        "Case must be CEO approved before RM can submit final terms",
+        "Case must be Credit L2 approved before RM can submit final terms",
       );
     }
 
@@ -3047,8 +2809,10 @@ Fintree Finance Pvt. Ltd.
 
   async getExecutivePending(role: string, userId?: number) {
     const r = role.toUpperCase();
-    let statusFilter: any =
-      r === "MD" ? "md_terms_submitted" : "credit_l2_approved";
+    if (r !== "MD") {
+      return { pending: [], handled: [] };
+    }
+    let statusFilter: any = "md_terms_submitted";
 
     // Pending cases
     const pendingWorkflows = await this.workflowRepository.find({

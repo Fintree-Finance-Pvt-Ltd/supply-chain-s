@@ -111,7 +111,7 @@ See **[API_WORKFLOWS_DOCUMENTATION.md](backend/API_DOCUMENTATION.md)**
 ### Workflow 1: Customer Onboarding (9 Steps)
 Creates a customer with comprehensive credit review and operations approval.
 
-**Flow**: RM Creates → RM Submits → Credit L1 → Credit L2 (LAN Generated) → CEO → MD → Ops L1 → Ops L2 → Ops Head (Complete)
+**Flow**: RM Creates → RM Submits → Credit L1 → Credit L2 → RM Final Terms → MD → Ops L1 → Ops Head (Complete)
 
 **Key Features**:
 - Automatic LAN generation at Credit L2

@@ -335,7 +335,7 @@ export class TaskDistributionService {
     const statusToStage: Record<string, string> = {
       [CASE_STATUS.SUBMITTED]: 'credit_l1',  // Directly to Credit L1 when submitted
       [CASE_STATUS.CREDIT_L1_APPROVED]: 'credit_l2',  // To Credit L2 after L1 approval
-      [CASE_STATUS.CREDIT_L2_APPROVED]: 'credit_l2',  // Stay at Credit L2 (no ops stages)
+      [CASE_STATUS.CREDIT_L2_APPROVED]: 'rm_final_terms',
           returned_to_rm: "rm", // ✅ NEW
 
     };

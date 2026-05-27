@@ -67,7 +67,6 @@ export const API_ENDPOINTS = {
   
   WORKFLOW_CUSTOMER_CREDIT_L1: (id) => `/workflows/customers/${id}/credit-l1`,
   WORKFLOW_CUSTOMER_CREDIT_L2: (id) => `/workflows/customers/${id}/credit-l2`,
-  WORKFLOW_CUSTOMER_CEO: (id) => `/workflows/customers/${id}/ceo-approve`,
   WORKFLOW_CUSTOMER_MD: (id) => `/workflows/customers/${id}/md-approve`,
   WORKFLOW_CUSTOMER_OPS_SUBMIT: (id) => `/workflows/customers/${id}/ops-submit`,
   WORKFLOW_CUSTOMER_OPS_L1: (id) => `/workflows/customers/${id}/ops-l1`,

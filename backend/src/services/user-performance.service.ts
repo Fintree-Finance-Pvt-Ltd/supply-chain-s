@@ -1127,8 +1127,8 @@ let rewardMap: Record<string, number> = {};
       md_approved: 'ready_for_ops',
       submitted: 'credit_l1',
       credit_l1_approved: 'credit_l2',
-      credit_l2_approved: 'ps_l1',
-      ceo_approved: 'ps_l2',
+      credit_l2_approved: 'rm_final_terms',
+      ceo_approved: 'rm_final_terms',
       md_terms_submitted: 'ps_l2',
       ops_l1_review: 'ops_l1',
       ops_l1_approved: 'ops_head',
@@ -1147,7 +1147,6 @@ let rewardMap: Record<string, number> = {};
     if (role === 'rm' || role === 'relationship_manager') return 'rm';
     if (role === 'credit_team_l1') return 'credit_l1';
     if (role === 'credit_team_l2') return 'credit_l2';
-    if (role === 'ceo') return 'ps_l1';
     if (role === 'md') return 'ps_l2';
     if (role === 'operations_team_l1') return 'ops_l1';
     if (role === 'operations_team_l2') return 'ops_l2';

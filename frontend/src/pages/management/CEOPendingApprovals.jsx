@@ -20,7 +20,7 @@ const CEOPendingApprovals = () => {
         const data = response.data?.data || { pending: [], handled: [] }
         setPendingApprovals(data.pending || [])
       } catch (error) {
-        console.error('Error loading CEO pending approvals:', error)
+        console.error('Error loading management pending approvals:', error)
         setPendingApprovals([])
       } finally {
         setIsLoading(false)
@@ -68,7 +68,7 @@ const CEOPendingApprovals = () => {
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold text-gray-900">Pending Approvals</h1>
-        <p className="text-gray-600 mt-2">Review and approve customer onboarding cases requiring CEO approval</p>
+        <p className="text-gray-600 mt-2">Review and approve customer onboarding cases requiring management approval</p>
       </div>
 
       <div className="card">

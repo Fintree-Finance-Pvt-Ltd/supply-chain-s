@@ -136,7 +136,7 @@ const RMCaseDetail = () => {
   }, []);
 
   // Fetch sanctions from dedicated API (/sanctions/customer/:customerId)
-  // This is the same endpoint used by credit_l2, CEO, and MD roles
+  // This is the same endpoint used by credit_l2 and MD roles
   useEffect(() => {
     const fetchSanctionsAndPartners = async () => {
       if (!id) return;
@@ -531,6 +531,9 @@ const handleSaveBankDetails = async () => {
   ].includes(currentCase.status);
 
   const isStage2 = currentCase.status === "md_approved";
+  const isReadyForFinalTerms = ["credit_l2_approved", "ceo_approved"].includes(
+    currentCase.status,
+  );
   const existingPartnerCodes = new Set(
     Object.keys(partnerSanctions).map((partnerCode) =>
       partnerCode.toUpperCase(),
@@ -1206,19 +1209,19 @@ const handleSaveBankDetails = async () => {
         <div className="space-y-6">
           <div className="card">
             <h2 className="text-xl font-semibold text-gray-900 mb-4">
-              {currentCase.status === "ceo_approved" ? "Submit Final Terms to MD" : "Submission to Operations"}
+              {isReadyForFinalTerms ? "Submit Final Terms to MD" : "Submission to Operations"}
             </h2>
-            {!isReadOnly && (currentCase.status === "ceo_approved" || currentCase.status === "md_approved") ? (
+            {!isReadOnly && (isReadyForFinalTerms || currentCase.status === "md_approved") ? (
               <>
                 <textarea
                   value={remarks}
                   onChange={(e) => setRemarks(e.target.value)}
                   className="w-full input-field mb-4"
                   rows={4}
-                  placeholder={currentCase.status === "ceo_approved" ? "Remarks for MD..." : "Final submission remarks..."}
+                  placeholder={isReadyForFinalTerms ? "Remarks for MD..." : "Final submission remarks..."}
                 />
                 
-                {currentCase.status === "ceo_approved" ? (
+                {isReadyForFinalTerms ? (
                   <button
                     disabled={isSubmitting}
                     onClick={async () => {

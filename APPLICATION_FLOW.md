@@ -6,7 +6,7 @@ This document outlines the end-to-end business process flow of the Fintree Suppl
 
 ## 1. Authentication & Role-Based Access
 - **Login**: Users authenticate using their credentials.
-- **Role Assignment**: Each user is assigned a specific role (RM, Credit L1/L2, CEO, MD, Ops L1/Head, Admin).
+- **Role Assignment**: Each user is assigned a specific role (RM, Credit L1/L2, MD, Ops L1/Head, Admin).
 - **Redirection**: Upon login, users are automatically redirected to their respective role-specific dashboard.
 
 ---
@@ -40,13 +40,13 @@ The Credit Team evaluates the risk and proposes sanction terms.
 
 ---
 
-## 4. Phase 3: Senior Management Approval (CEO & MD)
-High-value sanctions require executive sign-off.
+## 4. Phase 3: Final Terms & Management Approval (RM & MD)
+After Credit L2 approval, the case returns to RM for final sanction terms before MD sign-off.
 
-- **Step 6: CEO Approval**
-  - **Component**: `ApprovalScreen.jsx`
-  - **Action**: CEO reviews the credit proposal and CAM. Can revise the sanction amount.
-  - **Status Transition**: `CEO_Review` -> `CEO_Approved` (Moves to **MD**).
+- **Step 6: RM Final Terms Submission**
+  - **Component**: `RMCaseDetail.jsx`
+  - **Action**: RM reviews Credit L2-approved limits and submits final sanction terms to MD.
+  - **Status Transition**: `Credit_L2_Approved` -> `MD_Terms_Submitted` (Moves to **MD**).
 - **Step 7: Managing Director (MD) Final Sanction**
   - **Action**: MD provides the ultimate approval on sanction terms and conditions.
   - **Status Transition**: `MD_Review` -> `MD_Approved` (Moves back to **RM** for post-sanction activities).
@@ -93,4 +93,4 @@ Maintenance and governance.
 ---
 
 ### **Summary of Status Transitions**
-`Draft` -> `Submitted` -> `Credit_L1_Review` -> `Credit_L2_Review` -> `CEO_Review` -> `MD_Review` -> `MD_Approved` -> `Ops_Pending` -> `Disbursed`.
+`Draft` -> `Submitted` -> `Credit_L1_Approved` -> `Credit_L2_Approved` -> `MD_Terms_Submitted` -> `MD_Approved` -> `Ops_L1_Review` -> `Ops_L1_Approved` -> `Completed`.

@@ -48,8 +48,7 @@ export const ROLE_MENU_CONFIG = {
     { path: '/operations/repayment-upload', label: 'Repayment Upload', icon: 'FiDollarSign' },
   ],
   [ROLES.CEO]: [
-    { path: '/management/dashboard', label: 'Ceo Dashboard', icon: 'FiHome' },
-    { path: '/management/ceo-approvals', label: 'Pending Approvals', icon: 'FiCheckCircle' },
+    { path: '/management/dashboard', label: 'Management Dashboard', icon: 'FiHome' },
   ],
   [ROLES.CFO]: [
     { path: '/management/dashboard', label: 'Management Dashboard', icon: 'FiHome' },

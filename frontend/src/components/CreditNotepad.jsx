@@ -13,12 +13,12 @@ const NOTE_DEFINITIONS = [
   {
     section: CREDIT_NOTEPAD_SECTIONS.CREDIT_MAKER,
     title: "Recommendation",
-    editRoles: ["credit_team_l1", "credit_team_l2", "ceo"],
+    editRoles: ["credit_team_l1", "credit_team_l2"],
     placeholder: "Write recommendation notes...",
   },
 ];
 
-const VIEW_ROLES = ["credit_team_l1", "credit_team_l2", "ceo"];
+const VIEW_ROLES = ["credit_team_l1", "credit_team_l2"];
 
 const ALLOWED_TAGS = new Set([
   "A",

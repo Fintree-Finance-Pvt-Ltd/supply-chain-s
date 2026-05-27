@@ -12,13 +12,6 @@ export const workflowService = {
   api.post(API_ENDPOINTS.WORKFLOW_CUSTOMER_RETURN(id), { remarks }),
     approveCreditL1: (id, approved, remarks, sanctionData) => api.post(API_ENDPOINTS.WORKFLOW_CUSTOMER_CREDIT_L1(id), { approved, remarks, partnerSanctions: sanctionData?.partnerSanctions }),
     approveCreditL2: (id, approved, remarks, sanctionData) => api.post(API_ENDPOINTS.WORKFLOW_CUSTOMER_CREDIT_L2(id), { approved, remarks, partnerSanctions: sanctionData?.partnerSanctions, sanctionAmount: sanctionData?.sanctionAmount }),
-    approveCEO: (id, approved, remarks, sanctionData) => api.post(API_ENDPOINTS.WORKFLOW_CUSTOMER_CEO(id), { 
-      approved, 
-      remarks, 
-      partnerSanctions: sanctionData?.partnerSanctions, 
-      sanctionAmount: sanctionData?.sanctionAmount 
-      // CEO can only modify sanctionAmount, not tenure or interestRate
-    }),
     approveMD: (id, approved, remarks, sanctionData) => api.post(API_ENDPOINTS.WORKFLOW_CUSTOMER_MD(id), { approved, remarks, ...sanctionData }),
     submitTermsToMD: (id, remarks, sanctionData) => api.post(`/workflows/customers/${id}/rm-submit-md`, { remarks, ...sanctionData }),
     submitToOperations: (id, remarks) => api.post(API_ENDPOINTS.WORKFLOW_CUSTOMER_OPS_SUBMIT(id), { remarks }),
