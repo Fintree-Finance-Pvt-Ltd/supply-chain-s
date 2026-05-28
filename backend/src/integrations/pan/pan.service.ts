@@ -19,61 +19,61 @@ export class PanService {
     }
 
     // 1️⃣ FINANALYZ (Primary)
-    try {
-      const { data } = await axios.post(
-        this.finanalyzUrl,
-        { panNumber: pan.toUpperCase() },
-        {
-          headers: {
-            'Content-Type': 'application/json',
-            XApiKey: this.finanalyzKey,
-          },
-          validateStatus: () => true,
-        },
-      );
+    // try {
+    //   const { data } = await axios.post(
+    //     this.finanalyzUrl,
+    //     { panNumber: pan.toUpperCase() },
+    //     {
+    //       headers: {
+    //         'Content-Type': 'application/json',
+    //         XApiKey: this.finanalyzKey,
+    //       },
+    //       validateStatus: () => true,
+    //     },
+    //   );
 
-      const resp = data?.data?.response;
+    //   const resp = data?.data?.response;
 
-      if (resp?.code === 200 && resp?.isValid === true) {
-        return {
-          success: true,
-          verified: true,
-          provider: 'FINANALYZ',
-          details: {
-            pan: resp.pan,
-            name: resp.name,
-            firstName: resp.firstName,
-            middleName: resp.middleName,
-            lastName: resp.lastName,
-            gender: resp.gender,
-            dob: resp.dob,
-            address: resp.address,
-            city: resp.city,
-            state: resp.state,
-            country: resp.country,
-            pincode: resp.pincode,
-            maskedAadhaar: resp.maskedAadhaar,
-            lastFourDigit: resp.lastFourDigit,
-            typeOfHolder: resp.typeOfHolder,
-            isValid: resp.isValid,
-            aadhaarSeedingStatus: resp.aadhaarSeedingStatus
-              ? 'SEEDED'
-              : 'NOT_SEEDED',
-            nameMatchScore: 100, // Finanalyz doesn't give score
-          },
-        };
-      }
+    //   if (resp?.code === 200 && resp?.isValid === true) {
+    //     return {
+    //       success: true,
+    //       verified: true,
+    //       provider: 'FINANALYZ',
+    //       details: {
+    //         pan: resp.pan,
+    //         name: resp.name,
+    //         firstName: resp.firstName,
+    //         middleName: resp.middleName,
+    //         lastName: resp.lastName,
+    //         gender: resp.gender,
+    //         dob: resp.dob,
+    //         address: resp.address,
+    //         city: resp.city,
+    //         state: resp.state,
+    //         country: resp.country,
+    //         pincode: resp.pincode,
+    //         maskedAadhaar: resp.maskedAadhaar,
+    //         lastFourDigit: resp.lastFourDigit,
+    //         typeOfHolder: resp.typeOfHolder,
+    //         isValid: resp.isValid,
+    //         aadhaarSeedingStatus: resp.aadhaarSeedingStatus
+    //           ? 'SEEDED'
+    //           : 'NOT_SEEDED',
+    //         nameMatchScore: 100, // Finanalyz doesn't give score
+    //       },
+    //     };
+    //   }
 
-      // PAN exists but invalid
-      return {
-        success: true,
-        verified: false,
-        provider: 'FINANALYZ',
-        message: resp?.message || 'PAN not found',
-      };
-    } catch (_) {
-      // Ignore & fallback
-    }
+    //   // PAN exists but invalid
+    //   return {
+    //     success: true,
+    //     verified: false,
+    //     provider: 'FINANALYZ',
+    //     message: resp?.message || 'PAN not found',
+    //   };
+    // } catch (_) {
+    //   // Ignore & fallback
+    // }
 
     // 2️⃣ ZOOP (Fallback)
     try {
