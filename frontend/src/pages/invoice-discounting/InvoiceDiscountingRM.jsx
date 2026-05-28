@@ -420,7 +420,20 @@ const handleInvoiceNumberChange = (e) => {
 //   }
 // };
 
-
+// Function to get total disbursement like SQL SUM
+const getTotalDisbursement = (invoiceNumber, supplierId, loanAccountId, invoiceDate) => {
+  return invoices
+    .filter(
+      (inv) =>
+        // Match invoice number or any _suffix variant
+        inv.invoiceNumber === invoiceNumber ||
+        inv.invoiceNumber?.startsWith(`${invoiceNumber}_`)
+    )
+    .filter((inv) => String(inv.supplierId || inv.supplier?.id) === String(supplierId))
+    .filter((inv) => String(inv.loanAccountId) === String(loanAccountId))
+    .filter((inv) => inv.invoiceDate?.split("T")[0] === invoiceDate)
+    .reduce((sum, inv) => sum + Number(inv.disbursementAmount || 0), 0);
+};
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -1288,7 +1301,7 @@ const getAllowedInvoiceDays = () => {
     const existingInvoice =
       invoices.find(
         (inv) =>
-
+inv.loanAccountId === Number(selectedLAN) &&
           inv.invoiceNumber
             ?.toLowerCase()
             ?.trim() ===
@@ -1302,6 +1315,7 @@ const getAllowedInvoiceDays = () => {
           inv.invoiceDate
             ?.split("T")[0] ===
           selectedValue
+
       );
 
     // ✅ auto fill invoice amount
@@ -1519,9 +1533,68 @@ const getAllowedInvoiceDays = () => {
 <FiDollarSign style={{ marginRight: "8px", color: "#6366f1" }} />
 
     Disbursement Amount
-</label>
+</label> 
+ <input
+  type="number"
+  name="disbursementAmount"
+  value={formData.disbursementAmount}
+      onWheel={(e) => e.target.blur()}
+
+  onChange={(e) => {
+    const value = Number(e.target.value || 0);
+
+    const totalUsed = getTotalDisbursement(
+      formData.invoiceNumber,
+      selectedSupplier?.id,
+      selectedLAN,
+      formData.invoiceDate
+    );
+
+    const invoiceAmt = Number(formData.invoiceAmount || 0);
+    const remainingAllowed = Math.max(invoiceAmt - totalUsed, 0);
+
+    // Clamp input if exceeds remaining allowed
+    let enteredAmount = value;
+    if (enteredAmount > remainingAllowed) {
+      enteredAmount = remainingAllowed;
+      toast.error(
+        `Disbursement cannot exceed remaining allowed.\n` +
+        `Invoice Amount: ₹${formatINR(invoiceAmt)}\n` +
+        `Already Utilized: ₹${formatINR(totalUsed)}\n` +
+        `Remaining Allowed: ₹${formatINR(remainingAllowed)}`
+      );
+    }
+
+    handleInputChange({ target: { name: "disbursementAmount", value: enteredAmount } });
+  }}
+
+    placeholder="0.00"
+
+  style={{
+
+      width: "100%",
+
+      padding: "12px",
+
+      border:
+
+        Number(formData.disbursementAmount || 0) >
+
+        Number(customerLimits.unutilizedAmount || 0)
+
+          ? "1px solid #ef4444"
+
+          : "1px solid #e2e8f0",
  
-  <input
+      borderRadius: "10px",
+
+      fontSize: "16px",
+
+      fontWeight: "600",
+
+    }}
+/>
+  {/* <input
 
     type="number"
 
@@ -1643,7 +1716,7 @@ Remaining Allowed: ₹${formatINR(
 
     }}
 
-  />
+  /> */}
  
   {/* LIMIT INFO */}
 <div
