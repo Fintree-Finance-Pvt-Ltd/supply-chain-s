@@ -104,7 +104,7 @@ export class PanService {
       ) {
         const score = Number(data.result.name_match_score || 0);
 
-        if (score >= 80) {
+  
           return {
             success: true,
             verified: true,
@@ -121,14 +121,9 @@ export class PanService {
               nameMatchScore: score,
             },
           };
-        }
 
-        return {
-          success: true,
-          verified: false,
-          provider: 'ZOOP',
-          message: 'PAN name mismatch',
-        };
+
+
       }
 
       return {
