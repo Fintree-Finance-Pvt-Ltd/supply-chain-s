@@ -8,6 +8,8 @@ import StatusBadge from '../../components/StatusBadge'
 import LoadingSpinner from '../../components/LoadingSpinner'
 import { formatDate } from '../../utils/format'
 import { FiEye } from 'react-icons/fi'
+import axios from 'axios'
+import api from '../../services/api'
 
 const HANDLED_PAGE_SIZE = 15
 
@@ -42,6 +44,25 @@ const isPendingPage =
   const [handledPage, setHandledPage] = useState(1)
   const userRoles = (user?.roles || []).map(r => (r.name || '').toLowerCase());
   const isCreditHead = userRoles.includes('credit_head');
+
+const [assignUsers, setAssignUsers] = useState([])
+const [assigningCaseId, setAssigningCaseId] = useState(null)
+
+useEffect(() => {
+  const fetchAssignUsers = async () => {
+    try {
+      const response = await api.get('/credit/assign-users')
+
+      setAssignUsers(response.data?.data || [])
+    } catch (error) {
+      console.error('Failed to fetch assign users:', error)
+    }
+  }
+
+  if (isCreditHead) {
+    fetchAssignUsers()
+  }
+}, [isCreditHead])
 
   useEffect(() => {
     const loadDashboard = async () => {
@@ -111,8 +132,8 @@ const isPendingPage =
       label: 'Customer Code',
       render: (_, row) => row.customer?.customerCode || row.customer?.id|| 'N/A'
     },
-    {
-      key: 'assigned',
+    
+      {key: 'assignedUserName',
       label: 'Assigned To',
       render: (_, row) => {
         const assignedUserName = row.customer?.assignedUserName || row.assignedUserName;
@@ -120,7 +141,54 @@ const isPendingPage =
         return assignedUserName || (assignedUserId ? `User ID: ${assignedUserId}` : 'Unassigned');
       },
       hidden: !isCreditHead, // Only show for credit head
-    },
+},
+
+{
+  key: 'assigned',
+  label: 'ReAssign to',
+  render: (_, row) => {
+    const customerId = row.customerId || row.customer?.id || row.id
+
+    const assignedUserId =
+      row.customer?.assignedTo ||
+      row.customer?.assigned_to ||
+      row.customer?.assignedUserId ||
+      row.assignedTo ||
+      row.assigned_to ||
+      row.assignedUserId ||
+      ''
+
+    const assignedUserName =
+      row.customer?.assignedUserName ||
+      row.assignedUserName ||
+      'Unassigned'
+
+    if (!isCreditHead) {
+      return assignedUserName
+    }
+
+    return (
+      <select
+        value={assignedUserId || ''}
+        disabled={assigningCaseId === customerId}
+        onClick={(e) => e.stopPropagation()}
+        onChange={(e) => handleAssignChange(e, row)}
+        className="w-44 rounded border border-gray-300 px-2 py-1 text-sm focus:border-primary-500 focus:outline-none"
+      >
+        <option value="">Unassigned</option>
+
+        {assignUsers.map((assignUser) => (
+          <option key={assignUser.id} value={assignUser.id}>
+            {assignUser.name || assignUser.fullName || assignUser.email}
+          </option>
+        ))}
+      </select>
+    )
+  },
+        hidden: !isCreditHead, // Only show for credit head
+
+},
+
     {
       key: 'status',
       label: 'Status',
@@ -133,6 +201,35 @@ const isPendingPage =
       render: (value) => formatDate(value),
     },
   ]
+
+const handleAssignChange = async (event, row) => {
+  event.stopPropagation()
+
+  const assignToUserId = event.target.value
+  const customerId = row.customerId || row.customer?.id || row.id
+
+  if (!customerId || !assignToUserId) return
+
+  try {
+    setAssigningCaseId(customerId)
+
+    await api.put(`/credit/cases/${customerId}/assign`, {
+      assignedTo: Number(assignToUserId),
+    })
+
+    dispatch(fetchWorkflowDashboard({
+      role: 'credit',
+      level: 'both',
+      handledPage,
+      handledLimit: HANDLED_PAGE_SIZE,
+    }))
+  } catch (error) {
+    console.error('Failed to assign case:', error)
+    alert(error.response?.data?.message || 'Failed to assign case')
+  } finally {
+    setAssigningCaseId(null)
+  }
+}  
 
   const handleRowClick = (row) => {
     navigate(`/credit/case/${row.customerId || row.id}`)

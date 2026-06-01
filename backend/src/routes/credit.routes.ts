@@ -23,13 +23,26 @@ creditNotepadRouter.use(roleMiddleware(allowedNotepadRoles));
 router.post(
   '/sanction',
   roleMiddleware([ROLES.CREDIT_TEAM_L1, ROLES.CREDIT_TEAM_L2]),
-  creditController.createSanction
+  creditController.createSanction,
 );
+
+router.get(
+  '/assign-users',
+  authMiddleware,
+  creditController.getAssignUsers
+);
+
+router.put(
+  '/cases/:customerId/assign',
+  authMiddleware,
+  creditController.assignCreditUser
+);
+router.put('/credit/cases/:customerId/assign', authMiddleware, creditController.assignCreditUser)
 
 router.get(
   '/pending',
   roleMiddleware([ROLES.CREDIT_TEAM_L1, ROLES.CREDIT_TEAM_L2]),
-  creditController.getPendingSanctions
+  creditController.getPendingSanctions,
 );
 
 router.get('/sanction/:id', creditController.getSanctionById);

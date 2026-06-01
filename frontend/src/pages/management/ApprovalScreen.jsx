@@ -82,7 +82,9 @@ const ApprovalScreen = () => {
 
   const userRoles = getUserRoleNames(user);
   const roleListLabel = userRoles.join(",");
-  const primaryRole = normalizeRole(user?.role || user?.defaultRole || userRoles[0]);
+  const primaryRole = normalizeRole(
+    user?.role || user?.defaultRole || userRoles[0],
+  );
   const hasCreditTeamL1Role = userRoles.includes("credit_team_l1");
   const approvalRole = getApprovalRoleForStatus(
     userRoles,
@@ -176,7 +178,9 @@ const ApprovalScreen = () => {
               penalCharges:
                 item.penalCharges !== null &&
                 item.penalCharges !== undefined &&
-                item.penalCharges !== 0? item.penalCharges: "",
+                item.penalCharges !== 0
+                  ? item.penalCharges
+                  : "",
               processingFees: item.processingFees || 0,
               legalCharges: item.legalCharges || 0,
               serviceFee: item.serviceFee || 0,
@@ -291,6 +295,19 @@ const ApprovalScreen = () => {
       loadData();
     }
   }, [id, partnersLoading, hasCreditTeamL1Role]);
+
+  const updatePartnerSanction = (index, field, value) => {
+    setPartnerSanctions((prev) =>
+      prev.map((item, i) =>
+        i === index
+          ? {
+              ...item,
+              [field]: value,
+            }
+          : item,
+      ),
+    );
+  };
 
   const handleApprove = async () => {
     if (!comments.trim()) {
@@ -438,10 +455,7 @@ const ApprovalScreen = () => {
 
   // RM and MD can access sanction details
   const canAccessSanctionDetails = () => {
-    return (
-      userRoles.includes("relationship_manager") ||
-      role === "md"
-    );
+    return userRoles.includes("relationship_manager") || role === "md";
   };
 
   const isReadOnly =
@@ -451,14 +465,10 @@ const ApprovalScreen = () => {
     customer.status === "rejected" ||
     customer.status === "completed" ||
     customer.status.includes("ops") ||
-  (
-  role === "md" &&
-  ![
-    "ceo_approved",
-    "md_terms_submitted",
-    "pending",
-  ].includes(customer.status)
-);
+    (role === "md" &&
+      !["ceo_approved", "md_terms_submitted", "pending"].includes(
+        customer.status,
+      ));
 
   const visibleDocuments = customer.documents || [];
   // Management can approve even without viewing documents as per new request
@@ -648,7 +658,7 @@ const ApprovalScreen = () => {
                               e.preventDefault();
                             }}
                             className="input-field text-sm"
-                            readOnly={true}
+                            readOnly={false}
                           />
 
                           {ps.sanctionAmount && (
@@ -668,11 +678,17 @@ const ApprovalScreen = () => {
                             type="number"
                             value={ps.tenure || ""}
                             onWheel={(e) => e.target.blur()}
-                            onChange={(e) => {
-                              e.preventDefault();
-                            }}
+                            onChange={(e) =>
+                              updatePartnerSanction(
+                                index,
+                                "tenure",
+                                e.target.value === ""
+                                  ? ""
+                                  : parseInt(e.target.value),
+                              )
+                            }
                             className="input-field text-sm"
-                            readOnly={true}
+                            readOnly={isPartnerLocked(ps)}
                           />
                         </div>
                         <div>
@@ -684,11 +700,17 @@ const ApprovalScreen = () => {
                             step="0.01"
                             value={ps.interestRate || ""}
                             onWheel={(e) => e.target.blur()}
-                            onChange={(e) => {
-                              e.preventDefault();
-                            }}
+                            onChange={(e) =>
+                              updatePartnerSanction(
+                                index,
+                                "interestRate",
+                                e.target.value === ""
+                                  ? ""
+                                  : parseFloat(e.target.value),
+                              )
+                            }
                             className="input-field text-sm"
-                            readOnly={true}
+                            readOnly={isPartnerLocked(ps)}
                           />
                         </div>
                       </div>
@@ -707,11 +729,17 @@ const ApprovalScreen = () => {
                             }
                             placeholder="Enter Penal Charges (%)"
                             onWheel={(e) => e.target.blur()}
-                            onChange={(e) => {
-                              e.preventDefault();
-                            }}
+                            onChange={(e) =>
+                              updatePartnerSanction(
+                                index,
+                                "penalCharges",
+                                e.target.value === ""
+                                  ? ""
+                                  : parseFloat(e.target.value),
+                              )
+                            }
                             className="input-field text-sm"
-                            readOnly={true}
+                            readOnly={isPartnerLocked(ps)}
                           />
                         </div>
                         <div>
@@ -727,11 +755,17 @@ const ApprovalScreen = () => {
                                 : (ps.processingFees ?? "")
                             }
                             onWheel={(e) => e.target.blur()}
-                            onChange={(e) => {
-                              e.preventDefault();
-                            }}
+                            onChange={(e) =>
+                              updatePartnerSanction(
+                                index,
+                                "processingFees",
+                                e.target.value === ""
+                                  ? ""
+                                  : parseFloat(e.target.value),
+                              )
+                            }
                             className="input-field text-sm"
-                            readOnly={true}
+                            readOnly={isPartnerLocked(ps)}
                           />
                         </div>
 
@@ -750,11 +784,17 @@ const ApprovalScreen = () => {
                             }
                             placeholder="Enter Legal Charges"
                             onWheel={(e) => e.target.blur()}
-                            onChange={(e) => {
-                              e.preventDefault();
-                            }}
+                            onChange={(e) =>
+                              updatePartnerSanction(
+                                index,
+                                "legalCharges",
+                                e.target.value === ""
+                                  ? ""
+                                  : parseFloat(e.target.value),
+                              )
+                            }
                             className="input-field text-sm"
-                            readOnly={true}
+                            readOnly={isPartnerLocked(ps)}
                           />
                         </div>
                         <div>
@@ -766,17 +806,21 @@ const ApprovalScreen = () => {
                             type="number"
                             step="0.01"
                             value={
-                              ps.serviceFee === 0
-                                ? ""
-                                : (ps.serviceFee ?? "")
+                              ps.serviceFee === 0 ? "" : (ps.serviceFee ?? "")
                             }
                             placeholder="Service Fee Charges"
                             onWheel={(e) => e.target.blur()}
-                            onChange={(e) => {
-                              e.preventDefault();
-                            }}
+                            onChange={(e) =>
+                              updatePartnerSanction(
+                                index,
+                                "serviceFee",
+                                e.target.value === ""
+                                  ? ""
+                                  : parseFloat(e.target.value),
+                              )
+                            }
                             className="input-field text-sm"
-                            readOnly={true}
+                            readOnly={isPartnerLocked(ps)}
                           />
                         </div>
                         <div>
@@ -794,11 +838,17 @@ const ApprovalScreen = () => {
                             }
                             placeholder="Cash Collateral"
                             onWheel={(e) => e.target.blur()}
-                            onChange={(e) => {
-                              e.preventDefault();
-                            }}
+                            onChange={(e) =>
+                              updatePartnerSanction(
+                                index,
+                                "cashCollateral",
+                                e.target.value === ""
+                                  ? ""
+                                  : parseFloat(e.target.value),
+                              )
+                            }
                             className="input-field text-sm"
-                            readOnly={true}
+                            readOnly={isPartnerLocked(ps)}
                           />
                         </div>
 
@@ -821,7 +871,6 @@ const ApprovalScreen = () => {
                   ))}
                 </div>
               )}
-
 
               {/* RM sees read-only view */}
               {role === "relationship_manager" && (
