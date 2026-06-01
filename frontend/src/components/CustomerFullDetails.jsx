@@ -127,7 +127,9 @@ const CustomerFullDetails = ({ customer }) => {
                                 <p className="font-medium text-gray-900">{customer.applicant?.name}</p>
                                 <p className="text-sm text-gray-600">Mobile: {customer.applicant?.mobile}</p>
                                 <p className="text-sm text-gray-600">Email: {customer.applicant?.email || 'N/A'}</p>
-                                <p className="text-sm text-gray-600">Gender: {customer.applicant?.pan}</p>
+                                <p className="text-sm text-gray-600">pan: {customer.applicant?.pan}</p>
+                                <p className="text-sm text-gray-600">Gender: {customer.applicant?.gender}</p>
+
                             </div>
                     </div>
                 </div>
