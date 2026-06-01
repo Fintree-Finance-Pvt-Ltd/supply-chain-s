@@ -210,6 +210,128 @@ export class CreditService {
     );
   }
 
+async getAssignUsers() {
+  try {
+    const users = await AppDataSource.query(`
+      SELECT 
+        u.id,
+        u.name,
+        u.email
+      FROM users u
+      INNER JOIN user_roles ur ON ur.userId = u.id
+      WHERE ur.roleId = 3
+        AND ur.isActive = 1
+        AND u.isActive = 1
+      ORDER BY u.name ASC
+    `);
+
+    return {
+      success: true,
+      data: users,
+    };
+  } catch (error: any) {
+    console.error('Get assign users error:', error);
+
+    return {
+      success: false,
+      message: error.message || 'Failed to fetch assign users',
+    };
+  }
+}
+
+async assignCreditUser(
+  customerId: number,
+  assignedTo: number,
+  loginUser: any
+) {
+  try {
+    if (!assignedTo) {
+      return {
+        success: false,
+        message: 'Assigned user is required',
+      };
+    }
+
+    const userRoles = loginUser?.roles || [];
+
+    const isCreditHead = userRoles.some((role: any) =>
+      ['credit_head', 'credithead'].includes(
+        String(role.name || '').toLowerCase()
+      )
+    );
+
+    if (!isCreditHead) {
+      return {
+        success: false,
+        message: 'Only Credit Head can assign cases',
+      };
+    }
+
+const assignUser = await AppDataSource.query(
+  `
+  SELECT 
+    u.id
+  FROM users u
+  INNER JOIN user_roles ur ON ur.userId = u.id
+  WHERE u.id = ?
+    AND ur.roleId = 3
+    AND ur.isActive = 1
+    AND u.isActive = 1
+  LIMIT 1
+  `,
+  [assignedTo]
+);
+
+    if (!assignUser.length) {
+      return {
+        success: false,
+        message: 'Selected user is not an active credit user',
+      };
+    }
+
+    await AppDataSource.transaction(async (manager) => {
+      await manager.query(
+        `
+        UPDATE customers
+        SET assignedUserId = ?
+        WHERE id = ?
+        `,
+        [assignedTo, customerId]
+      );
+
+      await manager.query(
+        `
+        UPDATE case_workflows
+        SET assignedUserId = ?
+        WHERE customerId = ?
+        `,
+        [assignedTo, customerId]
+      );
+
+      await manager.query(
+        `
+        UPDATE task_time_tracking
+        SET userId = ?
+        WHERE taskId = ?
+        `,
+        [assignedTo, customerId]
+      );
+    });
+
+    return {
+      success: true,
+      message: 'Case assigned successfully',
+    };
+  } catch (error: any) {
+    console.error('Assign credit user error:', error);
+
+    return {
+      success: false,
+      message: error.message || 'Failed to assign case',
+    };
+  }
+}
+  
   async upsertCustomerNotepad(
     customerId: number,
     section: string,

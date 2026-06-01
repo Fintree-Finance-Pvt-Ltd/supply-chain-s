@@ -183,6 +183,48 @@ export class CreditController {
     }
   };
 
+  getAssignUsers = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const result = await this.creditService.getAssignUsers();
+
+    if (!result.success) {
+      res.status(500).json(result);
+      return;
+    }
+
+    res.json(result);
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to fetch assign users',
+    });
+  }
+};
+
+assignCreditUser = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const customerId = Number(req.params.customerId);
+    const assignedTo = Number(req.body.assignedTo);
+
+    const result = await this.creditService.assignCreditUser(
+      customerId,
+      assignedTo,
+      (req as any).user
+    );
+
+    if (!result.success) {
+      res.status(400).json(result);
+      return;
+    }
+
+    res.json(result);
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to assign credit user',
+    });
+  }
+};
   updateCustomerNotepad = async (
     req: Request,
     res: Response,
