@@ -15,6 +15,8 @@ import {
   KycDetail,
   CustomerAddress,
   CoApplicant,
+  LanSequence,
+  PARTNER_STATUS,
 } from '../entities';
 import { EntityManager, In, Repository } from 'typeorm';
 import { ApprovalService } from './approval.service';
@@ -345,13 +347,78 @@ export class OperationsService {
     return this.normalizeHeader(value).includes('rent') ? 'Rented' : 'Owned';
   }
 
+  private normalizePartnerLookupValue(value: string): string {
+    return this.normalizeHeader(value).replace(/_/g, '');
+  }
+
+  private async resolveMigrationPartner(manager: EntityManager, lenderType: string): Promise<Partner> {
+    const normalizedInput = this.normalizePartnerLookupValue(lenderType);
+    if (!normalizedInput) {
+      throw new Error('lender_type is required');
+    }
+
+    const partners = await manager.getRepository(Partner).find();
+    const partner = partners.find((item) => {
+      const candidates = [item.name, item.code, item.lanPrefix]
+        .filter(Boolean)
+        .map((value) => this.normalizePartnerLookupValue(value));
+
+      return candidates.some(
+        (candidate) =>
+          candidate === normalizedInput ||
+          (normalizedInput.length >= 3 && candidate.includes(normalizedInput)) ||
+          (candidate.length >= 3 && normalizedInput.includes(candidate)),
+      );
+    });
+
+    if (!partner) {
+      throw new Error(`Lender type "${lenderType}" was not found in the partners table`);
+    }
+
+    if (partner.status !== PARTNER_STATUS.ACTIVE) {
+      throw new Error(`Lender type "${lenderType}" maps to inactive partner ${partner.code}`);
+    }
+
+    return partner;
+  }
+
+  private async getNextMigrationLanId(manager: EntityManager, partner: Partner): Promise<string> {
+    const sequenceRepo = manager.getRepository(LanSequence);
+    const prefix = partner.lanPrefix || partner.code;
+    const sequence = await sequenceRepo
+      .createQueryBuilder('seq')
+      .setLock('pessimistic_write')
+      .where('seq.partnerId = :partnerId', { partnerId: partner.id })
+      .getOne();
+
+    if (!sequence) {
+      const initialValue = 10000100;
+      const nextValue = initialValue + 1;
+      const newSequence = sequenceRepo.create({
+        partnerId: partner.id,
+        currentValue: nextValue,
+        prefix,
+      } as Partial<LanSequence>);
+      await sequenceRepo.save(newSequence);
+      return `${prefix}${nextValue.toString().padStart(8, '0')}`;
+    }
+
+    sequence.currentValue += 1;
+    await sequenceRepo.save(sequence);
+
+    return `${sequence.prefix}${sequence.currentValue.toString().padStart(8, '0')}`;
+  }
+
+  private buildGeneratedCustomerCode(customerId: number): string {
+    return `CUST${String(customerId).padStart(6, '0')}`;
+  }
+
   private validateCustomerMigrationRow(row: ExcelRow): string[] {
     const errors: string[] = [];
     const requiredFields: Array<[string[], string]> = [
       [['customer_name', 'name'], 'customer_name'],
       [['mobile', 'customer_mobile'], 'mobile'],
-      [['lender_code', 'partner_code', 'lender'], 'lender_code'],
-      [['lan_id', 'lan', 'loan_account_number'], 'lan_id'],
+      [['lender_type', 'lender_name', 'partner_name', 'lender'], 'lender_type'],
       [['sanction_amount', 'sanctioned_amount'], 'sanction_amount'],
       [['co_applicant_name'], 'co_applicant_name'],
       [['co_applicant_mobile'], 'co_applicant_mobile'],
@@ -565,12 +632,11 @@ export class OperationsService {
     manager: EntityManager,
     row: ExcelRow,
     userId: number,
-  ): Promise<{ customerId: number; customerCode: string; partnerLoanId: string }> {
+  ): Promise<{ customerId: number; customerCode: string; partnerLoanId: string; lanId: string }> {
     const customerRepo = manager.getRepository(Customer);
     const applicantRepo = manager.getRepository(Applicant);
     const sanctionRepo = manager.getRepository(CreditSanction);
     const loanAccountRepo = manager.getRepository(LoanAccount);
-    const partnerRepo = manager.getRepository(Partner);
     const workflowRepo = manager.getRepository(CaseWorkflow);
     const historyRepo = manager.getRepository(CaseStatusHistory);
 
@@ -586,9 +652,7 @@ export class OperationsService {
     const companyPan = this.getCell(row, ['company_pan']);
     const gstNumber = this.getCell(row, ['gst_number', 'gst']);
     const partnerLoanId = this.getCell(row, ['partner_loan_id']);
-    const customerCode = this.getCell(row, ['customer_code']) || partnerLoanId;
-    const lenderCode = this.getCell(row, ['lender_code', 'partner_code', 'lender']).toUpperCase();
-    const lanId = this.getCell(row, ['lan_id', 'lan', 'loan_account_number']);
+    const lenderType = this.getCell(row, ['lender_type', 'lender_name', 'partner_name', 'lender']);
     const sanctionAmount = this.toNumber(this.getCell(row, ['sanction_amount', 'sanctioned_amount'])) || 0;
     const tenure = this.toNumber(this.getCell(row, ['tenure_months', 'tenure'])) || 0;
     const interestRate = this.toNumber(this.getCell(row, ['interest_rate', 'roi_percentage', 'roi'])) || 0;
@@ -598,13 +662,11 @@ export class OperationsService {
     const processingFeeRate = processingFeeInput <= 999.99 ? processingFeeInput : 0;
     const serviceFee = serviceFeeInput || (processingFeeInput > 999.99 ? processingFeeInput : 0);
     const annualTurnover = this.toNumber(this.getCell(row, ['annual_turnover']));
-    const partner = await partnerRepo.findOne({ where: { code: lenderCode } as any });
+    const partner = await this.resolveMigrationPartner(manager, lenderType);
+    const lenderCode = partner.code.toUpperCase();
 
     let customer: Customer | null = null;
-    if (customerCode) {
-      customer = await customerRepo.findOne({ where: { customerCode } });
-    }
-    if (!customer && gstNumber) {
+    if (gstNumber) {
       customer = await customerRepo.findOne({ where: { gstNumber } });
     }
 
@@ -640,7 +702,6 @@ export class OperationsService {
     this.applyIfPresent(customer, 'companyEmail', companyEmail);
     this.applyIfPresent(customer, 'companyPan', companyPan);
     this.applyIfPresent(customer, 'gstNumber', gstNumber);
-    this.applyIfPresent(customer, 'customerCode', customerCode);
     this.applyIfPresent(customer, 'industryType', this.getCell(row, ['industry_type']));
     this.applyIfPresent(customer, 'bankAccountNo', this.getCell(row, ['bank_account_no', 'bank_account_number']));
     this.applyIfPresent(customer, 'bankIfscCode', this.getCell(row, ['bank_ifsc_code', 'ifsc_code']).toUpperCase());
@@ -650,6 +711,10 @@ export class OperationsService {
     if (annualTurnover !== null) customer.annualTurnover = annualTurnover;
 
     const savedCustomer = await customerRepo.save(customer);
+    if (!savedCustomer.customerCode) {
+      savedCustomer.customerCode = this.buildGeneratedCustomerCode(savedCustomer.id);
+      await customerRepo.save(savedCustomer);
+    }
 
     let applicant = await applicantRepo.findOne({ where: { customerId: savedCustomer.id } });
     if (!applicant) {
@@ -711,28 +776,15 @@ export class OperationsService {
     sanction.creditRemarks = 'Migrated by operations';
     await sanctionRepo.save(sanction);
 
-    let loanAccount = await loanAccountRepo.findOne({ where: { lanId } });
-    if (loanAccount && loanAccount.customerId !== savedCustomer.id) {
-      throw new Error(`LAN ${lanId} already belongs to another customer`);
-    }
-
-    if (!loanAccount) {
-      loanAccount = await loanAccountRepo.findOne({
-        where: { customerId: savedCustomer.id, lender: lenderCode } as any,
-      });
-    }
-
-    if (!loanAccount) {
-      loanAccount = loanAccountRepo.create({
-        customerId: savedCustomer.id,
-        disbursedAmount: 0,
-      } as Partial<LoanAccount>);
-    }
+    const loanAccount = loanAccountRepo.create({
+      customerId: savedCustomer.id,
+      lanId: await this.getNextMigrationLanId(manager, partner),
+      disbursedAmount: 0,
+    } as Partial<LoanAccount>);
 
     loanAccount.customerId = savedCustomer.id;
-    loanAccount.partnerId = partner?.id || loanAccount.partnerId || null;
+    loanAccount.partnerId = partner.id;
     loanAccount.lender = lenderCode;
-    loanAccount.lanId = lanId;
     loanAccount.sanctionedAmount = sanctionAmount;
     loanAccount.status = 'active';
     loanAccount.isOnboarded = false;
@@ -775,7 +827,8 @@ export class OperationsService {
     return {
       customerId: savedCustomer.id,
       customerCode: savedCustomer.customerCode || String(savedCustomer.id),
-      partnerLoanId: partnerLoanId || savedCustomer.customerCode || String(savedCustomer.id),
+      partnerLoanId: partnerLoanId || String(savedCustomer.id),
+      lanId: loanAccount.lanId,
     };
   }
 
@@ -908,7 +961,7 @@ export class OperationsService {
     return {
       supplierId: savedSupplier.id,
       supplierCode: savedSupplier.supplierCode,
-      partnerLoanId: this.getCell(row, ['partner_loan_id']) || lanId || loanAccount?.lanId || String(customer.id),
+      partnerLoanId: loanAccount?.lanId || lanId || this.getCell(row, ['partner_loan_id']) || String(customer.id),
     };
   }
 
@@ -994,7 +1047,7 @@ export class OperationsService {
     );
 
     const payload = {
-      partner_loan_id: partnerLoanId || customer.customerCode || String(customer.id),
+      partner_loan_id: partnerLoanId || String(customer.id),
       applicant: {
         name: applicant?.name || customer.name || '',
         pan: applicant?.pan || customer.pan || '',
@@ -1011,6 +1064,8 @@ export class OperationsService {
       },
       sanctions,
     };
+
+    console.log('LMS Payload for customerId', customerId, payload);
 
     const baseUrl = process.env.LMS_API_BASE_URL;
     const apiKey = process.env.LMS_API_KEY;
@@ -1120,7 +1175,7 @@ export class OperationsService {
     for (const row of rows) {
       const rowNumber = Number(row.__rowNumber);
       const name = this.getCell(row, ['customer_name', 'name']);
-      const reference = this.getCell(row, ['customer_code', 'partner_loan_id', 'lan_id']) || `Row ${rowNumber}`;
+      const reference = this.getCell(row, ['partner_loan_id', 'lender_type', 'lan_id']) || `Row ${rowNumber}`;
       const validationErrors = this.validateCustomerMigrationRow(row);
 
       if (validationErrors.length > 0) {
@@ -1146,10 +1201,11 @@ export class OperationsService {
           localStatus: 'SAVED',
           lmsStatus: 'PENDING',
           localId: saved.customerId,
-          message: 'Saved locally. LMS sync pending.',
+          message: `Saved locally with system LAN ${saved.lanId}. LMS sync pending.`,
         }) - 1;
 
         customerPartnerLoanIds.set(saved.customerId, saved.partnerLoanId);
+        console.log(`Saved customer ${saved.customerCode} with system LAN ${saved.lanId}`);
         customerResultIndexes.set(saved.customerId, [
           ...(customerResultIndexes.get(saved.customerId) || []),
           resultIndex,
@@ -1185,6 +1241,8 @@ export class OperationsService {
         });
       }
     }
+
+    console.log("result--->",results);
 
     return this.buildMigrationResult('Customer', rows.length, results);
   }
