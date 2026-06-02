@@ -1,12 +1,14 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { FiX, FiFileText, FiArrowUpRight } from "react-icons/fi";
+import { FiX, FiFileText, FiUpload, FiCheckCircle, FiAlertTriangle } from "react-icons/fi";
 import axios from "axios";
 import { workflowService } from "../../services/workflowService";
+import { operationsService } from "../../services/operationsService";
 import DataTable from "../../components/DataTable";
 import StatusBadge from "../../components/StatusBadge";
 import LoadingSpinner from "../../components/LoadingSpinner";
 import { formatDate } from "../../utils/format";
+import { toast } from "react-toastify";
 
 const OperationsDashboard = () => {
   const navigate = useNavigate();
@@ -17,6 +19,10 @@ const OperationsDashboard = () => {
 
   const [cases, setCases] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [customerMigrationFile, setCustomerMigrationFile] = useState(null);
+  const [supplierMigrationFile, setSupplierMigrationFile] = useState(null);
+  const [migrationUploading, setMigrationUploading] = useState(null);
+  const [migrationResult, setMigrationResult] = useState(null);
 
   const [showViewModal, setShowViewModal] = useState(false);
 
@@ -117,6 +123,96 @@ const OperationsDashboard = () => {
       setLoadingInvoice(false);
     }
   };
+
+  const handleMigrationUpload = async (type) => {
+    const file =
+      type === "customer" ? customerMigrationFile : supplierMigrationFile;
+
+    if (!file) {
+      toast.error("Please select an .xlsx file");
+      return;
+    }
+
+    try {
+      setMigrationUploading(type);
+      const response =
+        type === "customer"
+          ? await operationsService.uploadCustomerMigration(file)
+          : await operationsService.uploadSupplierMigration(file);
+
+      setMigrationResult({
+        type,
+        ...response,
+      });
+
+      if (response.success) {
+        toast.success(response.message || "Migration completed");
+      } else {
+        toast.warning(response.message || "Migration completed with issues");
+      }
+    } catch (error) {
+      console.error("Migration upload failed:", error);
+      toast.error(error.message || "Migration upload failed");
+    } finally {
+      setMigrationUploading(null);
+    }
+  };
+
+  const migrationColumns = [
+    {
+      key: "rowNumber",
+      label: "Row",
+    },
+    {
+      key: "reference",
+      label: "Reference",
+      render: (value) => value || "N/A",
+    },
+    {
+      key: "name",
+      label: "Name",
+      render: (value) => value || "N/A",
+    },
+    {
+      key: "localStatus",
+      label: "Local",
+      render: (value) => (
+        <span
+          className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-bold ${
+            value === "SAVED"
+              ? "bg-emerald-50 text-emerald-700"
+              : "bg-rose-50 text-rose-700"
+          }`}
+        >
+          {value === "SAVED" ? <FiCheckCircle /> : <FiAlertTriangle />}
+          {value}
+        </span>
+      ),
+    },
+    {
+      key: "lmsStatus",
+      label: "LMS",
+      render: (value) => (
+        <span
+          className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-bold ${
+            value === "SENT"
+              ? "bg-emerald-50 text-emerald-700"
+              : value === "PENDING"
+                ? "bg-amber-50 text-amber-700"
+                : "bg-rose-50 text-rose-700"
+          }`}
+        >
+          {value === "SENT" ? <FiCheckCircle /> : <FiAlertTriangle />}
+          {value}
+        </span>
+      ),
+    },
+    {
+      key: "message",
+      label: "Message",
+      render: (value) => value || "-",
+    },
+  ];
 
   const customerPending = (cases.pending || []).filter(
     (item) => item.workflowType === "CUSTOMER_ONBOARDING",
@@ -228,6 +324,129 @@ const OperationsDashboard = () => {
         </div>
 
       </div> */}
+
+        {isDashboardPage && (
+          <section className="rounded-[24px] bg-white border border-slate-200 shadow-sm overflow-hidden">
+            <div className="px-8 py-6 border-b border-slate-100 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+              <div>
+                <h2 className="text-2xl font-black text-slate-900">
+                  Customer & Supplier Migration
+                </h2>
+                <p className="text-sm text-slate-500 mt-1">
+                  Upload Excel data for local migration and LMS sync.
+                </p>
+              </div>
+
+              {migrationResult?.summary && (
+                <div className="grid grid-cols-3 gap-2 text-center">
+                  <div className="rounded-lg bg-slate-50 px-4 py-2">
+                    <p className="text-xs text-slate-400">Rows</p>
+                    <p className="font-black text-slate-900">
+                      {migrationResult.summary.totalRows}
+                    </p>
+                  </div>
+                  <div className="rounded-lg bg-emerald-50 px-4 py-2">
+                    <p className="text-xs text-emerald-500">LMS Sent</p>
+                    <p className="font-black text-emerald-700">
+                      {migrationResult.summary.lmsSent}
+                    </p>
+                  </div>
+                  <div className="rounded-lg bg-rose-50 px-4 py-2">
+                    <p className="text-xs text-rose-500">Failed</p>
+                    <p className="font-black text-rose-700">
+                      {migrationResult.summary.failed}
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2">
+              <div className="p-6 border-b lg:border-b-0 lg:border-r border-slate-100">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <h3 className="text-lg font-black text-slate-900">
+                      Customer Excel
+                    </h3>
+                    <p className="text-sm text-slate-500 mt-1">
+                      Customers, sanctions, LAN and bank data.
+                    </p>
+                  </div>
+                  <FiFileText className="h-6 w-6 text-indigo-500" />
+                </div>
+
+                <div className="mt-5 flex flex-col gap-3 sm:flex-row">
+                  <input
+                    type="file"
+                    accept=".xlsx"
+                    onChange={(event) =>
+                      setCustomerMigrationFile(event.target.files?.[0] || null)
+                    }
+                    className="min-w-0 flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                  />
+                  <button
+                    onClick={() => handleMigrationUpload("customer")}
+                    disabled={migrationUploading === "customer"}
+                    className="inline-flex items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-bold text-white hover:bg-indigo-700 disabled:bg-slate-300"
+                  >
+                    <FiUpload />
+                    {migrationUploading === "customer" ? "Uploading" : "Upload"}
+                  </button>
+                </div>
+              </div>
+
+              <div className="p-6">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <h3 className="text-lg font-black text-slate-900">
+                      Supplier Excel
+                    </h3>
+                    <p className="text-sm text-slate-500 mt-1">
+                      Suppliers mapped to migrated customers or LANs.
+                    </p>
+                  </div>
+                  <FiFileText className="h-6 w-6 text-emerald-500" />
+                </div>
+
+                <div className="mt-5 flex flex-col gap-3 sm:flex-row">
+                  <input
+                    type="file"
+                    accept=".xlsx"
+                    onChange={(event) =>
+                      setSupplierMigrationFile(event.target.files?.[0] || null)
+                    }
+                    className="min-w-0 flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                  />
+                  <button
+                    onClick={() => handleMigrationUpload("supplier")}
+                    disabled={migrationUploading === "supplier"}
+                    className="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-bold text-white hover:bg-emerald-700 disabled:bg-slate-300"
+                  >
+                    <FiUpload />
+                    {migrationUploading === "supplier" ? "Uploading" : "Upload"}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {migrationResult?.results?.length > 0 && (
+              <div className="border-t border-slate-100 p-2">
+                <div className="px-6 py-4">
+                  <h3 className="text-lg font-black text-slate-900">
+                    {migrationResult.type === "customer"
+                      ? "Customer"
+                      : "Supplier"}{" "}
+                    Upload Result
+                  </h3>
+                </div>
+                <DataTable
+                  data={migrationResult.results}
+                  columns={migrationColumns}
+                />
+              </div>
+            )}
+          </section>
+        )}
 
         {/* PENDING CUSTOMER SECTION */}
         {(isPendingPage || isDashboardPage) && (

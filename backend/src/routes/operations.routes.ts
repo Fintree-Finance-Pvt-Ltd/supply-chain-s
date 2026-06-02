@@ -3,6 +3,7 @@ import { OperationsController } from '../controllers/operations.controller';
 import { authMiddleware } from '../middlewares/auth.middleware';
 import { roleMiddleware } from '../middlewares/role.middleware';
 import { ROLES } from '../config/constants';
+import { upload } from '../utils/upload';
 
 const router = Router();
 const operationsController = new OperationsController();
@@ -10,6 +11,21 @@ const operationsController = new OperationsController();
 router.use(authMiddleware);
 
 // IMPORTANT: More specific routes must come BEFORE generic /:id route
+
+// Data Migration Routes (OPS only)
+router.post(
+  '/migrations/customers',
+  roleMiddleware([ROLES.OPERATIONS_TEAM_L1, ROLES.OPERATIONS_TEAM_L2, ROLES.OPERATIONS_HEAD]),
+  upload.single('file'),
+  operationsController.migrateCustomers
+);
+
+router.post(
+  '/migrations/suppliers',
+  roleMiddleware([ROLES.OPERATIONS_TEAM_L1, ROLES.OPERATIONS_TEAM_L2, ROLES.OPERATIONS_HEAD]),
+  upload.single('file'),
+  operationsController.migrateSuppliers
+);
 
 // Repayment Upload Routes (OPS L1/L2)
 router.post(

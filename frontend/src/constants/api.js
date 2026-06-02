@@ -144,6 +144,8 @@ DASHBOARD_OPERATIONS_SUPPLIERS: '/workflows/suppliers/dashboard/operations',
   REPAYMENT_RETRY: (id) => `/operations/repayments/${id}/retry`,
   REPAYMENT_LENDERS: '/operations/repayments/lenders',
   REPAYMENT_LANS: '/operations/repayments/lans',
+  CUSTOMER_MIGRATION_UPLOAD: '/operations/migrations/customers',
+  SUPPLIER_MIGRATION_UPLOAD: '/operations/migrations/suppliers',
 
   // Onboarding Integrations
   ONBOARDING_MOBILE_SEND_OTP: '/onboarding/mobile/send-otp',

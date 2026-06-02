@@ -114,6 +114,64 @@ export class OperationsController {
   // REPAYMENT UPLOAD METHODS
   // =====================================================
 
+  migrateCustomers = async (req: Request, res: Response): Promise<void> => {
+    try {
+      if (!req.userId) {
+        res.status(401).json({
+          success: false,
+          message: 'Authentication required',
+        });
+        return;
+      }
+
+      if (!req.file) {
+        res.status(400).json({
+          success: false,
+          message: 'Excel file is required',
+        });
+        return;
+      }
+
+      const result = await this.operationsService.migrateCustomersFromExcel(req.file, req.userId);
+
+      res.json(result);
+    } catch (error: any) {
+      res.status(400).json({
+        success: false,
+        message: error.message || 'Failed to migrate customers',
+      });
+    }
+  };
+
+  migrateSuppliers = async (req: Request, res: Response): Promise<void> => {
+    try {
+      if (!req.userId) {
+        res.status(401).json({
+          success: false,
+          message: 'Authentication required',
+        });
+        return;
+      }
+
+      if (!req.file) {
+        res.status(400).json({
+          success: false,
+          message: 'Excel file is required',
+        });
+        return;
+      }
+
+      const result = await this.operationsService.migrateSuppliersFromExcel(req.file, req.userId);
+
+      res.json(result);
+    } catch (error: any) {
+      res.status(400).json({
+        success: false,
+        message: error.message || 'Failed to migrate suppliers',
+      });
+    }
+  };
+
   uploadRepayments = async (req: Request, res: Response): Promise<void> => {
     try {
       if (!req.userId) {

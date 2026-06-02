@@ -1,9 +1,28 @@
 import { AppDataSource } from '../config/database';
-import { OperationsCheck, Customer, RepaymentUpload, REPAYMENT_UPLOAD_STATUS, LoanAccount, Partner } from '../entities';
-import { Repository } from 'typeorm';
+import {
+  OperationsCheck,
+  Customer,
+  RepaymentUpload,
+  REPAYMENT_UPLOAD_STATUS,
+  LoanAccount,
+  Partner,
+  Supplier,
+  SupplierBankDetail,
+  CaseWorkflow,
+  CaseStatusHistory,
+  CreditSanction,
+  Applicant,
+  KycDetail,
+  CustomerAddress,
+  CoApplicant,
+} from '../entities';
+import { EntityManager, In, Repository } from 'typeorm';
 import { ApprovalService } from './approval.service';
-import { CASE_STATUS } from '../config/constants';
+import { ADDRESS_TYPES, CASE_STATUS, COMPANY_TYPES, KYC_TYPES } from '../config/constants';
 import axios from 'axios';
+import path from 'path';
+import * as yauzl from 'yauzl';
+import { XMLParser } from 'fast-xml-parser';
 
 export interface RepaymentRecord {
   lan: string;
@@ -28,12 +47,48 @@ export interface UploadResult {
   }[];
 }
 
+interface ExcelRow {
+  __rowNumber: number;
+  [key: string]: string | number;
+}
+
+interface MigrationRowResult {
+  rowNumber: number;
+  reference: string;
+  name: string;
+  localStatus: 'SAVED' | 'FAILED';
+  lmsStatus: 'PENDING' | 'SENT' | 'FAILED' | 'SKIPPED';
+  message?: string;
+  localId?: number;
+}
+
+interface MigrationUploadResult {
+  success: boolean;
+  message: string;
+  summary: {
+    totalRows: number;
+    localSaved: number;
+    lmsSent: number;
+    failed: number;
+  };
+  results: MigrationRowResult[];
+}
+
 export class OperationsService {
   private operationsCheckRepository: Repository<OperationsCheck>;
   private customerRepository: Repository<Customer>;
   private repaymentUploadRepository: Repository<RepaymentUpload>;
   private loanAccountRepository: Repository<LoanAccount>;
   private partnerRepository: Repository<Partner>;
+  private supplierRepository: Repository<Supplier>;
+  private supplierBankRepository: Repository<SupplierBankDetail>;
+  private workflowRepository: Repository<CaseWorkflow>;
+  private historyRepository: Repository<CaseStatusHistory>;
+  private sanctionRepository: Repository<CreditSanction>;
+  private applicantRepository: Repository<Applicant>;
+  private coApplicantRepository: Repository<CoApplicant>;
+  private kycDetailRepository: Repository<KycDetail>;
+  private customerAddressRepository: Repository<CustomerAddress>;
   private approvalService: ApprovalService;
 
   constructor() {
@@ -42,7 +97,1153 @@ export class OperationsService {
     this.repaymentUploadRepository = AppDataSource.getRepository(RepaymentUpload);
     this.loanAccountRepository = AppDataSource.getRepository(LoanAccount);
     this.partnerRepository = AppDataSource.getRepository(Partner);
+    this.supplierRepository = AppDataSource.getRepository(Supplier);
+    this.supplierBankRepository = AppDataSource.getRepository(SupplierBankDetail);
+    this.workflowRepository = AppDataSource.getRepository(CaseWorkflow);
+    this.historyRepository = AppDataSource.getRepository(CaseStatusHistory);
+    this.sanctionRepository = AppDataSource.getRepository(CreditSanction);
+    this.applicantRepository = AppDataSource.getRepository(Applicant);
+    this.coApplicantRepository = AppDataSource.getRepository(CoApplicant);
+    this.kycDetailRepository = AppDataSource.getRepository(KycDetail);
+    this.customerAddressRepository = AppDataSource.getRepository(CustomerAddress);
     this.approvalService = new ApprovalService();
+  }
+
+  private asArray<T>(value: T | T[] | undefined | null): T[] {
+    if (value === undefined || value === null) return [];
+    return Array.isArray(value) ? value : [value];
+  }
+
+  private normalizeHeader(value: string): string {
+    return String(value || '')
+      .trim()
+      .toLowerCase()
+      .replace(/%/g, ' percentage ')
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '');
+  }
+
+  private getCell(row: ExcelRow, aliases: string[]): string {
+    for (const alias of aliases) {
+      const key = this.normalizeHeader(alias);
+      const value = row[key];
+      if (value !== undefined && value !== null && String(value).trim() !== '') {
+        return String(value).trim();
+      }
+    }
+    return '';
+  }
+
+  private toNumber(value: string): number | null {
+    if (!value) return null;
+    const parsed = Number(String(value).replace(/,/g, '').trim());
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  private getSharedText(node: any): string {
+    if (node === undefined || node === null) return '';
+    if (typeof node === 'string' || typeof node === 'number') return String(node);
+    if (Array.isArray(node)) return node.map((item) => this.getSharedText(item)).join('');
+    if (typeof node === 'object') {
+      if (node.t !== undefined) return this.getSharedText(node.t);
+      if (node.r !== undefined) return this.getSharedText(node.r);
+    }
+    return '';
+  }
+
+  private getCellColumnIndex(cellRef: string): number {
+    const letters = String(cellRef || '').replace(/[0-9]/g, '').toUpperCase();
+    let index = 0;
+    for (const letter of letters) {
+      index = index * 26 + (letter.charCodeAt(0) - 64);
+    }
+    return Math.max(index - 1, 0);
+  }
+
+  private async readZipXmlEntries(filePath: string): Promise<Record<string, string>> {
+    return new Promise((resolve, reject) => {
+      const entries: Record<string, string> = {};
+
+      yauzl.open(filePath, { lazyEntries: true }, (openError, zipfile) => {
+        if (openError || !zipfile) {
+          reject(openError || new Error('Unable to open Excel file'));
+          return;
+        }
+
+        zipfile.readEntry();
+
+        zipfile.on('entry', (entry: yauzl.Entry) => {
+          const shouldRead =
+            !entry.fileName.endsWith('/') &&
+            (entry.fileName.endsWith('.xml') || entry.fileName.endsWith('.rels'));
+
+          if (!shouldRead) {
+            zipfile.readEntry();
+            return;
+          }
+
+          zipfile.openReadStream(entry, (streamError, stream) => {
+            if (streamError || !stream) {
+              zipfile.close();
+              reject(streamError || new Error(`Unable to read ${entry.fileName}`));
+              return;
+            }
+
+            const chunks: Buffer[] = [];
+            stream.on('data', (chunk) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
+            stream.on('end', () => {
+              entries[entry.fileName] = Buffer.concat(chunks).toString('utf8');
+              zipfile.readEntry();
+            });
+            stream.on('error', (error) => {
+              zipfile.close();
+              reject(error);
+            });
+          });
+        });
+
+        zipfile.on('end', () => resolve(entries));
+        zipfile.on('error', reject);
+      });
+    });
+  }
+
+  private getFirstWorksheetXml(entries: Record<string, string>, parser: XMLParser): string {
+    const workbookXml = entries['xl/workbook.xml'];
+    const workbookRelsXml = entries['xl/_rels/workbook.xml.rels'];
+
+    if (workbookXml && workbookRelsXml) {
+      const workbook = parser.parse(workbookXml);
+      const relationships = parser.parse(workbookRelsXml);
+      const firstSheet = this.asArray<any>(workbook?.workbook?.sheets?.sheet)[0];
+      const relationId = firstSheet?.['@_r:id'] || firstSheet?.['@_id'];
+      const relation = this
+        .asArray<any>(relationships?.Relationships?.Relationship)
+        .find((item) => item?.['@_Id'] === relationId);
+
+      if (relation?.['@_Target']) {
+        const target = String(relation['@_Target']).replace(/^\/+/, '');
+        const normalizedTarget = target.startsWith('xl/') ? target : `xl/${target}`;
+        if (entries[normalizedTarget]) return entries[normalizedTarget];
+      }
+    }
+
+    const fallbackSheet = Object.keys(entries).find((key) =>
+      /^xl\/worksheets\/sheet\d+\.xml$/.test(key)
+    );
+
+    if (!fallbackSheet) {
+      throw new Error('Excel workbook does not contain a worksheet');
+    }
+
+    return entries[fallbackSheet];
+  }
+
+  private parseSharedStrings(entries: Record<string, string>, parser: XMLParser): string[] {
+    const sharedXml = entries['xl/sharedStrings.xml'];
+    if (!sharedXml) return [];
+
+    const parsed = parser.parse(sharedXml);
+    return this
+      .asArray<any>(parsed?.sst?.si)
+      .map((item) => this.getSharedText(item));
+  }
+
+  private getExcelCellValue(cell: any, sharedStrings: string[]): string {
+    const type = cell?.['@_t'];
+    const rawValue = cell?.v;
+
+    if (type === 's') {
+      const index = Number(rawValue);
+      return Number.isInteger(index) ? sharedStrings[index] || '' : '';
+    }
+
+    if (type === 'inlineStr') {
+      return this.getSharedText(cell?.is);
+    }
+
+    if (type === 'b') {
+      return rawValue === '1' ? 'true' : 'false';
+    }
+
+    return this.getSharedText(rawValue);
+  }
+
+  private async parseXlsxRows(file: Express.Multer.File): Promise<ExcelRow[]> {
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (ext !== '.xlsx') {
+      throw new Error('Please upload an .xlsx Excel file');
+    }
+
+    const parser = new XMLParser({
+      ignoreAttributes: false,
+      attributeNamePrefix: '@_',
+      parseTagValue: false,
+      trimValues: false,
+      removeNSPrefix: true,
+    });
+    const entries = await this.readZipXmlEntries(file.path);
+    const sharedStrings = this.parseSharedStrings(entries, parser);
+    const worksheetXml = this.getFirstWorksheetXml(entries, parser);
+    const worksheet = parser.parse(worksheetXml);
+
+    const sheetRows = this.asArray<any>(worksheet?.worksheet?.sheetData?.row)
+      .map((row, index) => {
+        const values: string[] = [];
+        this.asArray<any>(row?.c).forEach((cell, cellIndex) => {
+          const columnIndex = cell?.['@_r']
+            ? this.getCellColumnIndex(cell['@_r'])
+            : cellIndex;
+          values[columnIndex] = this.getExcelCellValue(cell, sharedStrings).trim();
+        });
+
+        return {
+          rowNumber: Number(row?.['@_r']) || index + 1,
+          values,
+        };
+      })
+      .filter((row) => row.values.some((value) => String(value || '').trim() !== ''));
+
+    if (sheetRows.length < 2) {
+      return [];
+    }
+
+    const headerRow = sheetRows[0];
+    const headers = headerRow.values.map((header) => this.normalizeHeader(header));
+
+    return sheetRows.slice(1).reduce<ExcelRow[]>((acc, row) => {
+      const hasData = row.values.some((value) => String(value || '').trim() !== '');
+      if (!hasData) return acc;
+
+      const parsedRow: ExcelRow = { __rowNumber: row.rowNumber };
+      headers.forEach((header, index) => {
+        if (header) parsedRow[header] = String(row.values[index] || '').trim();
+      });
+      acc.push(parsedRow);
+      return acc;
+    }, []);
+  }
+
+  private normalizeCompanyType(value: string): string | undefined {
+    if (!value) return undefined;
+    const normalized = this.normalizeHeader(value);
+    const typeMap: Record<string, string> = {
+      proprietorship: COMPANY_TYPES.PROPRIETORSHIP,
+      sole_proprietorship: COMPANY_TYPES.PROPRIETORSHIP,
+      partnership: COMPANY_TYPES.PARTNERSHIP,
+      pvt_ltd: COMPANY_TYPES.PVT_LTD,
+      pvt_ltd_ltd: COMPANY_TYPES.PVT_LTD,
+      private_limited: COMPANY_TYPES.PVT_LTD,
+      ltd: COMPANY_TYPES.PVT_LTD,
+      llp: COMPANY_TYPES.LLP,
+    };
+
+    return typeMap[normalized] || Object.values(COMPANY_TYPES).find((type) => type === value);
+  }
+
+  private normalizeOwnership(value: string): string {
+    return this.normalizeHeader(value).includes('rent') ? 'Rented' : 'Owned';
+  }
+
+  private validateCustomerMigrationRow(row: ExcelRow): string[] {
+    const errors: string[] = [];
+    const requiredFields: Array<[string[], string]> = [
+      [['customer_name', 'name'], 'customer_name'],
+      [['mobile', 'customer_mobile'], 'mobile'],
+      [['lender_code', 'partner_code', 'lender'], 'lender_code'],
+      [['lan_id', 'lan', 'loan_account_number'], 'lan_id'],
+      [['sanction_amount', 'sanctioned_amount'], 'sanction_amount'],
+      [['co_applicant_name'], 'co_applicant_name'],
+      [['co_applicant_mobile'], 'co_applicant_mobile'],
+      [['co_applicant_pan'], 'co_applicant_pan'],
+      [['co_applicant_aadhaar'], 'co_applicant_aadhaar'],
+      [['co_applicant_address'], 'co_applicant_address'],
+    ];
+
+    requiredFields.forEach(([aliases, label]) => {
+      if (!this.getCell(row, aliases)) errors.push(`${label} is required`);
+    });
+
+    const sanctionAmount = this.toNumber(this.getCell(row, ['sanction_amount', 'sanctioned_amount']));
+    if (sanctionAmount === null || sanctionAmount <= 0) {
+      errors.push('sanction_amount must be a positive number');
+    }
+
+    const turnover = this.getCell(row, ['annual_turnover']);
+    if (turnover && this.toNumber(turnover) === null) {
+      errors.push('annual_turnover must be a valid number');
+    }
+
+    const companyType = this.getCell(row, ['company_type']);
+    if (companyType && !this.normalizeCompanyType(companyType)) {
+      errors.push('company_type must be Proprietorship, Partnership, Pvt Ltd / Ltd, or LLP');
+    }
+
+    const ifsc = this.getCell(row, ['bank_ifsc_code', 'ifsc_code']);
+    if (ifsc && ifsc.length !== 11) {
+      errors.push('bank_ifsc_code must be 11 characters');
+    }
+
+    return errors;
+  }
+
+  private validateSupplierMigrationRow(row: ExcelRow): string[] {
+    const errors: string[] = [];
+    const hasCustomerReference = Boolean(
+      this.getCell(row, ['customer_id']) ||
+      this.getCell(row, ['customer_code']) ||
+      this.getCell(row, ['lan_id', 'partner_loan_id'])
+    );
+
+    if (!hasCustomerReference) {
+      errors.push('customer_id, customer_code, or lan_id is required');
+    }
+
+    const requiredFields: Array<[string[], string]> = [
+      [['supplier_name'], 'supplier_name'],
+      [['bank_account_number'], 'bank_account_number'],
+      [['ifsc_code', 'bank_ifsc_code'], 'ifsc_code'],
+      [['bank_name'], 'bank_name'],
+      [['account_holder_name'], 'account_holder_name'],
+    ];
+
+    requiredFields.forEach(([aliases, label]) => {
+      if (!this.getCell(row, aliases)) errors.push(`${label} is required`);
+    });
+
+    const ifsc = this.getCell(row, ['ifsc_code', 'bank_ifsc_code']);
+    if (ifsc && ifsc.length !== 11) {
+      errors.push('ifsc_code must be 11 characters');
+    }
+
+    return errors;
+  }
+
+  private applyIfPresent<T extends object>(target: T, key: keyof T, value: any): void {
+    if (value !== undefined && value !== null && String(value).trim() !== '') {
+      target[key] = value;
+    }
+  }
+
+  private async upsertKycDetail(
+    manager: EntityManager,
+    customerId: number,
+    kycType: string,
+    kycNumber: string,
+    userId: number,
+    options: {
+      applicantType?: string;
+      applicantIndex?: number;
+      coApplicantId?: number | null;
+      remarks?: string;
+    } = {},
+  ): Promise<void> {
+    if (!kycNumber) return;
+
+    const repository = manager.getRepository(KycDetail);
+    const applicantType = options.applicantType || 'applicant';
+    const applicantIndex = options.applicantIndex ?? 0;
+    const coApplicantId = options.coApplicantId ?? null;
+    let kyc = await repository.findOne({
+      where: {
+        customerId,
+        applicantType,
+        applicantIndex,
+        coApplicantId,
+        kycType,
+      } as any,
+    });
+
+    if (!kyc) {
+      kyc = repository.create();
+      kyc.customerId = customerId;
+      kyc.applicantType = applicantType;
+      kyc.applicantIndex = applicantIndex;
+      kyc.coApplicantId = coApplicantId;
+      kyc.kycType = kycType;
+    }
+
+    kyc.kycNumber = kycNumber;
+    kyc.coApplicantId = coApplicantId;
+    kyc.verified = true;
+    kyc.verifiedAt = new Date();
+    kyc.verifiedBy = userId;
+    kyc.remarks = options.remarks || 'Migrated by operations';
+    await repository.save(kyc);
+  }
+
+  private async upsertCustomerAddress(
+    manager: EntityManager,
+    customerId: number,
+    type: string,
+    fullAddress: string,
+    city: string,
+    state: string,
+    pincode: string,
+    ownership: string,
+  ): Promise<void> {
+    if (!fullAddress || !city || !state || !pincode) return;
+
+    const repository = manager.getRepository(CustomerAddress);
+    let address = await repository.findOne({ where: { customerId, type } as any });
+
+    if (!address) {
+      address = repository.create();
+      address.customerId = customerId;
+      address.type = type;
+    }
+
+    address.fullAddress = fullAddress;
+    address.city = city;
+    address.state = state;
+    address.pincode = pincode;
+    address.ownership = this.normalizeOwnership(ownership);
+    await repository.save(address);
+  }
+
+  private normalizeGender(value: string): string | undefined {
+    if (!value) return undefined;
+    const normalized = this.normalizeHeader(value);
+    if (normalized === 'male') return 'Male';
+    if (normalized === 'female') return 'Female';
+    if (normalized === 'other') return 'Other';
+    return undefined;
+  }
+
+  private async upsertCoApplicantFromRow(
+    manager: EntityManager,
+    customerId: number,
+    row: ExcelRow,
+    userId: number,
+  ): Promise<CoApplicant> {
+    const repository = manager.getRepository(CoApplicant);
+    const name = this.getCell(row, ['co_applicant_name', 'coapplicant_name']);
+    const mobile = this.getCell(row, ['co_applicant_mobile', 'coapplicant_mobile']);
+    const email = this.getCell(row, ['co_applicant_email', 'coapplicant_email']);
+    const pan = this.getCell(row, ['co_applicant_pan', 'coapplicant_pan']);
+    const aadhaar = this.getCell(row, ['co_applicant_aadhaar', 'coapplicant_aadhaar']);
+    const address = this.getCell(row, ['co_applicant_address', 'coapplicant_address']);
+    const gender = this.normalizeGender(this.getCell(row, ['co_applicant_gender', 'coapplicant_gender']));
+
+    let coApplicant = pan
+      ? await repository.findOne({ where: { customerId, pan } as any })
+      : null;
+
+    if (!coApplicant && mobile) {
+      coApplicant = await repository.findOne({ where: { customerId, mobile } as any });
+    }
+
+    if (!coApplicant) {
+      coApplicant = repository.create();
+      coApplicant.customerId = customerId;
+    }
+
+    coApplicant.name = name;
+    coApplicant.mobile = mobile;
+    coApplicant.pan = pan;
+    coApplicant.email = email || coApplicant.email || null;
+    if (gender) coApplicant.gender = gender;
+
+    const savedCoApplicant = await repository.save(coApplicant);
+
+    await this.upsertKycDetail(manager, customerId, KYC_TYPES.PAN, pan, userId, {
+      applicantType: 'co-applicant',
+      applicantIndex: 1,
+      coApplicantId: savedCoApplicant.id,
+    });
+    await this.upsertKycDetail(manager, customerId, KYC_TYPES.AADHAAR, aadhaar, userId, {
+      applicantType: 'co-applicant',
+      applicantIndex: 1,
+      coApplicantId: savedCoApplicant.id,
+      remarks: address,
+    });
+
+    return savedCoApplicant;
+  }
+
+  private async saveMigratedCustomerRow(
+    manager: EntityManager,
+    row: ExcelRow,
+    userId: number,
+  ): Promise<{ customerId: number; customerCode: string; partnerLoanId: string }> {
+    const customerRepo = manager.getRepository(Customer);
+    const applicantRepo = manager.getRepository(Applicant);
+    const sanctionRepo = manager.getRepository(CreditSanction);
+    const loanAccountRepo = manager.getRepository(LoanAccount);
+    const partnerRepo = manager.getRepository(Partner);
+    const workflowRepo = manager.getRepository(CaseWorkflow);
+    const historyRepo = manager.getRepository(CaseStatusHistory);
+
+    const customerName = this.getCell(row, ['customer_name', 'name']);
+    const mobile = this.getCell(row, ['mobile', 'customer_mobile']);
+    const email = this.getCell(row, ['email', 'customer_email']);
+    const pan = this.getCell(row, ['pan', 'applicant_pan']);
+    const aadhaar = this.getCell(row, ['aadhaar_number', 'applicant_aadhaar']);
+    const companyType = this.normalizeCompanyType(this.getCell(row, ['company_type']));
+    const companyName = this.getCell(row, ['company_name']);
+    const companyMobile = this.getCell(row, ['company_mobile']);
+    const companyEmail = this.getCell(row, ['company_email']);
+    const companyPan = this.getCell(row, ['company_pan']);
+    const gstNumber = this.getCell(row, ['gst_number', 'gst']);
+    const partnerLoanId = this.getCell(row, ['partner_loan_id']);
+    const customerCode = this.getCell(row, ['customer_code']) || partnerLoanId;
+    const lenderCode = this.getCell(row, ['lender_code', 'partner_code', 'lender']).toUpperCase();
+    const lanId = this.getCell(row, ['lan_id', 'lan', 'loan_account_number']);
+    const sanctionAmount = this.toNumber(this.getCell(row, ['sanction_amount', 'sanctioned_amount'])) || 0;
+    const tenure = this.toNumber(this.getCell(row, ['tenure_months', 'tenure'])) || 0;
+    const interestRate = this.toNumber(this.getCell(row, ['interest_rate', 'roi_percentage', 'roi'])) || 0;
+    const penalRate = this.toNumber(this.getCell(row, ['penal_rate', 'penal_charges'])) || 0;
+    const processingFeeInput = this.toNumber(this.getCell(row, ['processing_fee', 'processing_fees'])) || 0;
+    const serviceFeeInput = this.toNumber(this.getCell(row, ['service_fee', 'processing_fee_amount'])) || 0;
+    const processingFeeRate = processingFeeInput <= 999.99 ? processingFeeInput : 0;
+    const serviceFee = serviceFeeInput || (processingFeeInput > 999.99 ? processingFeeInput : 0);
+    const annualTurnover = this.toNumber(this.getCell(row, ['annual_turnover']));
+    const partner = await partnerRepo.findOne({ where: { code: lenderCode } as any });
+
+    let customer: Customer | null = null;
+    if (customerCode) {
+      customer = await customerRepo.findOne({ where: { customerCode } });
+    }
+    if (!customer && gstNumber) {
+      customer = await customerRepo.findOne({ where: { gstNumber } });
+    }
+
+    if (!customer) {
+      customer = customerRepo.create({
+        name: customerName,
+        mobile,
+        rmId: userId,
+      } as Partial<Customer>);
+    }
+
+    customer.name = customerName;
+    customer.customerName = customerName;
+    customer.mobile = mobile;
+    customer.rmId = customer.rmId || userId;
+    customer.status = CASE_STATUS.COMPLETED;
+    customer.kycVerified = true;
+    customer.remarks = 'Migrated by operations';
+    customer.pushedTo = Array.from(
+      new Set(
+        `${customer.pushedTo || ''},${lenderCode}`
+          .split(',')
+          .map((value) => value.trim())
+          .filter(Boolean),
+      ),
+    ).join(',');
+
+    this.applyIfPresent(customer, 'email', email);
+    this.applyIfPresent(customer, 'pan', pan);
+    this.applyIfPresent(customer, 'companyType', companyType);
+    this.applyIfPresent(customer, 'companyName', companyName);
+    this.applyIfPresent(customer, 'companyMobile', companyMobile);
+    this.applyIfPresent(customer, 'companyEmail', companyEmail);
+    this.applyIfPresent(customer, 'companyPan', companyPan);
+    this.applyIfPresent(customer, 'gstNumber', gstNumber);
+    this.applyIfPresent(customer, 'customerCode', customerCode);
+    this.applyIfPresent(customer, 'industryType', this.getCell(row, ['industry_type']));
+    this.applyIfPresent(customer, 'bankAccountNo', this.getCell(row, ['bank_account_no', 'bank_account_number']));
+    this.applyIfPresent(customer, 'bankIfscCode', this.getCell(row, ['bank_ifsc_code', 'ifsc_code']).toUpperCase());
+    this.applyIfPresent(customer, 'bankName', this.getCell(row, ['bank_name']));
+    this.applyIfPresent(customer, 'bankBranch', this.getCell(row, ['bank_branch']));
+    this.applyIfPresent(customer, 'bankType', this.getCell(row, ['bank_type', 'account_type']));
+    if (annualTurnover !== null) customer.annualTurnover = annualTurnover;
+
+    const savedCustomer = await customerRepo.save(customer);
+
+    let applicant = await applicantRepo.findOne({ where: { customerId: savedCustomer.id } });
+    if (!applicant) {
+      applicant = applicantRepo.create({ customerId: savedCustomer.id } as Partial<Applicant>);
+    }
+    applicant.name = customerName;
+    applicant.mobile = mobile;
+    this.applyIfPresent(applicant, 'email', email);
+    this.applyIfPresent(applicant, 'pan', pan);
+    this.applyIfPresent(applicant, 'aadhaarNumber', aadhaar);
+    this.applyIfPresent(applicant, 'aadhaarAddress', this.getCell(row, ['applicant_address', 'address_line']));
+    await applicantRepo.save(applicant);
+
+    await this.upsertKycDetail(manager, savedCustomer.id, KYC_TYPES.PAN, pan, userId);
+    await this.upsertKycDetail(manager, savedCustomer.id, KYC_TYPES.AADHAAR, aadhaar, userId);
+    await this.upsertKycDetail(manager, savedCustomer.id, KYC_TYPES.GST, gstNumber, userId);
+    await this.upsertCoApplicantFromRow(manager, savedCustomer.id, row, userId);
+
+    await this.upsertCustomerAddress(
+      manager,
+      savedCustomer.id,
+      ADDRESS_TYPES.RESIDENCE,
+      this.getCell(row, ['applicant_address', 'address_line', 'residence_address']),
+      this.getCell(row, ['applicant_city', 'city']),
+      this.getCell(row, ['applicant_state', 'state']),
+      this.getCell(row, ['applicant_pincode', 'pincode']),
+      this.getCell(row, ['applicant_address_ownership', 'address_ownership']),
+    );
+
+    await this.upsertCustomerAddress(
+      manager,
+      savedCustomer.id,
+      ADDRESS_TYPES.SHOP,
+      this.getCell(row, ['company_address', 'shop_address']),
+      this.getCell(row, ['company_city', 'shop_city', 'city']),
+      this.getCell(row, ['company_state', 'shop_state', 'state']),
+      this.getCell(row, ['company_pincode', 'shop_pincode', 'pincode']),
+      this.getCell(row, ['company_address_ownership', 'shop_ownership']),
+    );
+
+    let sanction = await sanctionRepo.findOne({
+      where: { customerId: savedCustomer.id, partner: lenderCode },
+    });
+    if (!sanction) {
+      sanction = sanctionRepo.create({
+        customerId: savedCustomer.id,
+        partner: lenderCode,
+        creditOfficerId: userId,
+      } as Partial<CreditSanction>);
+    }
+    sanction.sanctionAmount = sanctionAmount;
+    sanction.tenure = tenure;
+    sanction.interestRate = interestRate;
+    sanction.penalCharges = penalRate;
+    sanction.processingFees = processingFeeRate;
+    sanction.serviceFee = serviceFee;
+    sanction.creditOfficerId = sanction.creditOfficerId || userId;
+    sanction.status = 'approved';
+    sanction.creditRemarks = 'Migrated by operations';
+    await sanctionRepo.save(sanction);
+
+    let loanAccount = await loanAccountRepo.findOne({ where: { lanId } });
+    if (loanAccount && loanAccount.customerId !== savedCustomer.id) {
+      throw new Error(`LAN ${lanId} already belongs to another customer`);
+    }
+
+    if (!loanAccount) {
+      loanAccount = await loanAccountRepo.findOne({
+        where: { customerId: savedCustomer.id, lender: lenderCode } as any,
+      });
+    }
+
+    if (!loanAccount) {
+      loanAccount = loanAccountRepo.create({
+        customerId: savedCustomer.id,
+        disbursedAmount: 0,
+      } as Partial<LoanAccount>);
+    }
+
+    loanAccount.customerId = savedCustomer.id;
+    loanAccount.partnerId = partner?.id || loanAccount.partnerId || null;
+    loanAccount.lender = lenderCode;
+    loanAccount.lanId = lanId;
+    loanAccount.sanctionedAmount = sanctionAmount;
+    loanAccount.status = 'active';
+    loanAccount.isOnboarded = false;
+    loanAccount.utilizedLimit = loanAccount.utilizedLimit || 0;
+    loanAccount.unutilizedLimit = sanctionAmount - Number(loanAccount.utilizedLimit || 0);
+    await loanAccountRepo.save(loanAccount);
+
+    let workflow = await workflowRepo.findOne({
+      where: { customerId: savedCustomer.id, workflowType: 'CUSTOMER_ONBOARDING' as any },
+    });
+    if (!workflow) {
+      workflow = workflowRepo.create({
+        workflowType: 'CUSTOMER_ONBOARDING',
+        customerId: savedCustomer.id,
+      } as Partial<CaseWorkflow>);
+    }
+    workflow.currentStatus = CASE_STATUS.COMPLETED;
+    workflow.currentApproverRoleName = 'None';
+    workflow.isCompleted = true;
+    workflow.completedDate = new Date();
+    workflow.remarks = 'Migrated by operations';
+    await workflowRepo.save(workflow);
+
+    await historyRepo.save(
+      historyRepo.create({
+        customerId: savedCustomer.id,
+        caseWorkflowId: workflow.id,
+        status: CASE_STATUS.COMPLETED,
+        previousStatus: null,
+        changedBy: userId,
+        remarks: 'Migrated by operations',
+        sanctionAmount,
+        tenure,
+        interestRate,
+        penalCharges: penalRate,
+        processingFees: processingFeeRate,
+      } as any),
+    );
+
+    return {
+      customerId: savedCustomer.id,
+      customerCode: savedCustomer.customerCode || String(savedCustomer.id),
+      partnerLoanId: partnerLoanId || savedCustomer.customerCode || String(savedCustomer.id),
+    };
+  }
+
+  private async saveMigratedSupplierRow(
+    manager: EntityManager,
+    row: ExcelRow,
+    userId: number,
+  ): Promise<{ supplierId: number; supplierCode: string; partnerLoanId: string }> {
+    const supplierRepo = manager.getRepository(Supplier);
+    const supplierBankRepo = manager.getRepository(SupplierBankDetail);
+    const customerRepo = manager.getRepository(Customer);
+    const loanAccountRepo = manager.getRepository(LoanAccount);
+    const workflowRepo = manager.getRepository(CaseWorkflow);
+    const historyRepo = manager.getRepository(CaseStatusHistory);
+
+    const customerIdValue = this.getCell(row, ['customer_id']);
+    const customerCode = this.getCell(row, ['customer_code']);
+    const lanId = this.getCell(row, ['lan_id', 'partner_loan_id']);
+    const supplierName = this.getCell(row, ['supplier_name']);
+    const supplierCode =
+      this.getCell(row, ['supplier_code']) ||
+      `SUP-MIG-${customerIdValue || customerCode || 'LAN'}-${this.getCell(row, ['bank_account_number']).replace(/[^a-zA-Z0-9]/g, '').slice(-10)}`;
+
+    let customer: Customer | null = null;
+    let loanAccount: LoanAccount | null = null;
+
+    if (lanId) {
+      loanAccount = await loanAccountRepo.findOne({ where: { lanId } });
+      if (loanAccount) {
+        customer = await customerRepo.findOne({ where: { id: loanAccount.customerId } });
+      }
+    }
+
+    if (!customer && customerIdValue) {
+      customer = await customerRepo.findOne({ where: { id: Number(customerIdValue) } });
+    }
+
+    if (!customer && customerCode) {
+      customer = await customerRepo.findOne({ where: { customerCode } });
+    }
+
+    if (!customer) {
+      throw new Error('Referenced customer was not found');
+    }
+
+    if (!loanAccount) {
+      loanAccount = await loanAccountRepo.findOne({
+        where: { customerId: customer.id, status: 'active' },
+      });
+    }
+
+    if (lanId && loanAccount && loanAccount.customerId !== customer.id) {
+      throw new Error(`LAN ${lanId} does not belong to the referenced customer`);
+    }
+
+    let supplier = await supplierRepo.findOne({ where: { supplierCode } });
+    if (supplier && supplier.customerId !== customer.id) {
+      throw new Error(`Supplier code ${supplierCode} already belongs to another customer`);
+    }
+
+    if (!supplier) {
+      supplier = supplierRepo.create({
+        supplierCode,
+        customerId: customer.id,
+      } as Partial<Supplier>);
+    }
+
+    supplier.customerId = customer.id;
+    supplier.supplierCode = supplierCode;
+    supplier.supplierName = supplierName;
+    supplier.email = this.getCell(row, ['email', 'supplier_email']);
+    supplier.contactNumber = this.getCell(row, ['contact_number', 'mobile_number', 'mobile']);
+    supplier.address = this.getCell(row, ['address', 'supplier_address']);
+    supplier.gstNumber = this.getCell(row, ['gst_number', 'supplier_gst']);
+    supplier.panNumber = this.getCell(row, ['pan_number', 'supplier_pan']);
+    supplier.createdByUserId = supplier.createdByUserId || userId;
+    supplier.status = 'COMPLETED';
+    supplier.isActive = true;
+    const savedSupplier = await supplierRepo.save(supplier);
+
+    let bankDetail = await supplierBankRepo.findOne({ where: { supplierId: savedSupplier.id } });
+    if (!bankDetail) {
+      bankDetail = supplierBankRepo.create({ supplierId: savedSupplier.id } as Partial<SupplierBankDetail>);
+    }
+    bankDetail.bankAccountNumber = this.getCell(row, ['bank_account_number']);
+    bankDetail.ifscCode = this.getCell(row, ['ifsc_code', 'bank_ifsc_code']).toUpperCase();
+    bankDetail.bankName = this.getCell(row, ['bank_name']);
+    bankDetail.accountHolderName = this.getCell(row, ['account_holder_name']);
+    bankDetail.micrCode = this.getCell(row, ['micr_code']) || '';
+    bankDetail.chequeNumber = this.getCell(row, ['cheque_number']) || '';
+    await supplierBankRepo.save(bankDetail);
+
+    let workflow = await workflowRepo.findOne({
+      where: { supplierId: savedSupplier.id, workflowType: 'SUPPLIER_ONBOARDING' as any },
+    });
+    if (!workflow) {
+      workflow = workflowRepo.create({
+        workflowType: 'SUPPLIER_ONBOARDING',
+        supplierId: savedSupplier.id,
+        customerId: customer.id,
+      } as Partial<CaseWorkflow>);
+    }
+    workflow.customerId = customer.id;
+    workflow.currentStatus = 'COMPLETED';
+    workflow.currentApproverRoleName = 'None';
+    workflow.isCompleted = true;
+    workflow.completedDate = new Date();
+    workflow.remarks = 'Migrated by operations';
+    await workflowRepo.save(workflow);
+
+    await historyRepo.save(
+      historyRepo.create({
+        customerId: customer.id,
+        supplierId: savedSupplier.id,
+        caseWorkflowId: workflow.id,
+        status: CASE_STATUS.COMPLETED,
+        previousStatus: null,
+        changedBy: userId,
+        remarks: 'Supplier migrated by operations',
+      } as any),
+    );
+
+    return {
+      supplierId: savedSupplier.id,
+      supplierCode: savedSupplier.supplierCode,
+      partnerLoanId: this.getCell(row, ['partner_loan_id']) || lanId || loanAccount?.lanId || String(customer.id),
+    };
+  }
+
+  private async sendMigratedCustomerToLMS(customerId: number, partnerLoanId?: string): Promise<{ success: boolean; message: string }> {
+    const customer = await this.customerRepository.findOne({ where: { id: customerId } });
+    if (!customer) throw new Error('Customer not found for LMS sync');
+
+    const applicant = await this.applicantRepository.findOne({ where: { customerId } });
+    const coApplicant = await this.coApplicantRepository.findOne({
+      where: { customerId },
+      order: { createdAt: 'ASC' },
+    });
+    let coApplicantData: {
+      name: string;
+      pan: string;
+      aadhaar: string;
+      mobile: string;
+      address: string;
+    } | undefined;
+
+    if (coApplicant) {
+      const coApplicantKycDetails = await this.kycDetailRepository.find({
+        where: { coApplicantId: coApplicant.id } as any,
+      });
+      const coApplicantPan =
+        coApplicant.pan ||
+        coApplicantKycDetails.find((kyc) => kyc.kycType === KYC_TYPES.PAN)?.kycNumber ||
+        '';
+      const coApplicantAadhaarKyc = coApplicantKycDetails.find(
+        (kyc) => kyc.kycType === KYC_TYPES.AADHAAR,
+      );
+
+      coApplicantData = {
+        name: coApplicant.name || '',
+        pan: coApplicantPan,
+        aadhaar: coApplicantAadhaarKyc?.kycNumber || '',
+        mobile: coApplicant.mobile || '',
+        address: coApplicantAadhaarKyc?.remarks || '',
+      };
+    }
+
+    const residenceAddress = await this.customerAddressRepository.findOne({
+      where: { customerId, type: ADDRESS_TYPES.RESIDENCE } as any,
+    });
+    const companyAddress = await this.customerAddressRepository.findOne({
+      where: { customerId, type: ADDRESS_TYPES.SHOP } as any,
+    });
+    const loanAccounts = await this.loanAccountRepository.find({
+      where: { customerId, status: 'active', isOnboarded: false },
+      relations: ['partner'],
+    });
+
+    if (loanAccounts.length === 0) {
+      throw new Error('No pending active loan accounts found for LMS sync');
+    }
+
+    const addressToString = (address?: CustomerAddress | null, fallback = '') => {
+      if (!address) return fallback;
+      return `${address.fullAddress}, ${address.city}, ${address.state} - ${address.pincode}`;
+    };
+
+    const sanctions = await Promise.all(
+      loanAccounts.map(async (loanAccount) => {
+        const sanction = await this.sanctionRepository.findOne({
+          where: {
+            customerId,
+            partner: loanAccount.lender,
+            status: 'approved',
+          },
+          order: { createdAt: 'DESC' },
+        });
+
+        return {
+          lan: loanAccount.lanId,
+          lender: loanAccount.partner?.code || loanAccount.lender || '',
+          sanction_amount: Number(loanAccount.sanctionedAmount),
+          tenure_months: Number(sanction?.tenure || 0),
+          interest_rate: Number(sanction?.interestRate || 0),
+          penal_rate: Number(sanction?.penalCharges || 0),
+          processing_fee: Number(sanction?.processingFees || sanction?.serviceFee || 0),
+        };
+      }),
+    );
+
+    const payload = {
+      partner_loan_id: partnerLoanId || customer.customerCode || String(customer.id),
+      applicant: {
+        name: applicant?.name || customer.name || '',
+        pan: applicant?.pan || customer.pan || '',
+        aadhaar: applicant?.aadhaarNumber || '',
+        mobile: applicant?.mobile || customer.mobile || '',
+        address: addressToString(residenceAddress, applicant?.aadhaarAddress || ''),
+      },
+      co_applicant: coApplicantData,
+      company: {
+        name: customer.companyName || '',
+        pan: customer.companyPan || '',
+        gst: customer.gstNumber || '',
+        address: addressToString(companyAddress, addressToString(residenceAddress, applicant?.aadhaarAddress || '')),
+      },
+      sanctions,
+    };
+
+    const baseUrl = process.env.LMS_API_BASE_URL;
+    const apiKey = process.env.LMS_API_KEY;
+
+    if (!baseUrl || !apiKey) {
+      throw new Error('LMS API configuration missing. Set LMS_API_BASE_URL and LMS_API_KEY in environment.');
+    }
+
+    const response = await axios.post(
+      `${baseUrl}loan-booking/v1/supply-chain`,
+      payload,
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+        },
+        timeout: 30000,
+      },
+    );
+
+    await this.loanAccountRepository.update(
+      { id: In(loanAccounts.map((loanAccount) => loanAccount.id)) },
+      { isOnboarded: true },
+    );
+
+    return {
+      success: response.data?.success ?? true,
+      message: response.data?.message || 'Customer sent to LMS successfully',
+    };
+  }
+
+  private async sendMigratedSupplierToLMS(supplierId: number, partnerLoanId: string): Promise<{ success: boolean; message: string }> {
+    const supplier = await this.supplierRepository.findOne({ where: { id: supplierId } });
+    if (!supplier) throw new Error('Supplier not found for LMS sync');
+
+    const bankDetail = await this.supplierBankRepository.findOne({ where: { supplierId } });
+    if (!bankDetail) throw new Error('Supplier bank details not found for LMS sync');
+
+    const baseUrl = process.env.LMS_API_BASE_URL;
+    const apiKey = process.env.LMS_API_KEY;
+
+    if (!baseUrl || !apiKey) {
+      throw new Error('LMS API configuration missing. Set LMS_API_BASE_URL and LMS_API_KEY in environment.');
+    }
+
+    const payload = {
+      partner_loan_id: partnerLoanId,
+      suppliers: [
+        {
+          supplier_name: supplier.supplierName,
+          mobile_number: supplier.contactNumber || '',
+          bank_account_number: bankDetail.bankAccountNumber || '',
+          ifsc_code: bankDetail.ifscCode || '',
+          bank_name: bankDetail.bankName || '',
+          account_holder_name: bankDetail.accountHolderName || '',
+        },
+      ],
+    };
+
+    const response = await axios.post(
+      `${baseUrl}loan-booking/v1/supplier-onboarding`,
+      payload,
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+        },
+        timeout: 30000,
+      },
+    );
+
+    return {
+      success: response.data?.success ?? true,
+      message: response.data?.message || 'Supplier sent to LMS successfully',
+    };
+  }
+
+  private buildMigrationResult(entityName: string, totalRows: number, results: MigrationRowResult[]): MigrationUploadResult {
+    const localSaved = results.filter((result) => result.localStatus === 'SAVED').length;
+    const lmsSent = results.filter((result) => result.lmsStatus === 'SENT').length;
+    const failed = results.filter(
+      (result) => result.localStatus === 'FAILED' || result.lmsStatus === 'FAILED' || result.lmsStatus === 'SKIPPED',
+    ).length;
+
+    return {
+      success: totalRows > 0 && failed === 0,
+      message:
+        totalRows === 0
+          ? `No ${entityName.toLowerCase()} rows found in the Excel file`
+          : `${entityName} migration completed: ${lmsSent}/${totalRows} rows sent to LMS`,
+      summary: {
+        totalRows,
+        localSaved,
+        lmsSent,
+        failed,
+      },
+      results,
+    };
+  }
+
+  async migrateCustomersFromExcel(file: Express.Multer.File, userId: number): Promise<MigrationUploadResult> {
+    const rows = await this.parseXlsxRows(file);
+    const results: MigrationRowResult[] = [];
+    const customerResultIndexes = new Map<number, number[]>();
+    const customerPartnerLoanIds = new Map<number, string>();
+     console.log("Parsed rows", rows);
+    for (const row of rows) {
+      const rowNumber = Number(row.__rowNumber);
+      const name = this.getCell(row, ['customer_name', 'name']);
+      const reference = this.getCell(row, ['customer_code', 'partner_loan_id', 'lan_id']) || `Row ${rowNumber}`;
+      const validationErrors = this.validateCustomerMigrationRow(row);
+
+      if (validationErrors.length > 0) {
+        results.push({
+          rowNumber,
+          reference,
+          name,
+          localStatus: 'FAILED',
+          lmsStatus: 'SKIPPED',
+          message: validationErrors.join('; '),
+        });
+        continue;
+      }
+
+      try {
+        const saved = await AppDataSource.transaction((manager) =>
+          this.saveMigratedCustomerRow(manager, row, userId),
+        );
+        const resultIndex = results.push({
+          rowNumber,
+          reference: saved.customerCode || reference,
+          name,
+          localStatus: 'SAVED',
+          lmsStatus: 'PENDING',
+          localId: saved.customerId,
+          message: 'Saved locally. LMS sync pending.',
+        }) - 1;
+
+        customerPartnerLoanIds.set(saved.customerId, saved.partnerLoanId);
+        customerResultIndexes.set(saved.customerId, [
+          ...(customerResultIndexes.get(saved.customerId) || []),
+          resultIndex,
+        ]);
+      } catch (error: any) {
+        results.push({
+          rowNumber,
+          reference,
+          name,
+          localStatus: 'FAILED',
+          lmsStatus: 'SKIPPED',
+          message: error.message || 'Failed to save customer locally',
+        });
+      }
+    }
+
+    for (const [customerId, resultIndexes] of customerResultIndexes.entries()) {
+      try {
+        const lmsResult = await this.sendMigratedCustomerToLMS(
+          customerId,
+          customerPartnerLoanIds.get(customerId),
+        );
+        resultIndexes.forEach((index) => {
+          results[index].lmsStatus = lmsResult.success ? 'SENT' : 'FAILED';
+          results[index].message = lmsResult.message;
+        });
+      } catch (error: any) {
+        resultIndexes.forEach((index) => {
+          results[index].lmsStatus = 'FAILED';
+          results[index].message = error.response?.data
+            ? `LMS API Error: ${JSON.stringify(error.response.data)}`
+            : error.message || 'Failed to send customer to LMS';
+        });
+      }
+    }
+
+    return this.buildMigrationResult('Customer', rows.length, results);
+  }
+
+  async migrateSuppliersFromExcel(file: Express.Multer.File, userId: number): Promise<MigrationUploadResult> {
+    const rows = await this.parseXlsxRows(file);
+    const results: MigrationRowResult[] = [];
+
+    for (const row of rows) {
+      const rowNumber = Number(row.__rowNumber);
+      const name = this.getCell(row, ['supplier_name']);
+      const reference = this.getCell(row, ['supplier_code', 'lan_id', 'customer_code']) || `Row ${rowNumber}`;
+      const validationErrors = this.validateSupplierMigrationRow(row);
+
+      if (validationErrors.length > 0) {
+        results.push({
+          rowNumber,
+          reference,
+          name,
+          localStatus: 'FAILED',
+          lmsStatus: 'SKIPPED',
+          message: validationErrors.join('; '),
+        });
+        continue;
+      }
+
+      try {
+        const saved = await AppDataSource.transaction((manager) =>
+          this.saveMigratedSupplierRow(manager, row, userId),
+        );
+
+        const result: MigrationRowResult = {
+          rowNumber,
+          reference: saved.supplierCode || reference,
+          name,
+          localStatus: 'SAVED',
+          lmsStatus: 'PENDING',
+          localId: saved.supplierId,
+          message: 'Saved locally. LMS sync pending.',
+        };
+
+        try {
+          const lmsResult = await this.sendMigratedSupplierToLMS(saved.supplierId, saved.partnerLoanId);
+          result.lmsStatus = lmsResult.success ? 'SENT' : 'FAILED';
+          result.message = lmsResult.message;
+        } catch (error: any) {
+          result.lmsStatus = 'FAILED';
+          result.message = error.response?.data
+            ? `LMS API Error: ${JSON.stringify(error.response.data)}`
+            : error.message || 'Failed to send supplier to LMS';
+        }
+
+        results.push(result);
+      } catch (error: any) {
+        results.push({
+          rowNumber,
+          reference,
+          name,
+          localStatus: 'FAILED',
+          lmsStatus: 'SKIPPED',
+          message: error.message || 'Failed to save supplier locally',
+        });
+      }
+    }
+
+    return this.buildMigrationResult('Supplier', rows.length, results);
   }
 
   /**
@@ -556,5 +1757,3 @@ await AppDataSource.query(
     return await this.operationsCheckRepository.save(opsCheck);
   }
 }
-
-

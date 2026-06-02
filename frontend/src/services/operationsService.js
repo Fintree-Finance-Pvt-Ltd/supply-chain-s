@@ -50,6 +50,40 @@ export const operationsService = {
     }
   },
 
+  uploadCustomerMigration: async (file) => {
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+
+      const response = await api.post(API_ENDPOINTS.CUSTOMER_MIGRATION_UPLOAD, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
+
+      return response.data
+    } catch (error) {
+      if (error.response?.data) return error.response.data
+      const message = error.message || 'Failed to migrate customers'
+      throw new Error(message)
+    }
+  },
+
+  uploadSupplierMigration: async (file) => {
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+
+      const response = await api.post(API_ENDPOINTS.SUPPLIER_MIGRATION_UPLOAD, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
+
+      return response.data
+    } catch (error) {
+      if (error.response?.data) return error.response.data
+      const message = error.message || 'Failed to migrate suppliers'
+      throw new Error(message)
+    }
+  },
+
   // ==================== Repayment Upload Methods ====================
 
   /**
