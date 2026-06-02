@@ -793,6 +793,10 @@ export class OperationsService {
 
     const customerIdValue = this.getCell(row, ['customer_id']);
     const customerCode = this.getCell(row, ['customer_code']);
+    const customerIdNumber = Number(customerIdValue);
+    const customerCodeCandidates = Array.from(
+      new Set([customerCode, customerIdValue].filter((value) => value && !/^\d+$/.test(value))),
+    );
     const lanId = this.getCell(row, ['lan_id', 'partner_loan_id']);
     const supplierName = this.getCell(row, ['supplier_name']);
     const supplierCode =
@@ -809,16 +813,19 @@ export class OperationsService {
       }
     }
 
-    if (!customer && customerIdValue) {
-      customer = await customerRepo.findOne({ where: { id: Number(customerIdValue) } });
+    if (!customer && customerIdValue && Number.isInteger(customerIdNumber) && customerIdNumber > 0) {
+      customer = await customerRepo.findOne({ where: { id: customerIdNumber } });
     }
 
-    if (!customer && customerCode) {
-      customer = await customerRepo.findOne({ where: { customerCode } });
+    for (const codeCandidate of customerCodeCandidates) {
+      if (customer) break;
+      customer = await customerRepo.findOne({ where: { customerCode: codeCandidate } });
     }
 
     if (!customer) {
-      throw new Error('Referenced customer was not found');
+      throw new Error(
+        `Referenced customer was not found. Use numeric customer_id, existing customer_code, or existing lan_id. Received customer_id=${customerIdValue || 'blank'}, customer_code=${customerCode || 'blank'}, lan_id=${lanId || 'blank'}`,
+      );
     }
 
     if (!loanAccount) {
