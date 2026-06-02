@@ -413,6 +413,10 @@ export class OperationsService {
     return `CUST${String(customerId).padStart(6, '0')}`;
   }
 
+  private buildGeneratedSupplierCode(supplierId: number): string {
+    return `SUP${String(supplierId).padStart(6, '0')}`;
+  }
+
   private validateCustomerMigrationRow(row: ExcelRow): string[] {
     const errors: string[] = [];
     const requiredFields: Array<[string[], string]> = [
@@ -456,14 +460,11 @@ export class OperationsService {
 
   private validateSupplierMigrationRow(row: ExcelRow): string[] {
     const errors: string[] = [];
-    const hasCustomerReference = Boolean(
-      this.getCell(row, ['customer_id']) ||
-      this.getCell(row, ['customer_code']) ||
-      this.getCell(row, ['lan_id', 'partner_loan_id'])
-    );
-
-    if (!hasCustomerReference) {
-      errors.push('customer_id, customer_code, or lan_id is required');
+    if (!this.getCell(row, ['lan_id', 'lan', 'lanid', 'loan_account_number'])) {
+      errors.push('lan_id is required');
+    }
+    if (!this.getCell(row, ['partner_loan_id'])) {
+      errors.push('partner_loan_id is required');
     }
 
     const requiredFields: Array<[string[], string]> = [
@@ -844,67 +845,26 @@ export class OperationsService {
     const workflowRepo = manager.getRepository(CaseWorkflow);
     const historyRepo = manager.getRepository(CaseStatusHistory);
 
-    const customerIdValue = this.getCell(row, ['customer_id']);
-    const customerCode = this.getCell(row, ['customer_code']);
-    const customerIdNumber = Number(customerIdValue);
-    const customerCodeCandidates = Array.from(
-      new Set([customerCode, customerIdValue].filter((value) => value && !/^\d+$/.test(value))),
-    );
-    const lanId = this.getCell(row, ['lan_id', 'partner_loan_id']);
+    const lanId = this.getCell(row, ['lan_id', 'lan', 'lanid', 'loan_account_number']);
+    const partnerLoanId = this.getCell(row, ['partner_loan_id']);
     const supplierName = this.getCell(row, ['supplier_name']);
-    const supplierCode =
-      this.getCell(row, ['supplier_code']) ||
-      `SUP-MIG-${customerIdValue || customerCode || 'LAN'}-${this.getCell(row, ['bank_account_number']).replace(/[^a-zA-Z0-9]/g, '').slice(-10)}`;
 
-    let customer: Customer | null = null;
-    let loanAccount: LoanAccount | null = null;
-
-    if (lanId) {
-      loanAccount = await loanAccountRepo.findOne({ where: { lanId } });
-      if (loanAccount) {
-        customer = await customerRepo.findOne({ where: { id: loanAccount.customerId } });
-      }
-    }
-
-    if (!customer && customerIdValue && Number.isInteger(customerIdNumber) && customerIdNumber > 0) {
-      customer = await customerRepo.findOne({ where: { id: customerIdNumber } });
-    }
-
-    for (const codeCandidate of customerCodeCandidates) {
-      if (customer) break;
-      customer = await customerRepo.findOne({ where: { customerCode: codeCandidate } });
-    }
-
-    if (!customer) {
-      throw new Error(
-        `Referenced customer was not found. Use numeric customer_id, existing customer_code, or existing lan_id. Received customer_id=${customerIdValue || 'blank'}, customer_code=${customerCode || 'blank'}, lan_id=${lanId || 'blank'}`,
-      );
-    }
-
+    const loanAccount = await loanAccountRepo.findOne({ where: { lanId } });
     if (!loanAccount) {
-      loanAccount = await loanAccountRepo.findOne({
-        where: { customerId: customer.id, status: 'active' },
-      });
+      throw new Error(`LAN ${lanId} was not found in loan accounts`);
     }
 
-    if (lanId && loanAccount && loanAccount.customerId !== customer.id) {
-      throw new Error(`LAN ${lanId} does not belong to the referenced customer`);
+    const customer = await customerRepo.findOne({ where: { id: loanAccount.customerId } });
+    if (!customer) {
+      throw new Error(`Customer for LAN ${lanId} was not found`);
     }
 
-    let supplier = await supplierRepo.findOne({ where: { supplierCode } });
-    if (supplier && supplier.customerId !== customer.id) {
-      throw new Error(`Supplier code ${supplierCode} already belongs to another customer`);
-    }
-
-    if (!supplier) {
-      supplier = supplierRepo.create({
-        supplierCode,
-        customerId: customer.id,
-      } as Partial<Supplier>);
-    }
+    const supplier = supplierRepo.create({
+      supplierCode: `SUP-TEMP-${Date.now()}-${Math.floor(Math.random() * 1000000)}`,
+      customerId: customer.id,
+    } as Partial<Supplier>);
 
     supplier.customerId = customer.id;
-    supplier.supplierCode = supplierCode;
     supplier.supplierName = supplierName;
     supplier.email = this.getCell(row, ['email', 'supplier_email']);
     supplier.contactNumber = this.getCell(row, ['contact_number', 'mobile_number', 'mobile']);
@@ -915,6 +875,8 @@ export class OperationsService {
     supplier.status = 'COMPLETED';
     supplier.isActive = true;
     const savedSupplier = await supplierRepo.save(supplier);
+    savedSupplier.supplierCode = this.buildGeneratedSupplierCode(savedSupplier.id);
+    await supplierRepo.save(savedSupplier);
 
     let bankDetail = await supplierBankRepo.findOne({ where: { supplierId: savedSupplier.id } });
     if (!bankDetail) {
@@ -961,7 +923,7 @@ export class OperationsService {
     return {
       supplierId: savedSupplier.id,
       supplierCode: savedSupplier.supplierCode,
-      partnerLoanId: loanAccount?.lanId || lanId || this.getCell(row, ['partner_loan_id']) || String(customer.id),
+      partnerLoanId,
     };
   }
 
@@ -1124,7 +1086,7 @@ export class OperationsService {
         },
       ],
     };
-
+  console.log('LMS Payload for supplierId', supplierId, payload);
     const response = await axios.post(
       `${baseUrl}loan-booking/v1/supplier-onboarding`,
       payload,
@@ -1254,7 +1216,7 @@ export class OperationsService {
     for (const row of rows) {
       const rowNumber = Number(row.__rowNumber);
       const name = this.getCell(row, ['supplier_name']);
-      const reference = this.getCell(row, ['supplier_code', 'lan_id', 'customer_code']) || `Row ${rowNumber}`;
+      const reference = this.getCell(row, ['lan_id', 'lan', 'lanid', 'loan_account_number']) || `Row ${rowNumber}`;
       const validationErrors = this.validateSupplierMigrationRow(row);
 
       if (validationErrors.length > 0) {
