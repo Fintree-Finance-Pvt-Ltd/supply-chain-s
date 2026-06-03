@@ -242,7 +242,7 @@ const normalizePanFromOcr = (data) => {
   return (
     data?.panNumber ||
     data?.pan ||
-    data?.pan_no ||
+    data?.pan_number ||
     data?.panNo ||
     ''
   )

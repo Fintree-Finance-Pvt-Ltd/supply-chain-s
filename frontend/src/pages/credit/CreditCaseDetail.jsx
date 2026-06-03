@@ -458,45 +458,45 @@ const CreditCaseDetail = () => {
     );
   };
 
-const canEditSanctionAmount = () => {
-  if (!currentCase) return false;
+  const canEditSanctionAmount = () => {
+    if (!currentCase) return false;
 
-  const status = currentCase.status;
+    const status = currentCase.status;
 
-  const roles = user?.roles?.map((r) => r.name?.toLowerCase()) || [];
-  const hasRole = (roleName) => roles.includes(roleName);
-  // Credit L1 can edit in submitted or credit_l1_review status
-  if (
-    hasRole("credit_team_l1") &&
-    (status === "submitted" || status === "credit_l1_review")
-  ) {
-    return true;
-  }
+    const roles = user?.roles?.map((r) => r.name?.toLowerCase()) || [];
+    const hasRole = (roleName) => roles.includes(roleName);
+    // Credit L1 can edit in submitted or credit_l1_review status
+    if (
+      hasRole("credit_team_l1") &&
+      (status === "submitted" || status === "credit_l1_review")
+    ) {
+      return true;
+    }
 
-  // Credit L2 can edit in credit_l1_approved or credit_l2_review status
-  if (
-    hasRole("credit_team_l2") &&
-    (status === "credit_l1_approved" || status === "credit_l2_review")
-  ) {
-    return true;
-  }
+    // Credit L2 can edit in credit_l1_approved or credit_l2_review status
+    if (
+      hasRole("credit_team_l2") &&
+      (status === "credit_l1_approved" || status === "credit_l2_review")
+    ) {
+      return true;
+    }
 
-  // MD can edit during final approval
-  if (
-    hasRole("md") &&
+    // MD can edit during final approval
+    if (
+      hasRole("md") &&
     (status === "md_terms_submitted" || status === "ceo_approved" || status === "md_review")
-  ) {
-    return true;
-  }
+    ) {
+      return true;
+    }
 
-  // Optional: Allow credit L2 in any status
-  // Keep this only if you really want credit_l2 unrestricted access.
-  if (hasRole("credit_team_l2")) {
-    return true;
-  }
+    // Optional: Allow credit L2 in any status
+    // Keep this only if you really want credit_l2 unrestricted access.
+    if (hasRole("credit_team_l2")) {
+      return true;
+    }
 
-  return false;
-};
+    return false;
+  };
 
   const canViewROI = () => {
     // Only MD can view ROI - credit_l1 and credit_l2 should only see sanction amount
@@ -1027,44 +1027,44 @@ const canEditSanctionAmount = () => {
                         <StatusBadge status={doc.status} />
                       </div>
                     </div>
+                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+                      <div className="lg:col-span-8 grid grid-cols-2 md:grid-cols-3 gap-4">
+                        <div className="space-y-1">
+                          <p className="text-[10px] text-gray-400 uppercase font-bold tracking-widest">
+                            Issue Date
+                          </p>
+                          <p className="text-xs font-semibold text-gray-700">
+                            {doc.issueDate ? formatDate(doc.issueDate) : "—"}
+                          </p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-[10px] text-gray-400 uppercase font-bold tracking-widest">
+                            Expiry Date
+                          </p>
+                          <p className="text-xs font-semibold text-gray-700">
+                            {doc.expiryDate ? formatDate(doc.expiryDate) : "—"}
+                          </p>
+                        </div>
+                        <div className="col-span-2 md:col-span-1 space-y-1">
+                          <p className="text-[10px] text-gray-400 uppercase font-bold tracking-widest">
+                            RM Remarks
+                          </p>
+                          <p
+                            className="text-xs italic text-gray-500 truncate"
+                            title={doc.rmRemarks}
+                          >
+                            {doc.rmRemarks || "No comments entered"}
+                          </p>
+                        </div>
+                      </div>
 
-                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mt-2">
-                      <div>
-                        <p className="text-[10px] text-gray-400 uppercase font-bold">
-                          Issue Date
-                        </p>
-                        <p className="text-xs text-gray-700">
-                          {doc.issueDate ? formatDate(doc.issueDate) : "N/A"}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-[10px] text-gray-400 uppercase font-bold">
-                          Expiry Date
-                        </p>
-                        <p className="text-xs text-gray-700">
-                          {doc.expiryDate ? formatDate(doc.expiryDate) : "N/A"}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-[10px] text-gray-400 uppercase font-bold">
-                          RM Remarks
-                        </p>
-                        <p
-                          className="text-xs text-gray-700 truncate"
-                          title={doc.rmRemarks}
-                        >
-                          {doc.rmRemarks || "N/A"}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
-                      <div>
-                        <p className="text-[10px] text-gray-400 uppercase font-bold mb-1">
-                          Credit Remarks
-                        </p>
+                      {/* Direct Card Notes Segment */}
+                      <div className="lg:col-span-4">
+                        <label className="block text-[10px] text-gray-400 uppercase font-bold tracking-widest mb-1.5">
+                          Credit Verification Remarks
+                        </label>
                         <textarea
-                          placeholder="Add your remarks..."
+                          placeholder="Add your dynamic card remarks..."
                           value={docRemarks[doc.id] || doc.remarks || ""}
                           onChange={(e) =>
                             setDocRemarks({
@@ -1072,7 +1072,7 @@ const canEditSanctionAmount = () => {
                               [doc.id]: e.target.value,
                             })
                           }
-                          className="w-full text-xs input-field"
+                          className="w-full text-xs rounded-lg border border-gray-300 focus:border-primary-500 focus:ring-1 focus:ring-primary-500 bg-white shadow-sm p-2 resize-none transition-colors"
                           rows={1}
                           disabled={readOnly}
                         />
