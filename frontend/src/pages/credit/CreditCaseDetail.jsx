@@ -138,9 +138,11 @@ const CreditCaseDetail = () => {
   const userRole = (user?.role || "").toLowerCase();
 
   // Get all user roles as an array (for users with multiple roles)
-  const userRoles = (user?.roles || []).map((r) =>
-    (r.name || r || "").toLowerCase(),
-  );
+  const userRoles = [
+    ...(user?.roles || []).map((r) => r.name || r),
+    user?.role,
+    user?.defaultRole,
+  ].filter(Boolean).map((role) => role.toLowerCase());
   const hasL1Role = userRoles.includes("credit_team_l1");
   const hasL2Role = userRoles.includes("credit_team_l2");
   const isSanctionLocked = (partnerCode) =>
@@ -436,6 +438,7 @@ const CreditCaseDetail = () => {
 
   // Define which roles can access (view and edit) sanction details
   const CAN_VIEW_SANCTION_ROLES = [
+    "superadmin",
     "relationship_manager",
     "credit_team_l1",
     "credit_team_l2",
@@ -451,7 +454,7 @@ const CreditCaseDetail = () => {
   // Role-based field visibility helpers for sanction fields
   const canViewSanctionAmount = () => {
     return userRoles.some((role) =>
-      ["credit_team_l1", "credit_team_l2", "credit_head", "md"].includes(role),
+      ["superadmin", "credit_team_l1", "credit_team_l2", "credit_head", "md"].includes(role),
     );
   };
 
@@ -496,9 +499,8 @@ const canEditSanctionAmount = () => {
 };
 
   const canViewROI = () => {
-    const role = (user?.role || "").toLowerCase();
     // Only MD can view ROI - credit_l1 and credit_l2 should only see sanction amount
-    return ["md"].includes(role);
+    return userRoles.some((role) => ["superadmin", "md"].includes(role));
   };
 
   const canEditROI = () => {
@@ -512,9 +514,8 @@ const canEditSanctionAmount = () => {
   };
 
   const canViewTenure = () => {
-    const role = (user?.role || "").toLowerCase();
     // Only MD can view tenure - credit_l1 and credit_l2 should only see sanction amount
-    return ["md"].includes(role);
+    return userRoles.some((role) => ["superadmin", "md"].includes(role));
   };
 
   const canEditTenure = () => {

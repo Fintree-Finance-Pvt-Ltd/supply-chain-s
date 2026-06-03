@@ -171,4 +171,5 @@ DASHBOARD_OPERATIONS_SUPPLIERS: '/workflows/suppliers/dashboard/operations',
   
   // Cases (SuperAdmin)
   SUPERADMIN_CASES: '/superadmin/cases',
+  SUPERADMIN_CASE_COMPANY_SUGGESTIONS: '/superadmin/cases/company-suggestions',
 }

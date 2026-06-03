@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { performanceService } from '../../services/performanceService';
 import { CASE_STATUS, CASE_STATUS_LABELS } from '../../constants/caseStatus';
 import {
@@ -46,6 +47,7 @@ const STATUS_OPTIONS = [
 ];
 
 const DEFAULT_FILTERS = {
+  companyName: '',
   status: '',
   stage: '',
   userId: '',
@@ -119,13 +121,24 @@ const formatLabel = (value) => {
   return CASE_STATUS_LABELS[value] || value.replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
 };
 
+const getCaseCustomerId = (caseItem) => {
+  if (caseItem.customerId) return caseItem.customerId;
+
+  const taskId = String(caseItem.taskId || '');
+  return /^\d+$/.test(taskId) ? Number(taskId) : null;
+};
+
 const AllCases = () => {
+  const navigate = useNavigate();
+
   // State
   const [loading, setLoading] = useState(true);
   const [cases, setCases] = useState([]);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
   const [users, setUsers] = useState([]);
+  const [companySuggestions, setCompanySuggestions] = useState([]);
+  const [companySuggestionsLoading, setCompanySuggestionsLoading] = useState(false);
   const [showFilterModal, setShowFilterModal] = useState(false);
   const [draftFilters, setDraftFilters] = useState(DEFAULT_FILTERS);
 
@@ -142,6 +155,46 @@ const AllCases = () => {
     loadCases();
   }, [filters]);
 
+  useEffect(() => {
+    if (!showFilterModal) return undefined;
+
+    const search = draftFilters.companyName.trim();
+    if (!search) {
+      setCompanySuggestions([]);
+      setCompanySuggestionsLoading(false);
+      return undefined;
+    }
+
+    let cancelled = false;
+    const timer = window.setTimeout(async () => {
+      setCompanySuggestionsLoading(true);
+      try {
+        const suggestions = await performanceService.getCompanySuggestions({
+          companyName: search,
+          limit: 8,
+        });
+
+        if (!cancelled) {
+          setCompanySuggestions(suggestions);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          console.error('Failed to load company suggestions:', error);
+          setCompanySuggestions([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setCompanySuggestionsLoading(false);
+        }
+      }
+    }, 250);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [draftFilters.companyName, showFilterModal]);
+
   const loadUsers = async () => {
     try {
       const data = await performanceService.getUsers();
@@ -155,6 +208,7 @@ const AllCases = () => {
     setLoading(true);
     try {
       const params = {
+        companyName: filters.companyName?.trim() || undefined,
         status: filters.status || undefined,
         stage: filters.stage || undefined,
         userId: filters.userId ? parseInt(filters.userId) : undefined,
@@ -199,7 +253,20 @@ const AllCases = () => {
     setFilters(prev => ({ ...prev, page: newPage }));
   };
 
+  const handleOpenCase = (caseItem) => {
+    const customerId = getCaseCustomerId(caseItem);
+    if (!customerId) return;
+
+    navigate(`/credit/case/${customerId}?readOnly=true&from=superadmin`);
+  };
+
+  const handleCompanySuggestionSelect = (suggestion) => {
+    handleDraftFilterChange('companyName', suggestion.companyName);
+    setCompanySuggestions([]);
+  };
+
   const activeFilterCount = [
+    filters.companyName,
     filters.status,
     filters.stage,
     filters.userId,
@@ -291,10 +358,27 @@ const AllCases = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {cases.map((c) => (
-                  <tr key={`${c.taskType || 'case'}-${c.id}-${c.taskId}`} className="hover:bg-gray-50">
+                {cases.map((c) => {
+                  const canOpenCase = Boolean(getCaseCustomerId(c));
+
+                  return (
+                  <tr
+                    key={`${c.taskType || 'case'}-${c.id}-${c.taskId}`}
+                    onClick={() => canOpenCase && handleOpenCase(c)}
+                    className={`${canOpenCase ? 'cursor-pointer' : ''} hover:bg-gray-50`}
+                  >
                     <td className="px-4 py-3">
-                      <span className="font-medium text-gray-900">{c.taskId}</span>
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          handleOpenCase(c);
+                        }}
+                        disabled={!canOpenCase}
+                        className="font-medium text-blue-700 hover:text-blue-900 hover:underline disabled:cursor-not-allowed disabled:text-gray-500 disabled:no-underline"
+                      >
+                        {c.taskId}
+                      </button>
                     </td>
                     <td className="px-4 py-3">
                       <span className="text-gray-600">{c.companyName || 'N/A'}</span>
@@ -363,7 +447,8 @@ const AllCases = () => {
                       {formatTime(c.totalCompletionTimeMinutes || c.roleStageTime)}
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -415,6 +500,42 @@ const AllCases = () => {
 
             <div className="max-h-[70vh] overflow-y-auto px-5 py-5">
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div className="relative">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Company Name</label>
+                  <input
+                    type="text"
+                    value={draftFilters.companyName}
+                    onChange={(e) => handleDraftFilterChange('companyName', e.target.value)}
+                    placeholder="Search company name"
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-primary-500 focus:ring-2 focus:ring-primary-500"
+                  />
+                  {draftFilters.companyName.trim() && (
+                    <div className="mt-2 max-h-44 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-sm">
+                      {companySuggestionsLoading ? (
+                        <div className="px-3 py-2 text-sm text-gray-500">Searching...</div>
+                      ) : companySuggestions.length > 0 ? (
+                        companySuggestions.map((suggestion) => (
+                          <button
+                            key={suggestion.customerId}
+                            type="button"
+                            onClick={() => handleCompanySuggestionSelect(suggestion)}
+                            className="block w-full px-3 py-2 text-left hover:bg-blue-50"
+                          >
+                            <span className="block text-sm font-medium text-gray-900">
+                              {suggestion.companyName}
+                            </span>
+                            <span className="block text-xs text-gray-500">
+                              {suggestion.customerCode || `Customer #${suggestion.customerId}`}
+                            </span>
+                          </button>
+                        ))
+                      ) : (
+                        <div className="px-3 py-2 text-sm text-gray-500">No matching companies</div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
                   <select

@@ -686,6 +686,22 @@ router.get('/user-performance/:userId', roleMiddleware([ROLES.SUPERADMIN]), asyn
 });
 
 /**
+ * GET /api/superadmin/cases/company-suggestions
+ * Search matching company names for the All Cases filter
+ */
+router.get('/cases/company-suggestions', roleMiddleware([ROLES.SUPERADMIN]), async (req: Request, res: Response) => {
+  try {
+    const search = String(req.query.companyName || req.query.q || '');
+    const limit = Math.min(parsePositiveInt(req.query.limit, 8), 20);
+    const suggestions = await userPerformanceService.getCompanyNameSuggestions(search, limit);
+
+    res.json({ success: true, data: suggestions });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+/**
  * GET /api/superadmin/cases
  * Get all cases across all users for SUPERADMIN view
  * Uses workflow data similar to user dashboards
@@ -703,6 +719,7 @@ router.get('/cases', roleMiddleware([ROLES.SUPERADMIN]), async (req: Request, re
     const { 
       stage, 
       status, 
+      companyName,
       userId, 
       startDate, 
       endDate,
@@ -722,6 +739,7 @@ router.get('/cases', roleMiddleware([ROLES.SUPERADMIN]), async (req: Request, re
     const filters = {
       stage: stage as string || undefined,
       status: status as string || undefined,
+      companyName: companyName ? String(companyName).trim() : undefined,
       userId: userId ? parseInt(userId as string) : undefined,
       startDate: parseDateQuery(startDate),
       endDate: parseDateQuery(endDate, true),

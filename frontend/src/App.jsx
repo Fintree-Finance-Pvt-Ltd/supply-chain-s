@@ -221,7 +221,7 @@ function App() {
           <Route
             path="credit/case/:id"
             element={
-              <ProtectedRoute allowedRoles={[ROLES.CREDIT_TEAM, ROLES.CREDIT_TEAM_L1, ROLES.CREDIT_TEAM_L2, ROLES.CREDIT_HEAD]}>
+              <ProtectedRoute allowedRoles={[ROLES.SUPERADMIN, ROLES.CREDIT_TEAM, ROLES.CREDIT_TEAM_L1, ROLES.CREDIT_TEAM_L2, ROLES.CREDIT_HEAD]}>
                 <CreditCaseDetail />
               </ProtectedRoute>
             }

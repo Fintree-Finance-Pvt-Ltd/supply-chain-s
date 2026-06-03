@@ -33,6 +33,12 @@ export const performanceService = {
     const response = await api.get(API_ENDPOINTS.SUPERADMIN_CASES, { params });
     return response.data.data;
   },
+
+  // Search matching companies for the All Cases filter
+  getCompanySuggestions: async (params = {}) => {
+    const response = await api.get(API_ENDPOINTS.SUPERADMIN_CASE_COMPANY_SUGGESTIONS, { params });
+    return response.data.data;
+  },
 };
 
 export default performanceService;

@@ -648,6 +648,40 @@ let rewardMap: Record<string, number> = {};
     }));
   }
 
+  async getCompanyNameSuggestions(search: string, limit = 8): Promise<Array<{
+    customerId: number;
+    companyName: string;
+    customerCode: string | null;
+    status: string | null;
+  }>> {
+    const searchTerm = (search || '').trim();
+    if (!searchTerm) return [];
+
+    const take = Math.min(Math.max(limit, 1), 20);
+    const likeSearch = `%${searchTerm}%`;
+
+    const rows = await this.customerRepository
+      .createQueryBuilder('customer')
+      .select('customer.id', 'customerId')
+      .addSelect('COALESCE(NULLIF(customer.companyName, \'\'), customer.customerName)', 'companyName')
+      .addSelect('customer.customerCode', 'customerCode')
+      .addSelect('customer.status', 'status')
+      .where('(customer.companyName LIKE :search OR customer.customerName LIKE :search OR customer.customerCode LIKE :search)', {
+        search: likeSearch,
+      })
+      .andWhere('(customer.companyName IS NOT NULL OR customer.customerName IS NOT NULL)')
+      .orderBy('COALESCE(NULLIF(customer.companyName, \'\'), customer.customerName)', 'ASC')
+      .limit(take)
+      .getRawMany();
+
+    return rows.map((row: any) => ({
+      customerId: parseInt(row.customerId),
+      companyName: row.companyName || 'Unknown',
+      customerCode: row.customerCode || null,
+      status: row.status || null,
+    }));
+  }
+
 /**
    * Get all cases across all users for SUPERADMIN view
    * Supports filtering by status, stage/bucket, and date range
@@ -656,6 +690,7 @@ let rewardMap: Record<string, number> = {};
   async getAllCasesByUsers(filters?: {
     status?: string;
     stage?: string;
+    companyName?: string;
     userId?: number;
     startDate?: Date;
     endDate?: Date;
@@ -665,6 +700,7 @@ let rewardMap: Record<string, number> = {};
   }): Promise<{
     cases: Array<{
       id: number;
+      customerId?: number | null;
       taskId: string;
       companyName: string;
       bucket: string | null;
@@ -694,7 +730,7 @@ let rewardMap: Record<string, number> = {};
     }>;
     total: number;
   }> {
-    const { status, stage, userId, startDate, endDate, limit = 50, offset = 0, includeSanctions = false } = filters || {};
+    const { status, stage, companyName, userId, startDate, endDate, limit = 50, offset = 0, includeSanctions = false } = filters || {};
 
     const toNumber = (value: any): number | null => {
       if (value === null || value === undefined || value === '') return null;
@@ -989,7 +1025,10 @@ let rewardMap: Record<string, number> = {};
     allCases = [...allCases, ...orphanTrackingCases];
 
     const normalizedStatus = normalizeText(status);
+    const normalizedCompanyName = normalizeText(companyName).trim();
     allCases = allCases.filter((c) => {
+      if (normalizedCompanyName && !normalizeText(c.companyName).includes(normalizedCompanyName)) return false;
+
       if (stage && c.bucket !== stage) return false;
 
       if (normalizedStatus) {
