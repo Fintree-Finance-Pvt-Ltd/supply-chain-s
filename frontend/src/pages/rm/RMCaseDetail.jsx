@@ -167,20 +167,23 @@ const RMCaseDetail = () => {
 // Initialize partnerSanctions with data from API
           const initialSanctions = {};
           sanctions.forEach((s) => {
-            if (s.partner) {
-              initialSanctions[s.partner] = {
-                sanctionAmount: s.sanctionAmount || s.sanction_limit || "",
-                tenure: s.tenure || s.tenor || "",
-                interestRate: s.interestRate || s.roi || "",
-                penalCharges: s.penalCharges || "",
-                processingFees: s.processingFees || "",
-                legalCharges: s.legalCharges || "",
-                serviceFee: s.serviceFee || "",
-                conditions: s.conditions || "",
-                status: s.status || "pending",
-              };
-            }
-          });
+  if (s.partner) {
+    const sanctionAmount = Number(
+      s.sanctionAmount || s.sanction_limit || 0
+    );
+    initialSanctions[s.partner] = {
+      sanctionAmount,
+      tenure: Number(s.tenure) > 0 ? s.tenure : 12,
+      interestRate: s.interestRate || s.roi || "",
+      penalCharges:Number(s.penalCharges) > 0? s.penalCharges: 36,
+      processingFees: s.processingFees || "",
+      legalCharges:Number(s.legalCharges) > 0? s.legalCharges: sanctionAmount * 0.1,
+      serviceFee: s.serviceFee || "",
+      conditions: s.conditions || "",
+      status: s.status || "pending",
+    };
+  }
+});
           setPartnerSanctions(initialSanctions);
         }
         setPartnersLoading(false);
