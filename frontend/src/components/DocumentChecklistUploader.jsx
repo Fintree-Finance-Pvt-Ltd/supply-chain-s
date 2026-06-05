@@ -288,26 +288,11 @@
 
 // export default DocumentChecklistUploader
 
-
-
 import { useState, useEffect } from 'react'
 import { FiUpload, FiX, FiFile, FiCheckCircle, FiEye } from 'react-icons/fi'
 import { documentService } from '../services/documentService'
 
 const MAX_FILE_MB = 50
-// const ALLOWED_TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg']
-
-const ALLOWED_TYPES = [
-  'application/pdf',
-  'image/jpeg',
-  'image/png',
-  'image/jpg',
-
-  // ✅ Excel support
-  'application/vnd.ms-excel',
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  'application/octet-stream' // fallback
-]
 
 const DocumentChecklistUploader = ({
   checklist = [],
@@ -321,6 +306,8 @@ const DocumentChecklistUploader = ({
 
   const [uploading, setUploading] = useState({})
   const [editingMeta, setEditingMeta] = useState({})
+  // Track which item is currently being hovered over during a drag event
+  const [dragOverItemKey, setDragOverItemKey] = useState(null)
 
   const notify = (type, message) => {
     if (onNotify) return onNotify(type, message)
@@ -328,119 +315,92 @@ const DocumentChecklistUploader = ({
     else console.log(message)
   }
 
-  // const validateFile = (file) => {
-  //   if (!file) return 'No file selected'
-  //   if (!ALLOWED_TYPES.includes(file.type)) return 'Only PDF, Image, Excel files allowed'
-  //   if (file.size / (1024 * 1024) > MAX_FILE_MB)
-  //     return `Max file size ${MAX_FILE_MB}MB`
-  //   return null
-  // }
-
-
   const validateFile = (file) => {
-  if (!file) return 'No file selected'
+    if (!file) return 'No file selected'
 
-  const allowedExtensions = ['pdf', 'jpg', 'jpeg', 'png', 'xls', 'xlsx']
-  const ext = file.name.split('.').pop().toLowerCase()
+    const allowedExtensions = ['pdf', 'jpg', 'jpeg', 'png', 'xls', 'xlsx']
+    const ext = file.name.split('.').pop().toLowerCase()
 
-  if (!allowedExtensions.includes(ext)) {
-    return 'Only PDF, Image, Excel files allowed'
-  }
-
-  if (file.size / (1024 * 1024) > MAX_FILE_MB) {
-    return `Max file size ${MAX_FILE_MB}MB`
-  }
-
-  return null
-}
-
-  // const handleFileSelect = async (item, e) => {
-  //   if (readOnly) return
-  //   const file = e.target.files?.[0]
-  //   if (!file) return
-
-  //   const validationError = validateFile(file)
-  //   if (validationError) {
-  //     notify('error', validationError)
-  //     e.target.value = ''
-  //     return
-  //   }
-
-  //   if (!customerId) {
-  //     notify('error', 'Save Basic & KYC details first to generate Case ID.')
-  //     e.target.value = ''
-  //     return
-  //   }
-
-  //   setUploading(prev => ({ ...prev, [item.key]: true }))
-
-  //   try {
-  //     const response = await documentService.uploadDocument(
-  //       customerId,
-  //       file,
-  //       item.documentType,
-  //       'applicant',
-  //       0,
-  //       null,
-  //       {}
-  //     )
-
-  //     onDocumentUploaded?.(response.data)
-  //     notify('success', 'Document uploaded successfully')
-
-  //   } catch (error) {
-  //     notify('error', error?.response?.data?.message || error.message)
-  //   } finally {
-  //     setUploading(prev => ({ ...prev, [item.key]: false }))
-  //     e.target.value = ''
-  //   }
-  // }
-
-
-  const handleFileSelect = async (item, e) => {
-  if (readOnly) return
-
-  const files = Array.from(e.target.files || [])
-  if (!files.length) return
-
-  if (!customerId) {
-    notify('error', 'Save Basic & KYC first')
-    return
-  }
-
-  setUploading(prev => ({ ...prev, [item.key]: true }))
-
-  try {
-    // 🚀 Upload ALL selected files
-    for (const file of files) {
-      const error = validateFile(file)
-      if (error) {
-        notify('error', `${file.name}: ${error}`)
-        continue
-      }
-
-      const response = await documentService.uploadDocument(
-        customerId,
-        file,
-        item.documentType, // SAME TYPE (GSTR3B)
-        'applicant',
-        0,
-        null,
-        {}
-      )
-
-      onDocumentUploaded?.(response.data)
+    if (!allowedExtensions.includes(ext)) {
+      return 'Only PDF, Image, Excel files allowed'
     }
 
-    notify('success', `${files.length} files uploaded successfully`)
+    if (file.size / (1024 * 1024) > MAX_FILE_MB) {
+      return `Max file size ${MAX_FILE_MB}MB`
+    }
 
-  } catch (error) {
-    notify('error', error.message)
-  } finally {
-    setUploading(prev => ({ ...prev, [item.key]: false }))
-    e.target.value = ''
+    return null
   }
-}
+
+  // Unified selection handler that handles standard input changes and drop events
+  const handleFileSelect = async (item, e, droppedFiles = null) => {
+    if (readOnly) return
+
+    // Get files from droppedFiles array or the traditional input event
+    const files = droppedFiles ? Array.from(droppedFiles) : Array.from(e.target.files || [])
+    if (!files.length) return
+
+    if (!customerId) {
+      notify('error', 'Save Basic & KYC first')
+      return
+    }
+
+    setUploading(prev => ({ ...prev, [item.key]: true }))
+
+    try {
+      // Upload ALL selected/dropped files
+      for (const file of files) {
+        const error = validateFile(file)
+        if (error) {
+          notify('error', `${file.name}: ${error}`)
+          continue
+        }
+
+        const response = await documentService.uploadDocument(
+          customerId,
+          file,
+          item.documentType, // SAME TYPE (GSTR3B)
+          'applicant',
+          0,
+          null,
+          {}
+        )
+
+        onDocumentUploaded?.(response.data)
+      }
+
+      notify('success', `${files.length} files uploaded successfully`)
+
+    } catch (error) {
+      notify('error', error.message)
+    } {
+      setUploading(prev => ({ ...prev, [item.key]: false }))
+      if (e && e.target) e.target.value = ''
+    }
+  }
+
+  // --- Drag & Drop Event Handlers ---
+  const handleDragOver = (e, itemKey) => {
+    e.preventDefault()
+    if (readOnly) return
+    setDragOverItemKey(itemKey)
+  }
+
+  const handleDragLeave = (e) => {
+    e.preventDefault()
+    setDragOverItemKey(null)
+  }
+
+  const handleDrop = (e, item) => {
+    e.preventDefault()
+    setDragOverItemKey(null)
+    if (readOnly) return
+
+    const files = e.dataTransfer.files
+    if (files && files.length > 0) {
+      handleFileSelect(item, null, files)
+    }
+  }
 
   const handleRemoveDocument = async (doc) => {
     if (readOnly) return
@@ -499,7 +459,7 @@ const DocumentChecklistUploader = ({
     const documentTypeMappings = {
       'gst_certificate': 'applicant_gst',
       'pan': 'applicant_pan',
-       'coapplicant_pan': 'coapplicant_pan',
+      'coapplicant_pan': 'coapplicant_pan',
       'msme_certificate': 'msme_certificate',
       'office_electricity_bill': 'office_electricity_bill',
       'applicant_pan': 'applicant_pan',
@@ -517,12 +477,8 @@ const DocumentChecklistUploader = ({
            documentTypeMappings[checklistDocumentType] === docDocumentType;
   };
 
-  const isUploaded = (type) =>
-    uploadedDocuments.some(d => isDocumentTypeMatch(d.documentType, type))
-
   return (
     <div className="space-y-4">
-
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-semibold text-gray-900">
           Required Documents
@@ -535,18 +491,23 @@ const DocumentChecklistUploader = ({
       {checklist.map((item) => {
         const docs = uploadedDocuments.filter(d => isDocumentTypeMatch(d.documentType, item.documentType))
         const uploadingNow = uploading[item.key]
+        const isDraggingOverThis = dragOverItemKey === item.key
 
         return (
           <div
             key={item.key}
-            className={`p-4 rounded-xl border ${
-              docs.length > 0
+            onDragOver={(e) => handleDragOver(e, item.key)}
+            onDragLeave={handleDragLeave}
+            onDrop={(e) => handleDrop(e, item)}
+            className={`p-4 rounded-xl border transition-all duration-200 ${
+              isDraggingOverThis
+                ? 'border-blue-500 bg-blue-50/50 scale-[1.01] border-dashed'
+                : docs.length > 0
                 ? 'bg-green-50 border-green-200'
                 : 'bg-white border-gray-200'
             }`}
           >
             <div className="flex justify-between items-start">
-
               <div className="flex-1">
                 <div className="flex items-center space-x-2">
                   <h4 className="text-sm font-semibold">{item.label}</h4>
@@ -561,15 +522,14 @@ const DocumentChecklistUploader = ({
                 </div>
 
                 <p className="text-xs text-gray-500 mt-1">
-                  {item.description}
+                  {item.description} { !readOnly && <span className="text-blue-500 font-medium">(Or drag & drop files here)</span> }
                 </p>
 
                 {docs.map((doc) => {
                   const currentEdit = editingMeta[doc.id] || {}
 
                   return (
-                    <div key={doc.id} className="mt-4 p-3 bg-white rounded border">
-
+                    <div key={doc.id} className="mt-4 p-3 bg-white rounded border" onClick={(e) => e.stopPropagation()}>
                       <div className="flex justify-between items-center">
                         <div className="flex items-center space-x-2">
                           <FiFile className="h-4 w-4 text-gray-500" />
@@ -599,16 +559,11 @@ const DocumentChecklistUploader = ({
 
                       {!readOnly && (
                         <div className="grid grid-cols-3 gap-3 mt-3">
-
                           <input
                             type="date"
                             value={currentEdit.issueDate ?? doc.issueDate?.split('T')[0] ?? ''}
-                            onChange={(e) =>
-                              handleMetaChange(doc.id, 'issueDate', e.target.value)
-                            }
-                            onBlur={(e) =>
-                              handleMetaSave(doc.id, 'issueDate', e.target.value)
-                            }
+                            onChange={(e) => handleMetaChange(doc.id, 'issueDate', e.target.value)}
+                            onBlur={(e) => handleMetaSave(doc.id, 'issueDate', e.target.value)}
                             className="border rounded p-1 text-xs"
                           />
 
@@ -646,28 +601,18 @@ const DocumentChecklistUploader = ({
 
               {!readOnly && (
                 <label
-                  className={`ml-4 cursor-pointer px-3 py-2 border border-dashed rounded ${
+                  className={`ml-4 cursor-pointer px-3 py-2 border border-dashed rounded shrink-0 select-none ${
                     uploadingNow ? 'opacity-50 cursor-wait' : ''
                   }`}
                 >
-                  {/* <input
+                  <input
                     type="file"
-                    // accept=".pdf,.jpg,.jpeg,.png"
-
-                    accept=".pdf,.jpg,.jpeg,.png,.xls,.xlsx"
+                    multiple
                     className="hidden"
+                    accept=".pdf,.jpg,.jpeg,.png,.xls,.xlsx"
                     disabled={uploadingNow}
                     onChange={(e) => handleFileSelect(item, e)}
-                  /> */}
-
-                  <input
-  type="file"
-  multiple   // ✅ REQUIRED
-   className="hidden"
-  accept=".pdf,.jpg,.jpeg,.png,.xls,.xlsx"
-  onChange={(e) => handleFileSelect(item, e)}
-/>
-
+                  />
                   {uploadingNow ? 'Uploading...' : 'Upload'}
                 </label>
               )}

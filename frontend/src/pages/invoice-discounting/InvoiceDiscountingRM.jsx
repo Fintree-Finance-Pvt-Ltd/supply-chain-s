@@ -2173,8 +2173,10 @@ Remaining Allowed: ₹${formatINR(
               <th style={{ padding: "16px 24px", textAlign: "left", fontSize: "12px", textTransform: "uppercase", letterSpacing: "0.05em", color: "#202b3a", fontWeight: "700" }}>Customer</th>
               <th style={{ padding: "16px 24px", textAlign: "left", fontSize: "12px", textTransform: "uppercase", letterSpacing: "0.05em", color: "#202b3a", fontWeight: "700" }}>Supplier</th>
               <th style={{ padding: "16px 24px", textAlign: "right", fontSize: "12px", textTransform: "uppercase", letterSpacing: "0.05em", color: "#202b3a", fontWeight: "700" }}>Amount</th>
+              <th style={{ padding: "16px 24px", textAlign: "right", fontSize: "12px", textTransform: "uppercase", letterSpacing: "0.05em", color: "#202b3a", fontWeight: "700" }}>Disbursement</th>
               <th style={{ padding: "16px 24px", textAlign: "right", fontSize: "12px", textTransform: "uppercase", letterSpacing: "0.05em", color: "#202b3a", fontWeight: "700" }}>ROI %</th>
               <th style={{ padding: "16px 24px", textAlign: "right", fontSize: "12px", textTransform: "uppercase", letterSpacing: "0.05em", color: "#202b3a", fontWeight: "700" }}>Penal %</th>
+              <th style={{ padding: "16px 24px", textAlign: "right", fontSize: "12px", textTransform: "uppercase", letterSpacing: "0.05em", color: "#202b3a", fontWeight: "700" }}>Service Fee</th>
               <th style={{ padding: "16px 24px", textAlign: "center", fontSize: "12px", textTransform: "uppercase", letterSpacing: "0.05em", color: "#202b3a", fontWeight: "700" }}>Status</th>
               <th style={{ padding: "16px 24px", textAlign: "center", fontSize: "12px", textTransform: "uppercase", letterSpacing: "0.05em", color: "#202b3a", fontWeight: "700" }}>Actions</th>
             </tr>
@@ -2196,16 +2198,14 @@ Remaining Allowed: ₹${formatINR(
                   <td style={{ padding: "16px 24px", fontSize: "14px", color: "#475569" }}>
                     {invoice.supplier?.supplierName || invoice.supplierName || "N/A"}
                   </td>
-                  <td style={{ padding: "16px 24px", textAlign: "right", fontSize: "14px", fontWeight: "700", color: "#0f172a" }}>
-                    ₹{invoice.invoiceAmount?.toLocaleString()}
-                  </td>
+                  <td style={{ padding: "16px 24px", textAlign: "right", fontSize: "14px", fontWeight: "700", color: "#0f172a" }}>₹{invoice.invoiceAmount?.toLocaleString()}</td>
+                  <td style={{ padding: "16px 24px", textAlign: "right", fontSize: "14px" }}>{invoice.disbursementAmount ?? "-"}</td>
                   <td style={{ padding: "16px 24px", textAlign: "right", fontSize: "14px" }}>{invoice.roiPercentage ?? "-"}</td>
                   <td style={{ padding: "16px 24px", textAlign: "right", fontSize: "14px" }}>{invoice.penalCharges ?? "-"}</td>
                   <td style={{ padding: "16px 24px", textAlign: "right", fontSize: "14px" }}>{invoice.serviceFee ?? "-"}</td>
+                  
 
-                  <td style={{ padding: "16px 24px", textAlign: "center" }}>
-                    {getStatusBadge(invoice.status)}
-                  </td>
+                  <td style={{ padding: "16px 24px", textAlign: "center" }}>{getStatusBadge(invoice.status)}</td>
                   <td style={{ padding: "16px 24px", textAlign: "center" }}>
                     <div style={{ display: "flex", gap: "8px", justifyContent: "center" }}>
                       {invoice.status === "PENDING_CUSTOMER_APPROVAL" && (
