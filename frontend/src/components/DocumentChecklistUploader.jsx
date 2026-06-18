@@ -538,12 +538,12 @@ const DocumentChecklistUploader = ({
                           </span>
                         </div>
 
-                        <div className="flex items-center space-x-2">
+                        <div className="flex items-center space-x-6">
                           <button
                             onClick={() => handlePreview(doc)}
                             className="text-primary-600"
                           >
-                            <FiEye />
+                            <FiEye /> 
                           </button>
 
                           {!readOnly && (
