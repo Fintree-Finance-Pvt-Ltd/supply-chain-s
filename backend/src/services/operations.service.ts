@@ -21,6 +21,7 @@ import {
 import { EntityManager, In, Repository } from 'typeorm';
 import { ApprovalService } from './approval.service';
 import { ADDRESS_TYPES, CASE_STATUS, COMPANY_TYPES, KYC_TYPES } from '../config/constants';
+import { internalLmsService } from './internal-lms.service';
 import axios from 'axios';
 import path from 'path';
 import * as yauzl from 'yauzl';
@@ -1373,48 +1374,51 @@ export class OperationsService {
   }
 
   /**
-   * Send repayment data to LMS API
+   * Post repayment data into the internal LMS ledger/allocation engine.
    */
   private async sendToLMSApi(repayments: RepaymentRecord[]): Promise<any> {
-    const baseUrl = process.env.LMS_API_BASE_URL;
-    const apiKey = process.env.LMS_API_KEY;
+    console.log('[Repayment Upload] Posting to internal LMS:', JSON.stringify({ repayments }, null, 2));
 
-    if (!baseUrl || !apiKey) {
-      throw new Error('LMS API configuration missing. Set LMS_API_BASE_URL and LMS_API_KEY in environment.');
-    }
+    const results = [];
+    for (const repayment of repayments) {
+      try {
+        const posted = await internalLmsService.recordCollection({
+          lan: repayment.lan,
+          collectionDate: repayment.collection_date,
+          collectionUtr: repayment.collection_utr,
+          collectionAmount: repayment.collection_amount,
+        });
 
-    const payload = { repayments };
-
-    console.log('[Repayment Upload] Sending to LMS:', JSON.stringify(payload, null, 2));
-
-    try {
-      const response = await axios.post(
-        `${baseUrl}loan-booking/v1/supplychain/repayment-upload`,
-        payload,
-        {
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${apiKey}`,
-            'x-api-key': apiKey,
-          },
-          timeout: 30000,
-        }
-      );
-
-      console.log('[Repayment Upload] LMS response:', response.status, response.data);
-      return response.data;
-    } catch (error: any) {
-      if (error.response) {
-        console.error('[Repayment Upload] LMS API Error:', error.response.status, error.response.data);
-        throw new Error(`LMS API Error: ${error.response.status} - ${JSON.stringify(error.response.data)}`);
-      } else if (error.request) {
-        console.error('[Repayment Upload] LMS API unreachable - no response received');
-        throw new Error('LMS API unreachable - network timeout');
-      } else {
-        console.error('[Repayment Upload] Failed to send to LMS:', error.message);
-        throw new Error(`Failed to send to LMS: ${error.message}`);
+        results.push({
+          lan: repayment.lan,
+          collection_utr: repayment.collection_utr,
+          status: 'success',
+          repaymentId: posted.repayment.id,
+          allocationCount: posted.allocations.length,
+          unappliedAmount: posted.repayment.unappliedAmount,
+        });
+      } catch (error: any) {
+        results.push({
+          lan: repayment.lan,
+          collection_utr: repayment.collection_utr,
+          status: 'failed',
+          message: error.message,
+        });
       }
     }
+
+    const failed = results.filter((result) => result.status === 'failed');
+    if (failed.length > 0) {
+      throw new Error(`Internal LMS repayment posting failed: ${failed.map((item) => `${item.lan}/${item.collection_utr}: ${item.message}`).join('; ')}`);
+    }
+
+    return {
+      message: 'Repayments posted to internal LMS successfully',
+      total: results.length,
+      success_count: results.length,
+      failed_count: 0,
+      results,
+    };
   }
 
   /**
@@ -1498,7 +1502,7 @@ export class OperationsService {
         record.lmsResponse = JSON.stringify(lmsResponse);
         await this.repaymentUploadRepository.save(record);
 
-await AppDataSource.query(
+if (false) await AppDataSource.query(
   `
   UPDATE loan_accounts
   SET
@@ -1518,7 +1522,7 @@ await AppDataSource.query(
 );
 
 // ✅ second query
-await AppDataSource.query(
+if (false) await AppDataSource.query(
   `
   UPDATE loan_accounts
   SET

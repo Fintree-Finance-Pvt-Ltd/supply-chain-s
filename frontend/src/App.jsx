@@ -45,6 +45,7 @@ import CEOPendingApprovals from './pages/management/CEOPendingApprovals'
 import OperationsDashboard from './pages/operations/OperationsDashboard'
 import OperationsCaseScreen from './pages/operations/OperationsCaseScreen'
 import RepaymentUpload from './pages/operations/RepaymentUpload'
+import LoanServicing from './pages/operations/LoanServicing'
 import SupplierDashboard from './pages/supplier/SupplierDashboard'
 import SupplierCreate from './pages/supplier/SupplierCreate'
 import SupplierDetail from './pages/supplier/SupplierDetail'
@@ -310,6 +311,22 @@ function App() {
                 ]}
               >
                 <RepaymentUpload />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="operations/loan-servicing"
+            element={
+              <ProtectedRoute
+                allowedRoles={[
+                  ROLES.OPERATIONS_TEAM_L1,
+                  ROLES.OPERATIONS_TEAM_L2,
+                  ROLES.OPERATIONS_HEAD,
+                  ROLES.SUPERADMIN,
+                  ROLES.ADMIN,
+                ]}
+              >
+                <LoanServicing />
               </ProtectedRoute>
             }
           />

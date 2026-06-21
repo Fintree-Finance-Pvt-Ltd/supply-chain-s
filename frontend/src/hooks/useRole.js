@@ -8,6 +8,7 @@ export const ROLE_MENU_CONFIG = {
     { path: '/admin/users', label: 'User Management', icon: 'FiUsers' },
     { path: '/admin/roles', label: 'Role Management', icon: 'FiShield' },
     { path: '/admin/approval-flows', label: 'Approval Flows', icon: 'FiGitBranch' },
+    { path: '/operations/loan-servicing', label: 'Loan Servicing', icon: 'FiDollarSign' },
   ],
   [ROLES.RELATIONSHIP_MANAGER]: [
     { path: '/rm/dashboard', label: 'Dashboard', icon: 'FiHome' },
@@ -32,6 +33,7 @@ export const ROLE_MENU_CONFIG = {
     { path: '/operations/suppliers', label: 'Supplier Onboarding', icon: 'FiUserPlus' },
     { path: '/invoice-discounting/ops-l1', label: 'Invoice Discounting', icon: 'FiFileText' },
     { path: '/operations/repayment-upload', label: 'Repayment Upload', icon: 'FiDollarSign' },
+    { path: '/operations/loan-servicing', label: 'Loan Servicing', icon: 'FiDollarSign' },
   ],
   [ROLES.OPERATIONS_TEAM_L2]: [
     { path: '/operations/dashboard', label: 'Ops Dashboard', icon: 'FiHome' },
@@ -39,6 +41,7 @@ export const ROLE_MENU_CONFIG = {
     { path: '/operations/suppliers', label: 'Supplier Onboarding', icon: 'FiUserPlus' },
     { path: '/invoice-discounting/ops-l2', label: 'Invoice Discounting', icon: 'FiFileText' },
     { path: '/operations/repayment-upload', label: 'Repayment Upload', icon: 'FiDollarSign' },
+    { path: '/operations/loan-servicing', label: 'Loan Servicing', icon: 'FiDollarSign' },
   ],
   [ROLES.OPERATIONS_HEAD]: [
     { path: '/operations/dashboard', label: 'Ops Dashboard', icon: 'FiHome' },
@@ -46,6 +49,7 @@ export const ROLE_MENU_CONFIG = {
     { path: '/operations/suppliers', label: 'Supplier Onboarding', icon: 'FiUserPlus' },
     { path: '/invoice-discounting/ops-head', label: 'Invoice Discounting', icon: 'FiFileText' },
     { path: '/operations/repayment-upload', label: 'Repayment Upload', icon: 'FiDollarSign' },
+    { path: '/operations/loan-servicing', label: 'Loan Servicing', icon: 'FiDollarSign' },
   ],
   [ROLES.CEO]: [
     { path: '/management/dashboard', label: 'Management Dashboard', icon: 'FiHome' },
@@ -64,6 +68,7 @@ export const ROLE_MENU_CONFIG = {
     { path: '/superadmin/analytics', label: 'Analytics', icon: 'FiFileText' },
     { path: '/superadmin/cases', label: 'All Cases', icon: 'FiFolder' },
     { path: '/superadmin/performance', label: 'User Performance', icon: 'FiBarChart' },
+    { path: '/operations/loan-servicing', label: 'Loan Servicing', icon: 'FiDollarSign' },
   ],
 }
 
@@ -80,6 +85,7 @@ const getIconComponent = (iconName) => {
     FiFileText: () => import('react-icons/fi').then((mod) => mod.FiFileText),
     FiBarChart: () => import('react-icons/fi').then((mod) => mod.FiBarChart),
     FiFolder: () => import('react-icons/fi').then((mod) => mod.FiFolder),
+    FiDollarSign: () => import('react-icons/fi').then((mod) => mod.FiDollarSign),
   }
   return icons[iconName]
 }

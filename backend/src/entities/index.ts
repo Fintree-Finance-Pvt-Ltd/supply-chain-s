@@ -36,6 +36,22 @@ export { Notification } from './Notification';
 export { RefreshToken } from './RefreshToken';
 export { Applicant } from './Applicant';
 export { RepaymentUpload, REPAYMENT_UPLOAD_STATUS } from './RepaymentUpload';
+export {
+  DEMAND_STATUS,
+  DISBURSEMENT_STATUS,
+  LEDGER_ENTRY_TYPE,
+  LMS_RECORD_STATUS,
+  LoanAccountSnapshot,
+  LoanDemand,
+  LoanDisbursement,
+  LoanLedgerEntry,
+  LoanProduct,
+  Repayment,
+  RepaymentAllocation,
+  REPAYMENT_STATUS,
+  ReportRun,
+  REPORT_RUN_STATUS,
+} from './InternalLms';
 
 // SUPERADMIN Analytics & RBAC Entities
 export { TaskTimeTracking } from './TaskTimeTracking';

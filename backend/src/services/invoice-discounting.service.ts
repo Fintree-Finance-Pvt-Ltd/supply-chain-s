@@ -9,6 +9,7 @@ import { LoanAccount } from "../entities/LoanAccount";
 import { CreditSanction } from "../entities/CreditSanction";
 import { Notification } from "../entities/Notification";
 import { NodemailerProvider } from "../integrations/notifications/email/nodemailer.provider";
+import { internalLmsService } from "./internal-lms.service";
 import axios from "axios";
 import crypto from "crypto";
 
@@ -1384,37 +1385,33 @@ await loanAccountRepository.save(
 
     // 🔴 FIRST send to LMS before making ANY DB updates
     try {
-      console.log(`[Auto-LMS] Sending invoice ${invoiceId} to LMS after disbursement...`);
+      console.log(`[Internal LMS] Booking invoice ${invoiceId} after final OPS L2 approval...`);
 
-      lmsResult = await this.sendSingleToLMS(invoiceId);
+      const booking = await internalLmsService.bookInvoiceDisbursement(invoiceId, userId);
+      lmsResult = {
+        success: true,
+        lmsResponse: {
+          disbursementId: booking.disbursement.id,
+          demandId: booking.demand.id,
+          snapshotId: booking.snapshot.id,
+          alreadyBooked: booking.alreadyBooked,
+        },
+      };
 
       if (!lmsResult.success) {
         throw new Error(lmsResult.error || "LMS send failed");
       }
 
-      console.log(`[Auto-LMS] Invoice ${invoiceId} sent to LMS successfully`);
+      console.log(`[Internal LMS] Invoice ${invoiceId} booked successfully`);
     } catch (error: any) {
-      console.error(`[Auto-LMS] Error sending invoice ${invoiceId} to LMS:`, error.message);
+      console.error(`[Internal LMS] Error booking invoice ${invoiceId}:`, error.message);
 
       // ⛔ STOP EXECUTION — nothing should change
-      throw new Error(`LMS sync failed. Approval halted. Reason: ${error.message}`);
+      throw new Error(`Internal LMS booking failed. Approval halted. Reason: ${error.message}`);
     }
 
     // ✅ Only update AFTER LMS success
     invoice.status = "ACTIVE";
-
-    if (invoice.loanAccountId) {
-      const loanAccount = await this.loanAccountRepository.findOne({
-        where: { id: invoice.loanAccountId },
-      });
-
-      if (loanAccount) {
-        loanAccount.disbursedAmount =
-          (loanAccount.disbursedAmount || 0) + invoice.disbursementAmount!;
-
-        await this.loanAccountRepository.save(loanAccount);
-      }
-    }
 
   } else {
     invoice.status = "REJECTED";

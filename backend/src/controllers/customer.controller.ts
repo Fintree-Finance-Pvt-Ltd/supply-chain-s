@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { CustomerService } from '../services/customer.service';
 import { TaskDistributionService } from '../services/task-distribution.service';
 import { LMSDataSource } from '../config/lmsDatabase';
+import { internalLmsService } from '../services/internal-lms.service';
 
 export class CustomerController {
   private customerService: CustomerService;
@@ -516,11 +517,11 @@ export class CustomerController {
         return;
       }
 
-      const dashboard = await this.customerService.getDashboard(partnerLoanId);
+      const dashboard = await internalLmsService.getCustomerDashboard(Number(partnerLoanId));
 
       res.json({
         success: true,
-        data: dashboard,
+        data: dashboard.data,
       });
     } catch (error: any) {
       res.status(500).json({
@@ -546,7 +547,7 @@ getLoanList = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    const result = await this.customerService.getLoanList(partnerLoanId);
+    const result = await internalLmsService.getCustomerLoanSummary(Number(partnerLoanId));
 
     if (!result.success) {
       res.status(500).json(result);
@@ -680,7 +681,7 @@ async getLoanSchedule(req: Request, res: Response) {
       });
     }
 
-    const result = await this.customerService.getLoanScheduleByLan(String(lan));
+    const result = await internalLmsService.getDemandSchedule(String(lan));
 
     return res.json(result);
 
@@ -706,17 +707,15 @@ async getLoanSchedule(req: Request, res: Response) {
         return;
       }
 
-      const result = await this.customerService.getLoanStatement(customerId, parseInt(id as string, 10), {
+      const result = await internalLmsService.getStatementByLoanAccountId(parseInt(id as string, 10), {
         startDate: startDate as string,
         endDate: endDate as string,
-        page: page ? parseInt(page as string, 10) : undefined,
-        limit: limit ? parseInt(limit as string, 10) : undefined,
       });
 
       res.json({
         success: true,
         data: result.data,
-        meta: { page: result.page, limit: result.limit, total: result.total },
+        meta: { page: page ? parseInt(page as string, 10) : 1, limit: limit ? parseInt(limit as string, 10) : result.data.length, total: result.data.length },
       });
     } catch (error: any) {
       res.status(500).json({ success: false, message: error.message || 'Failed to fetch statement' });
@@ -772,25 +771,17 @@ async getLoanSchedule(req: Request, res: Response) {
    */
   getTransactionsByLan = async (req: Request, res: Response): Promise<void> => {
     try {
-      const lender = req.query.lan as string;
+      const lan = req.query.lan as string;
 
       // Basic validation: lan is required
-      if (!lender) {
+      if (!lan) {
         res.status(400).json({
           success: false,
-          message:  'Lender is required'
+          message:  'LAN is required'
         });
         return;
       }
-      const lan = await LMSDataSource.query(
-        `SELECT lan FROM supply_chain_sanctions WHERE lender = ?`,
-        [lender]
-      );
-      console.info('[CustomerTransactions] LMS LAN lookup completed', {
-        lender,
-        rows: Array.isArray(lan) ? lan.length : 0,
-      });
-      const result = await this.customerService.getTransactionsByLan(lan[0]?.lan);
+      const result = await internalLmsService.getTransactionsByLan(lan);
 
       if (!result) {
         res.status(500).json({
@@ -836,7 +827,7 @@ async getLoanSchedule(req: Request, res: Response) {
         return;
       }
 
-      const result = await this.customerService.getTransactionDetail(lan, utr);
+      const result = await internalLmsService.getCollectionDetail(lan, utr);
 
       res.json(result);
     } catch (error: any) {

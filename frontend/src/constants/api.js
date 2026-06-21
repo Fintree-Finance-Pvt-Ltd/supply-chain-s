@@ -147,6 +147,15 @@ DASHBOARD_OPERATIONS_SUPPLIERS: '/workflows/suppliers/dashboard/operations',
   CUSTOMER_MIGRATION_UPLOAD: '/operations/migrations/customers',
   SUPPLIER_MIGRATION_UPLOAD: '/operations/migrations/suppliers',
 
+  // Loan Servicing
+  LOAN_SERVICING_ACCOUNT: (lan) => `/loan-servicing/accounts/${lan}`,
+  LOAN_SERVICING_SCHEDULE: (lan) => `/loan-servicing/accounts/${lan}/schedule`,
+  LOAN_SERVICING_STATEMENT: (lan) => `/loan-servicing/accounts/${lan}/statement`,
+  LOAN_SERVICING_COLLECTION_DETAIL: (lan, utr) => `/loan-servicing/collections/${lan}/${utr}`,
+  LOAN_SERVICING_PORTFOLIO_REPORT: '/loan-servicing/reports/portfolio',
+  LOAN_SERVICING_DISBURSEMENT_REPORT: '/loan-servicing/reports/disbursements',
+  LOAN_SERVICING_COLLECTION_REPORT: '/loan-servicing/reports/collections',
+
   // Onboarding Integrations
   ONBOARDING_MOBILE_SEND_OTP: '/onboarding/mobile/send-otp',
   ONBOARDING_MOBILE_VERIFY_OTP: '/onboarding/mobile/verify-otp',

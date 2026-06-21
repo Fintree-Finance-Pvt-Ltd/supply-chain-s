@@ -1,11 +1,11 @@
 import app from './app';
 import { AppDataSource } from './config/database';
-import { initializeLMSDatabase } from './config/lmsDatabase';
 import * as dotenv from 'dotenv';
 
 dotenv.config();
 
 const PORT = process.env.PORT || 3000;
+const initializeLMSDatabase = async (): Promise<void> => undefined;
 
 // Initialize database connection
 AppDataSource.initialize()

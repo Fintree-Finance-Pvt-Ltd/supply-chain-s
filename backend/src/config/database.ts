@@ -43,6 +43,16 @@ import { Applicant } from '../entities/Applicant';
 import { Partner } from '../entities/Partner';
 import { LanSequence } from '../entities/LanSequence';
 import { RepaymentUpload } from '../entities/RepaymentUpload';
+import {
+  LoanAccountSnapshot,
+  LoanDemand,
+  LoanDisbursement,
+  LoanLedgerEntry,
+  LoanProduct,
+  Repayment,
+  RepaymentAllocation,
+  ReportRun,
+} from '../entities/InternalLms';
 import { PerformanceMetricsCache, RewardConfiguration, RewardPoint, TaskBucketMapping, TaskTimeTracking } from '../entities';
 
 // Export entities array for use in DataSource
@@ -86,6 +96,14 @@ const entities = [
   RefreshToken,
   Applicant,
   RepaymentUpload,
+  LoanProduct,
+  LoanDisbursement,
+  LoanDemand,
+  Repayment,
+  RepaymentAllocation,
+  LoanLedgerEntry,
+  LoanAccountSnapshot,
+  ReportRun,
   RewardPoint,
   RewardConfiguration,
   PerformanceMetricsCache,
