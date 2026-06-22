@@ -1240,9 +1240,9 @@ await loanAccountRepository.save(
 
     const roiPercentage = invoice.roiPercentage ?? await this.getROIPercentage(invoice.loanAccountId!);
     const penalCharges = invoice.penalCharges ?? await this.getPenalCharges(invoice.loanAccountId!);
-    const totalRoiAmount =
-      (invoice.disbursementAmount! * roiPercentage * 90) / 365;
-    const emiAmount = invoice.disbursementAmount! + totalRoiAmount;
+    const disbursementAmount = Number(invoice.disbursementAmount);
+    const totalRoiAmount = this.calculateTotalRoiAmount(disbursementAmount, roiPercentage, 90);
+    const emiAmount = this.calculateEmiAmount(disbursementAmount, totalRoiAmount);
 
     const previousStatus = invoice.status;
 
@@ -1590,14 +1590,14 @@ await loanAccountRepository.save(
 
   /**
    * Calculate total ROI amount
-   * Formula: (disbursement_amount × roi_percentage × 90) / 365
+   * Formula: (disbursement_amount * roi_percentage * tenure_days) / (365 * 100)
    */
   private calculateTotalRoiAmount(
     disbursementAmount: number,
     roiPercentage: number,
     tenureDays: number
   ): number {
-    const roiAmount = (disbursementAmount * roiPercentage * tenureDays) / 365;
+    const roiAmount = (disbursementAmount * roiPercentage * tenureDays) / (365 * 100);
     return Number(roiAmount.toFixed(2));
   }
 
