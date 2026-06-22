@@ -32,6 +32,15 @@ type CollectionInput = {
 };
 
 const CLOSED_DEMAND_STATUSES = [DEMAND_STATUS.PAID, DEMAND_STATUS.REVERSED];
+const PENAL_START_DAY = 91;
+
+type AccruedDemandCharges = {
+  principal: number;
+  interestDue: number;
+  feeDue: number;
+  penalDue: number;
+  dayCount: number;
+};
 
 export class InternalLmsService {
   private loanAccountRepository = AppDataSource.getRepository(LoanAccount);
@@ -73,8 +82,90 @@ export class InternalLmsService {
     return Math.max(0, Math.round((this.toDateOnly(end).getTime() - this.toDateOnly(start).getTime()) / msPerDay));
   }
 
-  private calculateInterest(amount: number, annualRate: number, tenureDays: number): number {
-    return this.roundMoney((amount * annualRate * tenureDays) / (365 * 100));
+  private calculatePercentageAmount(amount: number, annualRate: number, dayCount: number): number {
+    return this.roundMoney((amount * annualRate * dayCount) / (365 * 100));
+  }
+
+  private getInterestDayCount(disbursementDate: string | Date, asOfDate: string | Date = new Date()): number {
+    return Math.max(1, this.daysBetween(this.toDateOnly(disbursementDate), this.toDateOnly(asOfDate)));
+  }
+
+  private calculateAccruedCharges(
+    demand: LoanDemand,
+    disbursement: LoanDisbursement | null | undefined,
+    invoice: Invoice | null | undefined,
+    asOfDate: string | Date = new Date(),
+  ): AccruedDemandCharges {
+    const principal = this.roundMoney(Math.max(this.toNumber(demand.principalDue) - this.toNumber(demand.principalPaid), 0));
+    const interestRate = this.toNumber(disbursement?.interestRate);
+    const serviceFeeRate = this.toNumber(invoice?.serviceFee);
+    const penalRate = this.toNumber(disbursement?.penalRate);
+    const disbursementDate = disbursement?.disbursementDate || demand.demandDate;
+    const dayCount = this.getInterestDayCount(disbursementDate, asOfDate);
+    const interestDue = this.calculatePercentageAmount(principal, interestRate, dayCount);
+    const feeDue = this.calculatePercentageAmount(principal, serviceFeeRate, dayCount);
+    const penalBase = this.roundMoney(principal + interestDue);
+    const penalDue = dayCount > PENAL_START_DAY
+      ? this.calculatePercentageAmount(penalBase, penalRate, dayCount)
+      : 0;
+
+    return {
+      principal,
+      interestDue,
+      feeDue,
+      penalDue,
+      dayCount,
+    };
+  }
+
+  private async refreshAccruedInterestForOpenDemands(
+    manager: EntityManager,
+    loanAccountId: number,
+    asOfDate: string | Date = new Date(),
+  ): Promise<void> {
+    const demandRepository = manager.getRepository(LoanDemand);
+    const disbursementRepository = manager.getRepository(LoanDisbursement);
+    const openDemands = await demandRepository.find({
+      where: {
+        loanAccountId,
+        status: Not(In(CLOSED_DEMAND_STATUSES)),
+      },
+      relations: ['disbursement', 'invoice'],
+      order: { dueDate: 'ASC', id: 'ASC' },
+    });
+
+    for (const demand of openDemands) {
+      const disbursement = demand.disbursement || await disbursementRepository.findOne({
+        where: { id: demand.loanDisbursementId },
+      });
+      const charges = this.calculateAccruedCharges(demand, disbursement, demand.invoice, asOfDate);
+      const totalDue = this.roundMoney(
+        this.toNumber(demand.principalDue) +
+        charges.interestDue +
+        charges.penalDue +
+        charges.feeDue,
+      );
+
+      demand.interestDue = charges.interestDue;
+      demand.penalDue = charges.penalDue;
+      demand.feeDue = charges.feeDue;
+      demand.totalDue = totalDue;
+      demand.outstandingAmount = this.roundMoney(Math.max(totalDue - this.toNumber(demand.totalPaid), 0));
+      demand.status = this.getDemandStatus(demand);
+      await demandRepository.save(demand);
+
+      if (disbursement) {
+        disbursement.interestAmount = charges.interestDue;
+        disbursement.principalOutstanding = charges.principal;
+        await disbursementRepository.save(disbursement);
+      }
+
+      if (demand.invoice) {
+        demand.invoice.roiAmount = charges.interestDue;
+        demand.invoice.emiAmount = totalDue;
+        await manager.getRepository(Invoice).save(demand.invoice);
+      }
+    }
   }
 
   private async getRunningBalance(manager: EntityManager, loanAccountId: number): Promise<number> {
@@ -185,8 +276,12 @@ export class InternalLmsService {
       const tenureDays = Math.max(1, this.daysBetween(disbursementDate, dueDate));
       const interestRate = this.toNumber(invoice.roiPercentage);
       const penalRate = this.toNumber(invoice.penalCharges);
-      const interestAmount = this.calculateInterest(disbursementAmount, interestRate, tenureDays);
-      const feeDue = this.roundMoney(this.toNumber(invoice.serviceFee));
+      const interestDayCount = this.getInterestDayCount(disbursementDate);
+      const interestAmount = this.calculatePercentageAmount(disbursementAmount, interestRate, interestDayCount);
+      const feeDue = this.calculatePercentageAmount(disbursementAmount, this.toNumber(invoice.serviceFee), interestDayCount);
+      const penalDue = interestDayCount > PENAL_START_DAY
+        ? this.calculatePercentageAmount(this.roundMoney(disbursementAmount + interestAmount), penalRate, interestDayCount)
+        : 0;
 
       const disbursement = await manager.getRepository(LoanDisbursement).save(
         manager.getRepository(LoanDisbursement).create({
@@ -209,7 +304,7 @@ export class InternalLmsService {
       );
 
       const demandPrincipal = disbursementAmount;
-      const totalDue = this.roundMoney(demandPrincipal + interestAmount + feeDue);
+      const totalDue = this.roundMoney(demandPrincipal + interestAmount + penalDue + feeDue);
       const demand = await manager.getRepository(LoanDemand).save(
         manager.getRepository(LoanDemand).create({
           loanAccountId: loanAccount.id,
@@ -220,7 +315,7 @@ export class InternalLmsService {
           dueDate,
           principalDue: demandPrincipal,
           interestDue: interestAmount,
-          penalDue: 0,
+          penalDue,
           feeDue,
           totalDue,
           outstandingAmount: totalDue,
@@ -242,7 +337,7 @@ export class InternalLmsService {
         createdByUserId: userId ?? null,
       });
 
-      const nonPrincipalDemand = this.roundMoney(interestAmount + feeDue);
+      const nonPrincipalDemand = this.roundMoney(interestAmount + penalDue + feeDue);
       if (nonPrincipalDemand > 0) {
         await this.createLedgerEntry(manager, {
           loanAccountId: loanAccount.id,
@@ -332,6 +427,7 @@ export class InternalLmsService {
         createdByUserId: input.userId ?? null,
       });
 
+      await this.refreshAccruedInterestForOpenDemands(manager, loanAccount.id, repaymentDate);
       const allocations = await this.allocateRepayment(manager, repayment, loanAccount.id);
       const allocatedAmount = allocations.reduce((sum, allocation) => sum + this.toNumber(allocation.totalAmount), 0);
       repayment.allocatedAmount = this.roundMoney(allocatedAmount);
@@ -470,6 +566,8 @@ export class InternalLmsService {
     const loanAccountRepository = manager.getRepository(LoanAccount);
     const loanAccount = await loanAccountRepository.findOne({ where: { id: loanAccountId } });
     if (!loanAccount) throw new Error('Loan account not found for LMS snapshot');
+
+    await this.refreshAccruedInterestForOpenDemands(manager, loanAccount.id);
 
     const [disbursements, demands, repayments] = await Promise.all([
       manager.getRepository(LoanDisbursement).find({
@@ -611,15 +709,23 @@ export class InternalLmsService {
           take: 5,
         })
       : [];
+    const totalSanctioned = this.roundMoney(rows.reduce((sum: number, row: any) => sum + this.toNumber(row.snapshot?.sanctionedAmount), 0));
+    const totalUtilized = this.roundMoney(rows.reduce((sum: number, row: any) => sum + this.toNumber(row.snapshot?.utilizedLimit), 0));
+    const totalAvailable = this.roundMoney(rows.reduce((sum: number, row: any) => sum + this.toNumber(row.snapshot?.unutilizedLimit), 0));
+    const totalOutstanding = this.roundMoney(rows.reduce((sum: number, row: any) => sum + this.toNumber(row.snapshot?.totalOutstanding), 0));
+    const totalCollected = this.roundMoney(rows.reduce((sum: number, row: any) => sum + this.toNumber(row.snapshot?.totalCollected), 0));
+    const totalDisbursed = this.roundMoney(rows.reduce((sum: number, row: any) => sum + this.toNumber(row.snapshot?.totalDisbursed), 0));
 
     return {
       success: true,
       data: {
-        totalSanctioned: this.roundMoney(rows.reduce((sum: number, row: any) => sum + this.toNumber(row.snapshot?.sanctionedAmount), 0)),
-        totalUtilized: this.roundMoney(rows.reduce((sum: number, row: any) => sum + this.toNumber(row.snapshot?.utilizedLimit), 0)),
-        totalAvailable: this.roundMoney(rows.reduce((sum: number, row: any) => sum + this.toNumber(row.snapshot?.unutilizedLimit), 0)),
-        totalOutstanding: this.roundMoney(rows.reduce((sum: number, row: any) => sum + this.toNumber(row.snapshot?.totalOutstanding), 0)),
-        totalDisbursed: this.roundMoney(rows.reduce((sum: number, row: any) => sum + this.toNumber(row.snapshot?.totalDisbursed), 0)),
+        totalSanctioned,
+        totalUtilized,
+        totalAvailable,
+        totalOutstanding,
+        totalToPay: totalOutstanding,
+        totalCollected,
+        totalDisbursed,
         activeLoans: rows.filter((row: any) => String(row.status || '').toLowerCase() === 'active').length,
         totalLoans: rows.length,
         recentRepayments: repayments.map(repayment => ({
@@ -636,7 +742,41 @@ export class InternalLmsService {
     };
   }
 
+  async getForeclosurePreview(lan: string): Promise<any> {
+    const cleanLan = String(lan || '').trim();
+    if (!cleanLan) throw new Error('LAN is required');
+
+    const loanAccount = await this.loanAccountRepository.findOne({ where: { lanId: cleanLan } });
+    if (!loanAccount) throw new Error(`LAN ${cleanLan} not found`);
+
+    const snapshot = await this.refreshSnapshot(loanAccount.id);
+    const totalToPay = this.toNumber(snapshot.totalOutstanding);
+
+    return {
+      success: true,
+      data: {
+        lan: cleanLan,
+        principal: this.toNumber(snapshot.principalOutstanding),
+        interest: this.toNumber(snapshot.interestOutstanding),
+        penal: this.toNumber(snapshot.penalOutstanding),
+        fee: this.toNumber(snapshot.feeOutstanding),
+        totalToPay,
+        totalForeclosureAmount: totalToPay,
+        totalCollected: this.toNumber(snapshot.totalCollected),
+        overdueAmount: this.toNumber(snapshot.overdueAmount),
+        dpd: this.toNumber(snapshot.dpd),
+        nextDueDate: snapshot.nextDueDate || null,
+        lastCollectionDate: snapshot.lastCollectionDate || null,
+      },
+    };
+  }
+
   async getDemandSchedule(lan: string): Promise<any> {
+    const loanAccount = await this.loanAccountRepository.findOne({ where: { lanId: lan } });
+    if (loanAccount) {
+      await this.refreshAccruedInterestForOpenDemands(AppDataSource.manager, loanAccount.id);
+    }
+
     const demands = await this.demandRepository.find({
       where: { lan },
       relations: ['invoice'],
@@ -781,6 +921,9 @@ export class InternalLmsService {
   }
 
   async getPortfolioReport(): Promise<any> {
+    const loanAccounts = await this.loanAccountRepository.find();
+    await Promise.all(loanAccounts.map(loanAccount => this.refreshSnapshot(loanAccount.id)));
+
     const snapshots = await this.snapshotRepository.find({ relations: ['loanAccount'] });
     return {
       success: true,

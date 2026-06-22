@@ -728,17 +728,16 @@ async getLoanSchedule(req: Request, res: Response) {
    */
   getForeclosurePreview = async (req: Request, res: Response): Promise<void> => {
     try {
-      const customerId = (req as any).customerId;
-      const { id } = req.query;
+      const lan = String(req.query.lan || req.query.id || '').trim();
 
-      if (!id) {
-        res.status(400).json({ success: false, message: 'Loan ID is required' });
+      if (!lan) {
+        res.status(400).json({ success: false, message: 'LAN is required' });
         return;
       }
 
-      const preview = await this.customerService.getForeclosurePreview(customerId);
+      const preview = await internalLmsService.getForeclosurePreview(lan);
 
-      res.json({ success: true, data: preview });
+      res.json(preview);
     } catch (error: any) {
       res.status(500).json({ success: false, message: error.message || 'Failed to fetch preview' });
     }
