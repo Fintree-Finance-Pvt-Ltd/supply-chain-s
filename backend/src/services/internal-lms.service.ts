@@ -32,7 +32,7 @@ type CollectionInput = {
 };
 
 const CLOSED_DEMAND_STATUSES = [DEMAND_STATUS.PAID, DEMAND_STATUS.REVERSED];
-const PENAL_START_DAY = 91;
+const DEFAULT_BILL_TENURE_DAYS = 90;
 
 type AccruedDemandCharges = {
   principal: number;
@@ -90,6 +90,10 @@ export class InternalLmsService {
     return Math.max(1, this.daysBetween(this.toDateOnly(disbursementDate), this.toDateOnly(asOfDate)));
   }
 
+  private getOverdueDayCount(dueDate: string | Date, asOfDate: string | Date = new Date()): number {
+    return Math.max(0, this.daysBetween(this.toDateOnly(dueDate), this.toDateOnly(asOfDate)));
+  }
+
   private calculateAccruedCharges(
     demand: LoanDemand,
     disbursement: LoanDisbursement | null | undefined,
@@ -104,10 +108,8 @@ export class InternalLmsService {
     const dayCount = this.getInterestDayCount(disbursementDate, asOfDate);
     const interestDue = this.calculatePercentageAmount(principal, interestRate, dayCount);
     const feeDue = this.calculatePercentageAmount(principal, serviceFeeRate, dayCount);
-    const penalBase = this.roundMoney(principal + interestDue);
-    const penalDue = dayCount > PENAL_START_DAY
-      ? this.calculatePercentageAmount(penalBase, penalRate, dayCount)
-      : 0;
+    const overdueDayCount = this.getOverdueDayCount(demand.dueDate, asOfDate);
+    const penalDue = this.calculatePercentageAmount(principal, penalRate, overdueDayCount);
 
     return {
       principal,
@@ -272,16 +274,15 @@ export class InternalLmsService {
       const disbursementDate = this.toDateOnly(invoice.disbursementDate);
       const dueDate = invoice.invoiceDueDate
         ? this.toDateOnly(invoice.invoiceDueDate)
-        : this.addDays(disbursementDate, 90);
+        : this.addDays(disbursementDate, DEFAULT_BILL_TENURE_DAYS);
       const tenureDays = Math.max(1, this.daysBetween(disbursementDate, dueDate));
       const interestRate = this.toNumber(invoice.roiPercentage);
       const penalRate = this.toNumber(invoice.penalCharges);
       const interestDayCount = this.getInterestDayCount(disbursementDate);
       const interestAmount = this.calculatePercentageAmount(disbursementAmount, interestRate, interestDayCount);
       const feeDue = this.calculatePercentageAmount(disbursementAmount, this.toNumber(invoice.serviceFee), interestDayCount);
-      const penalDue = interestDayCount > PENAL_START_DAY
-        ? this.calculatePercentageAmount(this.roundMoney(disbursementAmount + interestAmount), penalRate, interestDayCount)
-        : 0;
+      const overdueDayCount = this.getOverdueDayCount(dueDate);
+      const penalDue = this.calculatePercentageAmount(disbursementAmount, penalRate, overdueDayCount);
 
       const disbursement = await manager.getRepository(LoanDisbursement).save(
         manager.getRepository(LoanDisbursement).create({
