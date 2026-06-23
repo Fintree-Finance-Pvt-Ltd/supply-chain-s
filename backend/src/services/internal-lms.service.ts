@@ -542,8 +542,8 @@ export class InternalLmsService {
       available = this.roundMoney(available - amount);
     };
 
-    applyComponent('interest', this.toNumber(demand.interestDue), this.toNumber(demand.interestPaid));
     applyComponent('principal', this.toNumber(demand.principalDue), this.toNumber(demand.principalPaid));
+    applyComponent('interest', this.toNumber(demand.interestDue), this.toNumber(demand.interestPaid));
     applyComponent('penal', this.toNumber(demand.penalDue), this.toNumber(demand.penalPaid));
 
     return applied;
