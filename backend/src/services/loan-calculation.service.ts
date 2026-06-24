@@ -427,24 +427,6 @@ export class InternalLmsService {
         createdByUserId: userId ?? null,
       });
 
-      const nonPrincipalDemand = this.roundMoney(interestAmount + penalDue);
-      if (nonPrincipalDemand > 0) {
-        await this.createLedgerEntry(manager, {
-          loanAccountId: loanAccount.id,
-          lan: loanAccount.lanId,
-          entryType: LEDGER_ENTRY_TYPE.DEMAND,
-          debit: nonPrincipalDemand,
-          valueDate: disbursementDate,
-          loanDisbursementId: disbursement.id,
-          demandId: demand.id,
-          invoiceId: invoice.id,
-          referenceType: 'DEMAND',
-          referenceId: String(demand.id),
-          narration: `Interest and fee demand for invoice ${invoice.invoiceNumber}`,
-          createdByUserId: userId ?? null,
-        });
-      }
-
       invoice.roiAmount = interestAmount;
       invoice.emiAmount = totalDue;
       invoice.disbursedAmount = disbursementAmount;
@@ -899,9 +881,19 @@ export class InternalLmsService {
       order: { valueDate: 'ASC', id: 'ASC' },
     });
 
+    let runningBalance = 0;
+    const statementRows = entries
+      .filter(entry => entry.entryType !== LEDGER_ENTRY_TYPE.DEMAND)
+      .map(entry => {
+        runningBalance = this.roundMoney(
+          runningBalance + this.toNumber(entry.debit) - this.toNumber(entry.credit),
+        );
+        return { entry, runningBalance };
+      });
+
     const startTime = filters?.startDate ? this.toDateOnly(filters.startDate).getTime() : null;
     const endTime = filters?.endDate ? this.toDateOnly(filters.endDate).getTime() : null;
-    const filtered = entries.filter((entry) => {
+    const filtered = statementRows.filter(({ entry }) => {
       const valueTime = this.toDateOnly(entry.valueDate).getTime();
       if (startTime !== null && valueTime < startTime) return false;
       if (endTime !== null && valueTime > endTime) return false;
@@ -910,14 +902,14 @@ export class InternalLmsService {
 
     return {
       success: true,
-      data: filtered.map(entry => ({
+      data: filtered.map(({ entry, runningBalance }) => ({
         id: entry.id,
         lan: entry.lan,
         valueDate: entry.valueDate,
         entryType: entry.entryType,
         debit: this.toNumber(entry.debit),
         credit: this.toNumber(entry.credit),
-        runningBalance: this.toNumber(entry.runningBalance),
+        runningBalance,
         narration: entry.narration,
         referenceType: entry.referenceType,
         referenceId: entry.referenceId,
