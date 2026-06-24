@@ -33,6 +33,7 @@ type CollectionInput = {
 
 const CLOSED_DEMAND_STATUSES = [DEMAND_STATUS.PAID, DEMAND_STATUS.REVERSED];
 const DEFAULT_BILL_TENURE_DAYS = 90;
+const PENAL_START_DAY = 91;
 
 type AccruedDemandCharges = {
   principal: number;
@@ -83,7 +84,11 @@ export class InternalLmsService {
   }
 
   private calculatePercentageAmount(amount: number, annualRate: number, dayCount: number): number {
-    return this.roundMoney((amount * annualRate * dayCount) / (365 * 100));
+    return this.roundMoney(this.calculatePercentageAmountRaw(amount, annualRate, dayCount));
+  }
+
+  private calculatePercentageAmountRaw(amount: number, annualRate: number, dayCount: number): number {
+    return (amount * annualRate * dayCount) / (365 * 100);
   }
 
   private getInterestDayCount(disbursementDate: string | Date, asOfDate: string | Date = new Date()): number {
@@ -100,22 +105,46 @@ export class InternalLmsService {
     invoice: Invoice | null | undefined,
     asOfDate: string | Date = new Date(),
   ): AccruedDemandCharges {
-    const principal = this.roundMoney(Math.max(this.toNumber(demand.principalDue) - this.toNumber(demand.principalPaid), 0));
     const interestRate = this.toNumber(disbursement?.interestRate);
     const serviceFeeRate = this.toNumber(invoice?.serviceFee);
     const penalRate = this.toNumber(disbursement?.penalRate);
     const disbursementDate = disbursement?.disbursementDate || demand.demandDate;
     const dayCount = this.getInterestDayCount(disbursementDate, asOfDate);
-    const interestDue = this.calculatePercentageAmount(principal, interestRate, dayCount);
-    const feeDue = this.calculatePercentageAmount(principal, serviceFeeRate, dayCount);
-    const overdueDayCount = this.getOverdueDayCount(demand.dueDate, asOfDate);
-    const penalDue = this.calculatePercentageAmount(principal, penalRate, overdueDayCount);
+    const allocations = [...(demand.allocations || [])]
+      .filter(allocation => allocation.repayment?.status !== REPAYMENT_STATUS.REVERSED)
+      .sort((a, b) => {
+        const dateDiff = this.toDateOnly(a.allocationDate).getTime() - this.toDateOnly(b.allocationDate).getTime();
+        return dateDiff || this.toNumber(a.id) - this.toNumber(b.id);
+      });
+
+    let principal = this.roundMoney(this.toNumber(demand.principalDue));
+    let accumulatedInterest = 0;
+    let accumulatedFee = 0;
+    let accumulatedPenal = 0;
+    let allocationIndex = 0;
+
+    for (let day = 1; day <= dayCount; day += 1) {
+      const accrualDate = this.addDays(this.toDateOnly(disbursementDate), day);
+      while (
+        allocationIndex < allocations.length &&
+        this.toDateOnly(allocations[allocationIndex].allocationDate).getTime() <= accrualDate.getTime()
+      ) {
+        principal = this.roundMoney(Math.max(principal - this.toNumber(allocations[allocationIndex].principalAmount), 0));
+        allocationIndex += 1;
+      }
+
+      accumulatedInterest += this.calculatePercentageAmountRaw(principal, interestRate, 1);
+      accumulatedFee += this.calculatePercentageAmountRaw(principal, serviceFeeRate, 1);
+      if (day > PENAL_START_DAY) {
+        accumulatedPenal += this.calculatePercentageAmountRaw(principal + accumulatedInterest, penalRate, 1);
+      }
+    }
 
     return {
-      principal,
-      interestDue,
-      feeDue,
-      penalDue,
+      principal: this.roundMoney(principal),
+      interestDue: this.roundMoney(accumulatedInterest),
+      feeDue: this.roundMoney(accumulatedFee),
+      penalDue: this.roundMoney(accumulatedPenal),
       dayCount,
     };
   }
@@ -132,7 +161,7 @@ export class InternalLmsService {
         loanAccountId,
         status: Not(In(CLOSED_DEMAND_STATUSES)),
       },
-      relations: ['disbursement', 'invoice'],
+      relations: ['disbursement', 'invoice', 'allocations', 'allocations.repayment'],
       order: { dueDate: 'ASC', id: 'ASC' },
     });
 
@@ -144,8 +173,7 @@ export class InternalLmsService {
       const totalDue = this.roundMoney(
         this.toNumber(demand.principalDue) +
         charges.interestDue +
-        charges.penalDue +
-        charges.feeDue,
+        charges.penalDue,
       );
 
       demand.interestDue = charges.interestDue;
@@ -278,11 +306,24 @@ export class InternalLmsService {
       const tenureDays = Math.max(1, this.daysBetween(disbursementDate, dueDate));
       const interestRate = this.toNumber(invoice.roiPercentage);
       const penalRate = this.toNumber(invoice.penalCharges);
-      const interestDayCount = this.getInterestDayCount(disbursementDate);
-      const interestAmount = this.calculatePercentageAmount(disbursementAmount, interestRate, interestDayCount);
-      const feeDue = this.calculatePercentageAmount(disbursementAmount, this.toNumber(invoice.serviceFee), interestDayCount);
-      const overdueDayCount = this.getOverdueDayCount(dueDate);
-      const penalDue = this.calculatePercentageAmount(disbursementAmount, penalRate, overdueDayCount);
+      const initialCharges = this.calculateAccruedCharges(
+        {
+          principalDue: disbursementAmount,
+          principalPaid: 0,
+          demandDate: disbursementDate,
+          dueDate,
+          allocations: [],
+        } as unknown as LoanDemand,
+        {
+          disbursementDate,
+          interestRate,
+          penalRate,
+        } as LoanDisbursement,
+        invoice,
+      );
+      const interestAmount = initialCharges.interestDue;
+      const feeDue = initialCharges.feeDue;
+      const penalDue = initialCharges.penalDue;
 
       const disbursement = await manager.getRepository(LoanDisbursement).save(
         manager.getRepository(LoanDisbursement).create({
@@ -305,7 +346,7 @@ export class InternalLmsService {
       );
 
       const demandPrincipal = disbursementAmount;
-      const totalDue = this.roundMoney(demandPrincipal + interestAmount + penalDue + feeDue);
+      const totalDue = this.roundMoney(demandPrincipal + interestAmount + penalDue);
       const demand = await manager.getRepository(LoanDemand).save(
         manager.getRepository(LoanDemand).create({
           loanAccountId: loanAccount.id,
@@ -338,7 +379,7 @@ export class InternalLmsService {
         createdByUserId: userId ?? null,
       });
 
-      const nonPrincipalDemand = this.roundMoney(interestAmount + penalDue + feeDue);
+      const nonPrincipalDemand = this.roundMoney(interestAmount + penalDue);
       if (nonPrincipalDemand > 0) {
         await this.createLedgerEntry(manager, {
           loanAccountId: loanAccount.id,
@@ -600,7 +641,7 @@ export class InternalLmsService {
     const feeOutstanding = this.roundMoney(
       openDemands.reduce((sum, demand) => sum + Math.max(this.toNumber(demand.feeDue) - this.toNumber(demand.feePaid), 0), 0),
     );
-    const totalOutstanding = this.roundMoney(principalOutstanding + interestOutstanding + penalOutstanding + feeOutstanding);
+    const totalOutstanding = this.roundMoney(principalOutstanding + interestOutstanding + penalOutstanding);
     const totalCollected = this.roundMoney(
       repayments.reduce((sum, repayment) => sum + this.toNumber(repayment.amount), 0),
     );
