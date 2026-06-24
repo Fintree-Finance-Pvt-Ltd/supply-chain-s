@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { authMiddleware } from '../middlewares/auth.middleware';
 import { roleMiddleware } from '../middlewares/role.middleware';
 import { ROLES } from '../config/constants';
-import { internalLmsService } from '../services/internal-lms.service';
+import { internalLmsService } from '../services/loan-calculation.service';
 
 const router = Router();
 

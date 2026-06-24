@@ -9,7 +9,7 @@ import { LoanAccount } from "../entities/LoanAccount";
 import { CreditSanction } from "../entities/CreditSanction";
 import { Notification } from "../entities/Notification";
 import { NodemailerProvider } from "../integrations/notifications/email/nodemailer.provider";
-import { internalLmsService } from "./internal-lms.service";
+import { internalLmsService } from "./loan-calculation.service";
 import axios from "axios";
 import crypto from "crypto";
 

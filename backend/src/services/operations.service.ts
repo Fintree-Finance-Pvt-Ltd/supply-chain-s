@@ -21,7 +21,7 @@ import {
 import { EntityManager, In, Repository } from 'typeorm';
 import { ApprovalService } from './approval.service';
 import { ADDRESS_TYPES, CASE_STATUS, COMPANY_TYPES, KYC_TYPES } from '../config/constants';
-import { internalLmsService } from './internal-lms.service';
+import { internalLmsService } from './loan-calculation.service';
 import axios from 'axios';
 import path from 'path';
 import * as yauzl from 'yauzl';

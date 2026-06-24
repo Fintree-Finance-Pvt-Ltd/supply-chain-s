@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import { CustomerService } from '../services/customer.service';
 import { TaskDistributionService } from '../services/task-distribution.service';
 import { LMSDataSource } from '../config/lmsDatabase';
-import { internalLmsService } from '../services/internal-lms.service';
+import { internalLmsService } from '../services/loan-calculation.service';
 
 export class CustomerController {
   private customerService: CustomerService;
