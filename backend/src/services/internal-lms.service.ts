@@ -22,6 +22,11 @@ type MoneyBreakup = {
   fee: number;
 };
 
+type AccrualRules = {
+  includeDisbursementDate: boolean;
+  penalStartDay: number;
+};
+
 type CollectionInput = {
   lan: string;
   collectionDate: string | Date;
@@ -33,7 +38,14 @@ type CollectionInput = {
 
 const CLOSED_DEMAND_STATUSES = [DEMAND_STATUS.PAID, DEMAND_STATUS.REVERSED];
 const DEFAULT_BILL_TENURE_DAYS = 90;
-const PENAL_START_DAY = 91;
+const DEFAULT_ACCRUAL_RULES: AccrualRules = {
+  includeDisbursementDate: false,
+  penalStartDay: 92,
+};
+const MUTHOOT_ACCRUAL_RULES: AccrualRules = {
+  includeDisbursementDate: true,
+  penalStartDay: 90,
+};
 
 type AccruedDemandCharges = {
   principal: number;
@@ -91,12 +103,38 @@ export class InternalLmsService {
     return (amount * annualRate * dayCount) / (365 * 100);
   }
 
-  private getInterestDayCount(disbursementDate: string | Date, asOfDate: string | Date = new Date()): number {
-    return Math.max(1, this.daysBetween(this.toDateOnly(disbursementDate), this.toDateOnly(asOfDate)));
+  private getInterestDayCount(
+    disbursementDate: string | Date,
+    asOfDate: string | Date = new Date(),
+    rules: AccrualRules = DEFAULT_ACCRUAL_RULES,
+  ): number {
+    const elapsedDays = this.daysBetween(this.toDateOnly(disbursementDate), this.toDateOnly(asOfDate));
+    return rules.includeDisbursementDate ? elapsedDays + 1 : Math.max(1, elapsedDays);
   }
 
   private getOverdueDayCount(dueDate: string | Date, asOfDate: string | Date = new Date()): number {
     return Math.max(0, this.daysBetween(this.toDateOnly(dueDate), this.toDateOnly(asOfDate)));
+  }
+
+  private getAccrualDate(disbursementDate: string | Date, day: number, rules: AccrualRules): Date {
+    return this.addDays(this.toDateOnly(disbursementDate), rules.includeDisbursementDate ? day - 1 : day);
+  }
+
+  private isMuthootLoanAccount(loanAccount: LoanAccount | null | undefined): boolean {
+    const values = [
+      loanAccount?.partner?.code,
+      loanAccount?.partner?.name,
+      loanAccount?.partner?.lanPrefix,
+      loanAccount?.lender,
+    ]
+      .filter(Boolean)
+      .map(value => String(value).trim().toUpperCase());
+
+    return values.some(value => value === 'MFL' || value.includes('MUTHOOT'));
+  }
+
+  private getAccrualRules(loanAccount: LoanAccount | null | undefined): AccrualRules {
+    return this.isMuthootLoanAccount(loanAccount) ? MUTHOOT_ACCRUAL_RULES : DEFAULT_ACCRUAL_RULES;
   }
 
   private calculateAccruedCharges(
@@ -104,12 +142,13 @@ export class InternalLmsService {
     disbursement: LoanDisbursement | null | undefined,
     invoice: Invoice | null | undefined,
     asOfDate: string | Date = new Date(),
+    rules: AccrualRules = DEFAULT_ACCRUAL_RULES,
   ): AccruedDemandCharges {
     const interestRate = this.toNumber(disbursement?.interestRate);
     const serviceFeeRate = this.toNumber(invoice?.serviceFee);
     const penalRate = this.toNumber(disbursement?.penalRate);
     const disbursementDate = disbursement?.disbursementDate || demand.demandDate;
-    const dayCount = this.getInterestDayCount(disbursementDate, asOfDate);
+    const dayCount = this.getInterestDayCount(disbursementDate, asOfDate, rules);
     const allocations = [...(demand.allocations || [])]
       .filter(allocation => allocation.repayment?.status !== REPAYMENT_STATUS.REVERSED)
       .sort((a, b) => {
@@ -124,7 +163,7 @@ export class InternalLmsService {
     let allocationIndex = 0;
 
     for (let day = 1; day <= dayCount; day += 1) {
-      const accrualDate = this.addDays(this.toDateOnly(disbursementDate), day);
+      const accrualDate = this.getAccrualDate(disbursementDate, day, rules);
       while (
         allocationIndex < allocations.length &&
         this.toDateOnly(allocations[allocationIndex].allocationDate).getTime() <= accrualDate.getTime()
@@ -135,7 +174,7 @@ export class InternalLmsService {
 
       accumulatedInterest += this.calculatePercentageAmountRaw(principal, interestRate, 1);
       accumulatedFee += this.calculatePercentageAmountRaw(principal, serviceFeeRate, 1);
-      if (day > PENAL_START_DAY) {
+      if (day >= rules.penalStartDay) {
         accumulatedPenal += this.calculatePercentageAmountRaw(principal + accumulatedInterest, penalRate, 1);
       }
     }
@@ -156,6 +195,11 @@ export class InternalLmsService {
   ): Promise<void> {
     const demandRepository = manager.getRepository(LoanDemand);
     const disbursementRepository = manager.getRepository(LoanDisbursement);
+    const loanAccount = await manager.getRepository(LoanAccount).findOne({
+      where: { id: loanAccountId },
+      relations: ['partner'],
+    });
+    const accrualRules = this.getAccrualRules(loanAccount);
     const openDemands = await demandRepository.find({
       where: {
         loanAccountId,
@@ -169,7 +213,7 @@ export class InternalLmsService {
       const disbursement = demand.disbursement || await disbursementRepository.findOne({
         where: { id: demand.loanDisbursementId },
       });
-      const charges = this.calculateAccruedCharges(demand, disbursement, demand.invoice, asOfDate);
+      const charges = this.calculateAccruedCharges(demand, disbursement, demand.invoice, asOfDate, accrualRules);
       const totalDue = this.roundMoney(
         this.toNumber(demand.principalDue) +
         charges.interestDue +
@@ -280,7 +324,7 @@ export class InternalLmsService {
 
       const invoice = await manager.getRepository(Invoice).findOne({
         where: { id: invoiceId },
-        relations: ['loanAccount', 'supplier', 'customer'],
+        relations: ['loanAccount', 'loanAccount.partner', 'supplier', 'customer'],
       });
       console.log(invoice)
       if (!invoice) throw new Error('Invoice not found for internal LMS booking');
@@ -290,6 +334,7 @@ export class InternalLmsService {
 
       const loanAccount = invoice.loanAccount || await manager.getRepository(LoanAccount).findOne({
         where: { id: invoice.loanAccountId },
+        relations: ['partner'],
       });
       if (!loanAccount) throw new Error('Loan account not found for internal LMS booking');
       if (String(loanAccount.status || '').toLowerCase() !== 'active') {
@@ -306,6 +351,7 @@ export class InternalLmsService {
       const tenureDays = Math.max(1, this.daysBetween(disbursementDate, dueDate));
       const interestRate = this.toNumber(invoice.roiPercentage);
       const penalRate = this.toNumber(invoice.penalCharges);
+      const accrualRules = this.getAccrualRules(loanAccount);
       const initialCharges = this.calculateAccruedCharges(
         {
           principalDue: disbursementAmount,
@@ -320,6 +366,8 @@ export class InternalLmsService {
           penalRate,
         } as LoanDisbursement,
         invoice,
+        new Date(),
+        accrualRules,
       );
       const interestAmount = initialCharges.interestDue;
       const feeDue = initialCharges.feeDue;
