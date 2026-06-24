@@ -224,14 +224,15 @@ const handleLANChange = async (lanId) => {
         console.log('✅ Response:', ratesResponse.data);
         
         if (ratesResponse.data?.success) {
+          const data = ratesResponse.data.data || {};
           setFormData(prev => ({
             ...prev,
-            roiPercentage: ratesResponse.data.data.roi || '',
-              penalCharges: ratesResponse.data.data.penalCharges || '',
-            serviceFee: ratesResponse.data.data.serviceFee || '',
-            sanctionAmount: ratesResponse.data.data.sanctionAmount || '',
-          utilizedAmount: ratesResponse.data.data.utilizedLimit || '',
-          unutilizedAmount: ratesResponse.data.data.unutilizedLimit || '',
+            roiPercentage: data.roi || '',
+              penalCharges: data.penalCharges || '',
+            serviceFee: data.serviceFee || '',
+            sanctionAmount: data.sanctionAmount || '',
+          utilizedAmount: data.utilizedLimit || '',
+          unutilizedAmount: data.unutilizedLimit || '',
           }));
 
 // ✅ set limit card values

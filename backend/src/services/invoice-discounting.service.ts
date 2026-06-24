@@ -367,6 +367,145 @@ export class InvoiceDiscountingService {
     return await this.historyRepository.save(history);
   }
 
+  private toNumber(value: unknown): number {
+    if (value === null || value === undefined || value === "") return 0;
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  private roundMoney(value: number): number {
+    return Number(value.toFixed(2));
+  }
+
+  private escapeRegExp(value: string): string {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  }
+
+  private normalizeInvoiceNumber(invoiceNumber: string): string {
+    return String(invoiceNumber || "").trim();
+  }
+
+  private async resolveSplitBaseInvoiceNumber(params: {
+    supplierId: number;
+    loanAccountId: number;
+    invoiceNumber: string;
+    invoiceDate: string | Date;
+    excludeInvoiceId?: number;
+  }): Promise<string> {
+    const invoiceNumber = this.normalizeInvoiceNumber(params.invoiceNumber);
+    const suffixMatch = invoiceNumber.match(/^(.*)_(\d+)$/);
+    if (!suffixMatch || !suffixMatch[1]) return invoiceNumber;
+
+    const query = this.invoiceRepository
+      .createQueryBuilder("invoice")
+      .where("invoice.supplierId = :supplierId", { supplierId: params.supplierId })
+      .andWhere("invoice.loanAccountId = :loanAccountId", { loanAccountId: params.loanAccountId })
+      .andWhere("invoice.invoiceNumber = :invoiceNumber", { invoiceNumber: suffixMatch[1] })
+      .andWhere("DATE(invoice.invoiceDate) = DATE(:invoiceDate)", { invoiceDate: params.invoiceDate });
+
+    if (params.excludeInvoiceId) {
+      query.andWhere("invoice.id != :excludeInvoiceId", { excludeInvoiceId: params.excludeInvoiceId });
+    }
+
+    const baseInvoice = await query.getOne();
+    return baseInvoice ? suffixMatch[1] : invoiceNumber;
+  }
+
+  private async getSplitInvoices(params: {
+    supplierId: number;
+    loanAccountId: number;
+    invoiceNumber: string;
+    invoiceDate: string | Date;
+    excludeInvoiceId?: number;
+  }): Promise<{ baseInvoiceNumber: string; invoices: Invoice[] }> {
+    const baseInvoiceNumber = await this.resolveSplitBaseInvoiceNumber(params);
+    const rows = await this.invoiceRepository
+      .createQueryBuilder("invoice")
+      .where("invoice.supplierId = :supplierId", { supplierId: params.supplierId })
+      .andWhere("invoice.loanAccountId = :loanAccountId", { loanAccountId: params.loanAccountId })
+      .andWhere("DATE(invoice.invoiceDate) = DATE(:invoiceDate)", { invoiceDate: params.invoiceDate })
+      .andWhere(
+        "(invoice.invoiceNumber = :invoiceNumber OR invoice.invoiceNumber LIKE :likeInvoice)",
+        {
+          invoiceNumber: baseInvoiceNumber,
+          likeInvoice: `${baseInvoiceNumber}_%`,
+        },
+      )
+      .getMany();
+
+    const splitPrefix = `${baseInvoiceNumber}_`;
+    const invoices = rows.filter((invoice) => {
+      const invoiceNumber = this.normalizeInvoiceNumber(invoice.invoiceNumber);
+      if (invoiceNumber === baseInvoiceNumber) return true;
+      if (!invoiceNumber.startsWith(splitPrefix)) return false;
+      return /^\d+$/.test(invoiceNumber.slice(splitPrefix.length));
+    });
+
+    return { baseInvoiceNumber, invoices };
+  }
+
+  private async validateSplitInvoiceDisbursement(params: {
+    supplierId: number;
+    loanAccountId: number;
+    invoiceNumber: string;
+    invoiceDate: string | Date;
+    invoiceAmount: number;
+    disbursementAmount: number;
+    excludeInvoiceId?: number;
+  }): Promise<{ baseInvoiceNumber: string; existingInvoices: Invoice[] }> {
+    const invoiceAmount = this.roundMoney(this.toNumber(params.invoiceAmount));
+    const disbursementAmount = this.roundMoney(this.toNumber(params.disbursementAmount));
+
+    if (!this.normalizeInvoiceNumber(params.invoiceNumber)) {
+      throw new Error("Invoice number is required");
+    }
+    if (!params.invoiceDate) {
+      throw new Error("Invoice date is required");
+    }
+    if (invoiceAmount <= 0) {
+      throw new Error("Invoice amount must be greater than zero");
+    }
+    if (disbursementAmount <= 0) {
+      throw new Error("Disbursement amount must be greater than zero");
+    }
+    if (disbursementAmount > invoiceAmount) {
+      throw new Error("Disbursement amount cannot exceed invoice amount");
+    }
+
+    const { baseInvoiceNumber, invoices } = await this.getSplitInvoices(params);
+    const validExistingInvoices = invoices.filter((invoice) => {
+      if (params.excludeInvoiceId && invoice.id === params.excludeInvoiceId) return false;
+      return !["REJECTED", "REJECTED_BY_CUSTOMER"].includes(String(invoice.status || "").toUpperCase());
+    });
+
+    const referenceInvoice = validExistingInvoices[0];
+    if (referenceInvoice) {
+      const existingInvoiceAmount = this.roundMoney(this.toNumber(referenceInvoice.invoiceAmount));
+      if (Math.abs(existingInvoiceAmount - invoiceAmount) > 0.01) {
+        throw new Error(
+          `Invoice amount must match existing split invoice amount (${existingInvoiceAmount})`,
+        );
+      }
+    }
+
+    const alreadyUtilized = this.roundMoney(
+      validExistingInvoices.reduce(
+        (sum, invoice) => sum + this.toNumber(invoice.disbursementAmount),
+        0,
+      ),
+    );
+    const totalRequested = this.roundMoney(alreadyUtilized + disbursementAmount);
+
+    if (totalRequested > invoiceAmount + 0.01) {
+      const remainingAllowed = this.roundMoney(Math.max(invoiceAmount - alreadyUtilized, 0));
+      throw new Error(
+        `Total disbursement for invoice ${baseInvoiceNumber} cannot exceed invoice amount. Invoice Amount: ${invoiceAmount}, Already Utilized: ${alreadyUtilized}, Requested: ${disbursementAmount}, Remaining Allowed: ${remainingAllowed}`,
+      );
+    }
+
+    return { baseInvoiceNumber, existingInvoices: invoices };
+  }
+
   // STEP 1: RM - Get Customer and LAN Selection
   async getCustomersByRM(rmId: number) {
     return this.customerRepository.find({
@@ -460,7 +599,7 @@ export class InvoiceDiscountingService {
     }
 
 
-const existingInvoices = await this.invoiceRepository
+let existingInvoices = await this.invoiceRepository
   .createQueryBuilder("invoice")
   .where("invoice.supplierId = :supplierId", {
     supplierId: data.supplierId,
@@ -483,18 +622,29 @@ const existingInvoices = await this.invoiceRepository
 
   .getMany();
 
-let finalInvoiceNumber = data.invoiceNumber;
+const splitValidation = await this.validateSplitInvoiceDisbursement({
+  supplierId: data.supplierId,
+  loanAccountId: data.loanAccountId,
+  invoiceNumber: data.invoiceNumber,
+  invoiceDate: data.invoiceDate,
+  invoiceAmount: data.invoiceAmount,
+  disbursementAmount: data.disbursementAmount,
+});
+const baseInvoiceNumber = splitValidation.baseInvoiceNumber;
+existingInvoices = splitValidation.existingInvoices;
+
+let finalInvoiceNumber = baseInvoiceNumber;
 if (existingInvoices.length > 0) {
   let maxSuffix = 0;
   existingInvoices.forEach((inv) => {
-    const regex = new RegExp(`^${data.invoiceNumber}_(\\d+)$`);
+    const regex = new RegExp(`^${this.escapeRegExp(baseInvoiceNumber)}_(\\d+)$`);
     const match = inv.invoiceNumber.match(regex);
     if (match) {
       const suffix = parseInt(match[1]);
       if (suffix > maxSuffix) maxSuffix = suffix;
     }
   });
-  finalInvoiceNumber = `${data.invoiceNumber}_${maxSuffix + 1}`;
+  finalInvoiceNumber = `${baseInvoiceNumber}_${maxSuffix + 1}`;
 }
 //  If already exists
 // if (existingInvoices.length > 0) {
@@ -595,6 +745,15 @@ if (existingInvoices.length > 0) {
     if (invoice.status !== "DRAFT") {
       throw new Error("Can only save draft invoices");
     }
+    await this.validateSplitInvoiceDisbursement({
+      supplierId: invoice.supplierId,
+      loanAccountId: invoice.loanAccountId,
+      invoiceNumber: data.invoiceNumber ?? invoice.invoiceNumber,
+      invoiceDate: data.invoiceDate ?? invoice.invoiceDate,
+      invoiceAmount: data.invoiceAmount ?? invoice.invoiceAmount,
+      disbursementAmount: data.disbursementAmount ?? invoice.disbursementAmount,
+      excludeInvoiceId: invoice.id,
+    });
     Object.assign(invoice, data);
     if (data.invoiceDate) {
       invoice.invoiceDate = new Date(data.invoiceDate);
