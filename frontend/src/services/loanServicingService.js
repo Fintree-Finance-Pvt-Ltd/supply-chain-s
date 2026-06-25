@@ -5,8 +5,17 @@ const buildQuery = (filters = {}) => {
   const params = new URLSearchParams()
   if (filters.startDate) params.append('startDate', filters.startDate)
   if (filters.endDate) params.append('endDate', filters.endDate)
+  if (filters.asOfDate) params.append('asOfDate', filters.asOfDate)
+  if (filters.lan) params.append('lan', filters.lan)
   const query = params.toString()
   return query ? `?${query}` : ''
+}
+
+const SCF_REPORT_ENDPOINTS = {
+  fifteenDay: API_ENDPOINTS.LOAN_SERVICING_SCF_15D_REPORT_EXPORT,
+  asOfNow: API_ENDPOINTS.LOAN_SERVICING_SCF_AS_OF_NOW_REPORT_EXPORT,
+  collections: API_ENDPOINTS.LOAN_SERVICING_SCF_COLLECTION_REPORT_EXPORT,
+  soa: API_ENDPOINTS.LOAN_SERVICING_SCF_SOA_REPORT_EXPORT,
 }
 
 export const loanServicingService = {
@@ -43,5 +52,18 @@ export const loanServicingService = {
   getCollectionDetail: async (lan, utr) => {
     const response = await api.get(API_ENDPOINTS.LOAN_SERVICING_COLLECTION_DETAIL(lan, utr))
     return response.data
+  },
+
+  downloadScfReport: async (reportType, filters = {}) => {
+    const endpoint = SCF_REPORT_ENDPOINTS[reportType]
+    if (!endpoint) {
+      throw new Error('Unknown SCF report type')
+    }
+
+    const response = await api.get(
+      `${endpoint}${buildQuery(filters)}`,
+      { responseType: 'blob' },
+    )
+    return response
   },
 }

@@ -155,6 +155,10 @@ DASHBOARD_OPERATIONS_SUPPLIERS: '/workflows/suppliers/dashboard/operations',
   LOAN_SERVICING_PORTFOLIO_REPORT: '/loan-servicing/reports/portfolio',
   LOAN_SERVICING_DISBURSEMENT_REPORT: '/loan-servicing/reports/disbursements',
   LOAN_SERVICING_COLLECTION_REPORT: '/loan-servicing/reports/collections',
+  LOAN_SERVICING_SCF_15D_REPORT_EXPORT: '/loan-servicing/reports/scf-15d/export',
+  LOAN_SERVICING_SCF_AS_OF_NOW_REPORT_EXPORT: '/loan-servicing/reports/scf-as-of-now/export',
+  LOAN_SERVICING_SCF_COLLECTION_REPORT_EXPORT: '/loan-servicing/reports/scf-collections/export',
+  LOAN_SERVICING_SCF_SOA_REPORT_EXPORT: '/loan-servicing/reports/scf-soa/export',
 
   // Onboarding Integrations
   ONBOARDING_MOBILE_SEND_OTP: '/onboarding/mobile/send-otp',

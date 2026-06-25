@@ -21,6 +21,39 @@ const REPORT_ROLES = [
   ROLES.CFO,
 ];
 
+const getReportFilters = (req: Request) => ({
+  startDate: req.query.startDate as string | undefined,
+  endDate: req.query.endDate as string | undefined,
+  asOfDate: req.query.asOfDate as string | undefined,
+  lan: req.query.lan ? String(req.query.lan).trim().toUpperCase() : undefined,
+});
+
+const getLoanSpecificReportFilters = (req: Request): {
+  startDate?: string;
+  endDate?: string;
+  asOfDate?: string;
+  lan: string;
+} => {
+  const filters = getReportFilters(req);
+  if (!filters.lan) {
+    throw new Error('LAN is required for SCF report export');
+  }
+  return { ...filters, lan: filters.lan };
+};
+
+const getSafeFilePrefix = (value: string): string => String(value || 'loan').replace(/[^a-z0-9_-]/gi, '_');
+
+const sendWorkbook = (res: Response, workbook: Buffer, fileName: string): void => {
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+  res.send(workbook);
+};
+
+const sendReportError = (res: Response, error: any, fallbackMessage: string): void => {
+  const message = error.message || fallbackMessage;
+  res.status(message.includes('LAN is required') ? 400 : 500).json({ success: false, message });
+};
+
 router.use(authMiddleware);
 
 router.post(
@@ -158,6 +191,62 @@ router.get(
       res.json(result);
     } catch (error: any) {
       res.status(500).json({ success: false, message: error.message || 'Failed to fetch collection report' });
+    }
+  },
+);
+
+router.get(
+  '/reports/scf-15d/export',
+  roleMiddleware(REPORT_ROLES),
+  async (req: Request, res: Response) => {
+    try {
+      const filters = getLoanSpecificReportFilters(req);
+      const workbook = await internalLmsService.generateScf15DReportWorkbook(filters);
+      sendWorkbook(res, workbook, `${getSafeFilePrefix(filters.lan)}_SCF_15D_Report.xlsx`);
+    } catch (error: any) {
+      sendReportError(res, error, 'Failed to generate SCF 15D report');
+    }
+  },
+);
+
+router.get(
+  '/reports/scf-as-of-now/export',
+  roleMiddleware(REPORT_ROLES),
+  async (req: Request, res: Response) => {
+    try {
+      const filters = getLoanSpecificReportFilters(req);
+      const workbook = await internalLmsService.generateScfAsOfNowReportWorkbook(filters);
+      sendWorkbook(res, workbook, `${getSafeFilePrefix(filters.lan)}_SCF_As_of_Now_Format.xlsx`);
+    } catch (error: any) {
+      sendReportError(res, error, 'Failed to generate SCF as-of-now report');
+    }
+  },
+);
+
+router.get(
+  '/reports/scf-collections/export',
+  roleMiddleware(REPORT_ROLES),
+  async (req: Request, res: Response) => {
+    try {
+      const filters = getLoanSpecificReportFilters(req);
+      const workbook = await internalLmsService.generateScfCollectionReportWorkbook(filters);
+      sendWorkbook(res, workbook, `${getSafeFilePrefix(filters.lan)}_SCF_Collection_Format.xlsx`);
+    } catch (error: any) {
+      sendReportError(res, error, 'Failed to generate SCF collection report');
+    }
+  },
+);
+
+router.get(
+  '/reports/scf-soa/export',
+  roleMiddleware(REPORT_ROLES),
+  async (req: Request, res: Response) => {
+    try {
+      const filters = getLoanSpecificReportFilters(req);
+      const workbook = await internalLmsService.generateScfSoaReportWorkbook(filters);
+      sendWorkbook(res, workbook, `${getSafeFilePrefix(filters.lan)}_SCF_SOA.xlsx`);
+    } catch (error: any) {
+      sendReportError(res, error, 'Failed to generate SCF SOA report');
     }
   },
 );

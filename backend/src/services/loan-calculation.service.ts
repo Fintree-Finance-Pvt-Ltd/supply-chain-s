@@ -36,6 +36,20 @@ type CollectionInput = {
   userId?: number | null;
 };
 
+type ScfReportFilters = {
+  startDate?: string;
+  endDate?: string;
+  asOfDate?: string;
+  lan?: string;
+};
+
+type WorkbookCellValue = string | number | Date | null | undefined;
+
+type WorkbookSheet = {
+  name: string;
+  rows: WorkbookCellValue[][];
+};
+
 const CLOSED_DEMAND_STATUSES = [DEMAND_STATUS.PAID, DEMAND_STATUS.REVERSED];
 const DEFAULT_BILL_TENURE_DAYS = 90;
 const DEFAULT_ACCRUAL_RULES: AccrualRules = {
@@ -64,6 +78,7 @@ export class InternalLmsService {
   private allocationRepository = AppDataSource.getRepository(RepaymentAllocation);
   private ledgerRepository = AppDataSource.getRepository(LoanLedgerEntry);
   private snapshotRepository = AppDataSource.getRepository(LoanAccountSnapshot);
+  private crc32Table: number[] | null = null;
 
   private toNumber(value: unknown): number {
     const parsed = Number(value || 0);
@@ -1001,6 +1016,465 @@ export class InternalLmsService {
     };
   }
 
+  private getScfReportAsOfDate(filters?: ScfReportFilters): Date {
+    return filters?.asOfDate ? this.toDateOnly(filters.asOfDate) : this.toDateOnly(new Date());
+  }
+
+  private getRequiredScfReportLan(filters?: ScfReportFilters): string {
+    const cleanLan = String(filters?.lan || '').trim().toUpperCase();
+    if (!cleanLan) {
+      throw new Error('LAN is required for SCF report export');
+    }
+    return cleanLan;
+  }
+
+  private getCustomerCode(loanAccount: LoanAccount | null | undefined): string | null {
+    return loanAccount?.customer?.customerCode || null;
+  }
+
+  private getCustomerName(loanAccount: LoanAccount | null | undefined): string | null {
+    const customer = loanAccount?.customer;
+    return customer?.companyName || customer?.customerName || customer?.name || null;
+  }
+
+  private formatDateDmy(value: string | Date): string {
+    const date = this.toDateOnly(value);
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const year = date.getFullYear();
+    return `${day}-${month}-${year}`;
+  }
+
+  private async getRequiredScfLoanAccount(filters?: ScfReportFilters): Promise<LoanAccount> {
+    const cleanLan = this.getRequiredScfReportLan(filters);
+    const loanAccount = await this.loanAccountRepository.findOne({
+      where: { lanId: cleanLan },
+      relations: ['customer', 'partner'],
+    });
+    if (!loanAccount) throw new Error(`LAN ${cleanLan} not found`);
+    return loanAccount;
+  }
+
+  private getProductName(loanAccount: LoanAccount | null | undefined): string {
+    return loanAccount?.partner?.name || loanAccount?.partner?.code || loanAccount?.lender || 'SCF';
+  }
+
+  private getInvoiceDisplayId(demand: LoanDemand | null | undefined): string | number | null {
+    return demand?.invoice?.invoiceNumber || demand?.invoiceId || null;
+  }
+
+  private getAllocationTotals(demand: LoanDemand, asOfDate: Date): MoneyBreakup & { total: number; lastPaymentDate: Date | null } {
+    const asOfTime = this.toDateOnly(asOfDate).getTime();
+    const allocations = [...(demand.allocations || [])]
+      .filter(allocation => allocation.repayment?.status !== REPAYMENT_STATUS.REVERSED)
+      .filter(allocation => this.toDateOnly(allocation.allocationDate).getTime() <= asOfTime)
+      .sort((a, b) => {
+        const dateDiff = this.toDateOnly(a.allocationDate).getTime() - this.toDateOnly(b.allocationDate).getTime();
+        return dateDiff || this.toNumber(a.id) - this.toNumber(b.id);
+      });
+
+    return {
+      principal: this.roundMoney(allocations.reduce((sum, allocation) => sum + this.toNumber(allocation.principalAmount), 0)),
+      interest: this.roundMoney(allocations.reduce((sum, allocation) => sum + this.toNumber(allocation.interestAmount), 0)),
+      penal: this.roundMoney(allocations.reduce((sum, allocation) => sum + this.toNumber(allocation.penalAmount), 0)),
+      fee: this.roundMoney(allocations.reduce((sum, allocation) => sum + this.toNumber(allocation.feeAmount), 0)),
+      total: this.roundMoney(allocations.reduce((sum, allocation) => sum + this.toNumber(allocation.totalAmount), 0)),
+      lastPaymentDate: allocations.length > 0 ? allocations[allocations.length - 1].allocationDate : null,
+    };
+  }
+
+  private buildScfDemandState(demand: LoanDemand, asOfDate: Date): any {
+    const loanAccount = demand.loanAccount;
+    const disbursement = demand.disbursement || null;
+    const disbursementDate = disbursement?.disbursementDate || demand.demandDate;
+    const rules = this.getAccrualRules(loanAccount);
+    const charges = this.calculateAccruedCharges(demand, disbursement, demand.invoice, asOfDate, rules);
+    const allocations = this.getAllocationTotals(demand, asOfDate);
+    const interestAccrued = this.toNumber(charges.interestDue);
+    const chargesAccrued = this.toNumber(charges.penalDue);
+    const interestOutstanding = this.roundMoney(Math.max(interestAccrued - allocations.interest, 0));
+    const chargesOutstanding = this.roundMoney(Math.max(chargesAccrued - allocations.penal, 0));
+    const principalOutstanding = this.roundMoney(Math.max(charges.principal, 0));
+
+    return {
+      customerCode: this.getCustomerCode(loanAccount),
+      customerName: this.getCustomerName(loanAccount),
+      product: this.getProductName(loanAccount),
+      lan: demand.lan,
+      invoiceId: this.getInvoiceDisplayId(demand),
+      status: demand.status,
+      dueDate: demand.dueDate,
+      dpd: this.getOverdueDayCount(demand.dueDate, asOfDate),
+      disbursementDate,
+      disbursementAmount: disbursement ? this.toNumber(disbursement.disbursementAmount) : this.toNumber(demand.principalDue),
+      principalOutstanding,
+      roi: this.toNumber(disbursement?.interestRate ?? demand.invoice?.roiPercentage),
+      penalRate: this.toNumber(disbursement?.penalRate ?? demand.invoice?.penalCharges),
+      lastPaymentDate: allocations.lastPaymentDate,
+      calculationTill: asOfDate,
+      interestDays: charges.dayCount,
+      interest: interestOutstanding,
+      previousInterest: allocations.interest,
+      chargesDays: Math.max(0, charges.dayCount - rules.penalStartDay + 1),
+      charges: chargesOutstanding,
+      previousCharges: allocations.penal,
+      principalSettled: allocations.principal,
+      interestSettled: allocations.interest,
+      chargesSettled: allocations.penal,
+      totalSettled: allocations.total,
+      principalDue: principalOutstanding,
+      interestDue: interestOutstanding,
+      chargesDue: chargesOutstanding,
+      totalOutstanding: this.roundMoney(principalOutstanding + interestOutstanding + chargesOutstanding),
+      demand,
+    };
+  }
+
+  private async getScfDemandStates(
+    filters?: ScfReportFilters,
+    options?: { dueWithinDays?: number; onlyOutstanding?: boolean },
+  ): Promise<any[]> {
+    const asOfDate = this.getScfReportAsOfDate(filters);
+    const cleanLan = this.getRequiredScfReportLan(filters);
+    const where: any = { status: Not(In([DEMAND_STATUS.REVERSED])) };
+    where.lan = cleanLan;
+
+    const demands = await this.demandRepository.find({
+      where,
+      relations: [
+        'loanAccount',
+        'loanAccount.customer',
+        'loanAccount.partner',
+        'invoice',
+        'disbursement',
+        'allocations',
+        'allocations.repayment',
+      ],
+      order: { dueDate: 'ASC', id: 'ASC' },
+    });
+
+    let filteredDemands = this.filterByDateRange(demands, 'dueDate', filters);
+    if (options?.dueWithinDays && !filters?.startDate && !filters?.endDate) {
+      const asOfTime = asOfDate.getTime();
+      const dueWindowEnd = this.addDays(asOfDate, options.dueWithinDays).getTime();
+      filteredDemands = filteredDemands.filter((demand) => {
+        const dueTime = this.toDateOnly(demand.dueDate).getTime();
+        return dueTime >= asOfTime && dueTime <= dueWindowEnd;
+      });
+    }
+
+    const rows = filteredDemands.map(demand => this.buildScfDemandState(demand, asOfDate));
+    if (options?.onlyOutstanding === false) return rows;
+    return rows.filter(row => this.toNumber(row.totalOutstanding) > 0);
+  }
+
+  private async getScfCollectionRows(filters?: ScfReportFilters): Promise<any[]> {
+    const cleanLan = this.getRequiredScfReportLan(filters);
+    const where: any = { lan: cleanLan };
+
+    const allocations = await this.allocationRepository.find({
+      where,
+      relations: [
+        'repayment',
+        'demand',
+        'demand.loanAccount',
+        'demand.loanAccount.customer',
+        'demand.loanAccount.partner',
+        'demand.invoice',
+        'demand.disbursement',
+        'demand.allocations',
+        'demand.allocations.repayment',
+        'invoice',
+      ],
+      order: { allocationDate: 'ASC', repaymentId: 'ASC', id: 'ASC' },
+    });
+
+    const startTime = filters?.startDate ? this.toDateOnly(filters.startDate).getTime() : null;
+    const endTime = filters?.endDate ? this.toDateOnly(filters.endDate).getTime() : null;
+
+    return allocations
+      .filter(allocation => allocation.repayment?.status !== REPAYMENT_STATUS.REVERSED)
+      .filter((allocation) => {
+        const collectionDate = allocation.repayment?.repaymentDate || allocation.allocationDate;
+        const time = this.toDateOnly(collectionDate).getTime();
+        if (startTime !== null && time < startTime) return false;
+        if (endTime !== null && time > endTime) return false;
+        return true;
+      })
+      .map((allocation) => {
+        const demand = allocation.demand;
+        const repayment = allocation.repayment;
+        const collectionDate = repayment?.repaymentDate || allocation.allocationDate;
+        const state = this.buildScfDemandState(demand, this.toDateOnly(collectionDate));
+        return {
+          customerCode: state.customerCode,
+          lan: allocation.lan,
+          transactionSerial: repayment?.id || allocation.repaymentId,
+          product: state.product,
+          collectionDate,
+          collectionSerial: repayment?.utr || null,
+          collectionAmount: this.toNumber(repayment?.amount),
+          amountRemaining: this.toNumber(repayment?.unappliedAmount),
+          amountUsed: this.toNumber(allocation.totalAmount),
+          invoiceNumber: allocation.invoice?.invoiceNumber || state.invoiceId,
+          disbursementDate: state.disbursementDate,
+          lastPaymentDate: state.lastPaymentDate || collectionDate,
+          principal: this.toNumber(allocation.principalAmount),
+          tenureUpdated: state.interestDays,
+          interest: this.toNumber(allocation.interestAmount),
+          previousInterestAccrued: state.previousInterest,
+          charges: this.toNumber(allocation.penalAmount),
+          principalSettled: this.toNumber(allocation.principalAmount),
+          interestSettled: this.toNumber(allocation.interestAmount),
+          chargesSettled: this.toNumber(allocation.penalAmount),
+          chargesDays: state.chargesDays,
+          interestDue: state.interestDue,
+          principalDue: state.principalDue,
+          previousChargesDue: state.previousCharges,
+          chargesDue: state.chargesDue,
+          amountBalance: this.toNumber(repayment?.unappliedAmount),
+        };
+      });
+  }
+
+  async generateScf15DReportWorkbook(filters?: ScfReportFilters): Promise<Buffer> {
+    const rows = await this.getScfDemandStates(filters, { dueWithinDays: 15, onlyOutstanding: true });
+    return this.createXlsxWorkbook([{
+      name: 'Sheet1',
+      rows: [
+        [
+          'Customer',
+          'Customer Name11',
+          'Product',
+          'LAN',
+          'Invoice ID',
+          'Status',
+          'Due Date',
+          'DPD',
+          'Disbursement Date',
+          'Disbursement Amount',
+          'Outstanding Principle',
+          'ROI',
+          'Overdue Charges (%)',
+          'Last Payment Date',
+          'Calculation Till',
+          'Interest Days',
+          'Interest',
+          'Previous Interest',
+          'Charges Days',
+          'Charges',
+          'Previous Charges',
+          'Total Outstanding',
+        ],
+        ...rows.map(row => [
+          row.customerCode,
+          row.customerName,
+          row.product,
+          row.lan,
+          row.invoiceId,
+          row.status,
+          row.dueDate,
+          row.dpd,
+          row.disbursementDate,
+          row.disbursementAmount,
+          row.principalOutstanding,
+          row.roi,
+          row.penalRate,
+          row.lastPaymentDate,
+          row.calculationTill,
+          row.interestDays,
+          row.interest,
+          row.previousInterest,
+          row.chargesDays,
+          row.charges,
+          row.previousCharges,
+          row.totalOutstanding,
+        ]),
+      ],
+    }]);
+  }
+
+  async generateScfAsOfNowReportWorkbook(filters?: ScfReportFilters): Promise<Buffer> {
+    const rows = await this.getScfDemandStates(filters, { onlyOutstanding: true });
+    return this.createXlsxWorkbook([{
+      name: 'Sheet1',
+      rows: [
+        [
+          'LAN',
+          'Invoice ID',
+          'Customer',
+          'Name',
+          'Product',
+          'Disb. Date',
+          'Due Date',
+          'Status',
+          'DPD',
+          'Disb. Amt',
+          'O/S Principal',
+          'ROI %',
+          'Int. Days',
+          'Interest',
+          'Prev. Interest',
+          'Chg. Days',
+          'OD Charges',
+          'Prev. Charges',
+          'Prin. Settled',
+          'Int. Settled',
+          'Chg. Settled',
+          'Total O/S',
+          'Last Payment',
+          'Calc. Till',
+        ],
+        ...rows.map(row => [
+          row.lan,
+          row.invoiceId,
+          row.customerCode,
+          row.customerName,
+          row.product,
+          row.disbursementDate,
+          row.dueDate,
+          row.status,
+          row.dpd,
+          row.disbursementAmount,
+          row.principalOutstanding,
+          row.roi,
+          row.interestDays,
+          row.interest,
+          row.previousInterest,
+          row.chargesDays,
+          row.charges,
+          row.previousCharges,
+          row.principalSettled,
+          row.interestSettled,
+          row.chargesSettled,
+          row.totalOutstanding,
+          row.lastPaymentDate,
+          row.calculationTill,
+        ]),
+      ],
+    }]);
+  }
+
+  async generateScfCollectionReportWorkbook(filters?: ScfReportFilters): Promise<Buffer> {
+    const rows = await this.getScfCollectionRows(filters);
+    return this.createXlsxWorkbook([{
+      name: 'Sheet1',
+      rows: [
+        [
+          'Customer',
+          'Account ID',
+          'Transaction Serial',
+          'Product',
+          'Collection Date',
+          'Collection Serial',
+          'Collection Amount',
+          'Amount Remaining',
+          'Amount Used',
+          'Invoice Number',
+          'Disbursement Date',
+          'Last Payment Date',
+          'Principal',
+          'Tenure Updated',
+          'Interest',
+          'Previous Interest Accrued',
+          'Charges',
+          'Principal Settled',
+          'Interest Settled',
+          'Charges Settled',
+          'Charges Days',
+          'Interest Due',
+          'Principal Due',
+          'Previous Charges Due',
+          'Charges Due',
+          'Amount Balance',
+        ],
+        ...rows.map(row => [
+          row.customerCode,
+          row.lan,
+          row.transactionSerial,
+          row.product,
+          row.collectionDate,
+          row.collectionSerial,
+          row.collectionAmount,
+          row.amountRemaining,
+          row.amountUsed,
+          row.invoiceNumber,
+          row.disbursementDate,
+          row.lastPaymentDate,
+          row.principal,
+          row.tenureUpdated,
+          row.interest,
+          row.previousInterestAccrued,
+          row.charges,
+          row.principalSettled,
+          row.interestSettled,
+          row.chargesSettled,
+          row.chargesDays,
+          row.interestDue,
+          row.principalDue,
+          row.previousChargesDue,
+          row.chargesDue,
+          row.amountBalance,
+        ]),
+      ],
+    }]);
+  }
+
+  async generateScfSoaReportWorkbook(filters?: ScfReportFilters): Promise<Buffer> {
+    const loanAccount = await this.getRequiredScfLoanAccount(filters);
+    const rows = await this.getScfCollectionRows(filters);
+    const asOfDate = this.getScfReportAsOfDate(filters);
+
+    return this.createXlsxWorkbook([{
+      name: 'transaction_ledger_report (88)',
+      rows: [
+        ['Transaction Ledger Report'],
+        [`Doc Name: ${loanAccount.lanId}`],
+        [`Customer: ${this.getCustomerName(loanAccount) || ''}`],
+        [`Date: ${this.formatDateDmy(asOfDate)}`],
+        [],
+        [],
+        [],
+        [
+          'Collection Serial',
+          'Transaction Serial',
+          'Collection Date',
+          'Collection Amount',
+          'Used in This Txn',
+          'Invoice',
+          'Disbursement Date',
+          'Last Payment Date',
+          'Principal',
+          'Principal Settled',
+          'Interest Days',
+          'Interest',
+          'Interest Settled',
+          'Charges Days',
+          'Charges',
+          'Charges Settled',
+        ],
+        ...rows.map(row => [
+          row.collectionSerial,
+          row.transactionSerial,
+          row.collectionDate,
+          row.collectionAmount,
+          row.amountUsed,
+          row.invoiceNumber,
+          row.disbursementDate,
+          row.lastPaymentDate,
+          row.principal,
+          row.principalSettled,
+          row.tenureUpdated,
+          row.interest,
+          row.interestSettled,
+          row.chargesDays,
+          row.charges,
+          row.chargesSettled,
+        ]),
+      ],
+    }]);
+  }
+
   async getPortfolioReport(): Promise<any> {
     const loanAccounts = await this.loanAccountRepository.find();
     await Promise.all(loanAccounts.map(loanAccount => this.refreshSnapshot(loanAccount.id)));
@@ -1070,6 +1544,217 @@ export class InternalLmsService {
       if (endTime !== null && time > endTime) return false;
       return true;
     });
+  }
+
+  private createXlsxWorkbook(sheets: WorkbookSheet[]): Buffer {
+    const safeSheets = sheets.map((sheet, index) => ({
+      name: this.sanitizeWorksheetName(sheet.name || `Sheet ${index + 1}`),
+      rows: sheet.rows || [],
+    }));
+
+    const workbookXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <sheets>
+    ${safeSheets.map((sheet, index) => `<sheet name="${this.escapeXml(sheet.name)}" sheetId="${index + 1}" r:id="rId${index + 1}"/>`).join('')}
+  </sheets>
+</workbook>`;
+
+    const workbookRelsXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  ${safeSheets.map((_sheet, index) => `<Relationship Id="rId${index + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${index + 1}.xml"/>`).join('')}
+  <Relationship Id="rId${safeSheets.length + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+</Relationships>`;
+
+    const contentTypesXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+  <Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
+  ${safeSheets.map((_sheet, index) => `<Override PartName="/xl/worksheets/sheet${index + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join('')}
+</Types>`;
+
+    const rootRelsXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+</Relationships>`;
+
+    const stylesXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts>
+  <fills count="1"><fill><patternFill patternType="none"/></fill></fills>
+  <borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>
+  <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
+  <cellXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/></cellXfs>
+  <cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
+</styleSheet>`;
+
+    const files = [
+      { path: '[Content_Types].xml', content: contentTypesXml },
+      { path: '_rels/.rels', content: rootRelsXml },
+      { path: 'xl/workbook.xml', content: workbookXml },
+      { path: 'xl/_rels/workbook.xml.rels', content: workbookRelsXml },
+      { path: 'xl/styles.xml', content: stylesXml },
+      ...safeSheets.map((sheet, index) => ({
+        path: `xl/worksheets/sheet${index + 1}.xml`,
+        content: this.buildWorksheetXml(sheet.rows),
+      })),
+    ];
+
+    return this.createZip(files);
+  }
+
+  private buildWorksheetXml(rows: WorkbookCellValue[][]): string {
+    const sheetRows = rows.map((row, rowIndex) => {
+      const rowNumber = rowIndex + 1;
+      const cells = row.map((cell, cellIndex) => this.buildCellXml(cell, rowNumber, cellIndex + 1)).join('');
+      return `<row r="${rowNumber}">${cells}</row>`;
+    }).join('');
+
+    return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <sheetData>${sheetRows}</sheetData>
+</worksheet>`;
+  }
+
+  private buildCellXml(value: WorkbookCellValue, rowNumber: number, columnNumber: number): string {
+    const cellRef = `${this.getExcelColumnName(columnNumber)}${rowNumber}`;
+    if (value === null || value === undefined || value === '') {
+      return `<c r="${cellRef}"/>`;
+    }
+
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return `<c r="${cellRef}"><v>${value}</v></c>`;
+    }
+
+    const text = value instanceof Date ? this.formatDateOnly(value) : String(value);
+    return `<c r="${cellRef}" t="inlineStr"><is><t xml:space="preserve">${this.escapeXml(text)}</t></is></c>`;
+  }
+
+  private getExcelColumnName(columnNumber: number): string {
+    let name = '';
+    let current = columnNumber;
+    while (current > 0) {
+      const remainder = (current - 1) % 26;
+      name = String.fromCharCode(65 + remainder) + name;
+      current = Math.floor((current - 1) / 26);
+    }
+    return name;
+  }
+
+  private formatDateOnly(value: string | Date): string {
+    const date = this.toDateOnly(value);
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  private sanitizeWorksheetName(name: string): string {
+    const sanitized = name.replace(/[\\/?*\[\]:]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 31);
+    return sanitized || 'Sheet';
+  }
+
+  private createZip(files: Array<{ path: string; content: string | Buffer }>): Buffer {
+    const localParts: Buffer[] = [];
+    const centralParts: Buffer[] = [];
+    let offset = 0;
+    const dosDateTime = this.getZipDateTime(new Date());
+
+    files.forEach((file) => {
+      const nameBuffer = Buffer.from(file.path, 'utf8');
+      const dataBuffer = Buffer.isBuffer(file.content) ? file.content : Buffer.from(file.content, 'utf8');
+      const crc = this.crc32(dataBuffer);
+
+      const localHeader = Buffer.alloc(30);
+      localHeader.writeUInt32LE(0x04034b50, 0);
+      localHeader.writeUInt16LE(20, 4);
+      localHeader.writeUInt16LE(0x0800, 6);
+      localHeader.writeUInt16LE(0, 8);
+      localHeader.writeUInt16LE(dosDateTime.time, 10);
+      localHeader.writeUInt16LE(dosDateTime.date, 12);
+      localHeader.writeUInt32LE(crc, 14);
+      localHeader.writeUInt32LE(dataBuffer.length, 18);
+      localHeader.writeUInt32LE(dataBuffer.length, 22);
+      localHeader.writeUInt16LE(nameBuffer.length, 26);
+      localHeader.writeUInt16LE(0, 28);
+
+      localParts.push(localHeader, nameBuffer, dataBuffer);
+
+      const centralHeader = Buffer.alloc(46);
+      centralHeader.writeUInt32LE(0x02014b50, 0);
+      centralHeader.writeUInt16LE(20, 4);
+      centralHeader.writeUInt16LE(20, 6);
+      centralHeader.writeUInt16LE(0x0800, 8);
+      centralHeader.writeUInt16LE(0, 10);
+      centralHeader.writeUInt16LE(dosDateTime.time, 12);
+      centralHeader.writeUInt16LE(dosDateTime.date, 14);
+      centralHeader.writeUInt32LE(crc, 16);
+      centralHeader.writeUInt32LE(dataBuffer.length, 20);
+      centralHeader.writeUInt32LE(dataBuffer.length, 24);
+      centralHeader.writeUInt16LE(nameBuffer.length, 28);
+      centralHeader.writeUInt16LE(0, 30);
+      centralHeader.writeUInt16LE(0, 32);
+      centralHeader.writeUInt16LE(0, 34);
+      centralHeader.writeUInt16LE(0, 36);
+      centralHeader.writeUInt32LE(0, 38);
+      centralHeader.writeUInt32LE(offset, 42);
+      centralParts.push(centralHeader, nameBuffer);
+
+      offset += localHeader.length + nameBuffer.length + dataBuffer.length;
+    });
+
+    const centralDirectory = Buffer.concat(centralParts);
+    const endRecord = Buffer.alloc(22);
+    endRecord.writeUInt32LE(0x06054b50, 0);
+    endRecord.writeUInt16LE(0, 4);
+    endRecord.writeUInt16LE(0, 6);
+    endRecord.writeUInt16LE(files.length, 8);
+    endRecord.writeUInt16LE(files.length, 10);
+    endRecord.writeUInt32LE(centralDirectory.length, 12);
+    endRecord.writeUInt32LE(offset, 16);
+    endRecord.writeUInt16LE(0, 20);
+
+    return Buffer.concat([...localParts, centralDirectory, endRecord]);
+  }
+
+  private getZipDateTime(date: Date): { date: number; time: number } {
+    const year = Math.max(date.getFullYear(), 1980);
+    return {
+      date: ((year - 1980) << 9) | ((date.getMonth() + 1) << 5) | date.getDate(),
+      time: (date.getHours() << 11) | (date.getMinutes() << 5) | Math.floor(date.getSeconds() / 2),
+    };
+  }
+
+  private crc32(buffer: Buffer): number {
+    const table = this.getCrc32Table();
+    let crc = 0xffffffff;
+    for (const byte of buffer) {
+      crc = (crc >>> 8) ^ table[(crc ^ byte) & 0xff];
+    }
+    return (crc ^ 0xffffffff) >>> 0;
+  }
+
+  private getCrc32Table(): number[] {
+    if (this.crc32Table) return this.crc32Table;
+
+    this.crc32Table = Array.from({ length: 256 }, (_value, index) => {
+      let crc = index;
+      for (let bit = 0; bit < 8; bit += 1) {
+        crc = (crc & 1) ? (0xedb88320 ^ (crc >>> 1)) : (crc >>> 1);
+      }
+      return crc >>> 0;
+    });
+    return this.crc32Table;
+  }
+
+  private escapeXml(value: string): string {
+    return value
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&apos;');
   }
 }
 

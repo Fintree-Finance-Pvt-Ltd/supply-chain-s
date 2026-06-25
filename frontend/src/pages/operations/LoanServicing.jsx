@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { FiRefreshCw, FiSearch, FiCreditCard, FiFileText, FiDollarSign } from 'react-icons/fi'
+import { FiRefreshCw, FiSearch, FiCreditCard, FiFileText, FiDollarSign, FiDownload } from 'react-icons/fi'
 import { toast } from 'react-toastify'
 import DataTable from '../../components/DataTable'
 import LoadingSpinner from '../../components/LoadingSpinner'
@@ -12,6 +12,13 @@ const tabs = [
   { id: 'disbursements', label: 'Disbursements' },
   { id: 'collections', label: 'Collections' },
   { id: 'lan', label: 'LAN Workbench' },
+]
+
+const scfReportExports = [
+  { id: 'fifteenDay', label: '15D Report', fileName: 'SCF_15D_Report.xlsx' },
+  { id: 'asOfNow', label: 'As of Now', fileName: 'SCF_As_of_Now_Format.xlsx' },
+  { id: 'collections', label: 'Collection Format', fileName: 'SCF_Collection_Format.xlsx' },
+  { id: 'soa', label: 'SOA', fileName: 'SCF_SOA.xlsx' },
 ]
 
 const Metric = ({ label, value, icon: Icon }) => (
@@ -35,6 +42,7 @@ const LoanServicing = () => {
   const [account, setAccount] = useState(null)
   const [schedule, setSchedule] = useState([])
   const [statement, setStatement] = useState([])
+  const [downloadingReport, setDownloadingReport] = useState(null)
 
   const loadReports = async () => {
     try {
@@ -60,7 +68,8 @@ const LoanServicing = () => {
   }, [])
 
   const loadLan = async () => {
-    if (!lan.trim()) {
+    const cleanLan = lan.trim().toUpperCase()
+    if (!cleanLan) {
       toast.info('Enter a LAN')
       return
     }
@@ -68,10 +77,11 @@ const LoanServicing = () => {
     try {
       setLoading(true)
       const [accountRes, scheduleRes, statementRes] = await Promise.all([
-        loanServicingService.getAccount(lan.trim()),
-        loanServicingService.getSchedule(lan.trim()),
-        loanServicingService.getStatement(lan.trim(), filters),
+        loanServicingService.getAccount(cleanLan),
+        loanServicingService.getSchedule(cleanLan),
+        loanServicingService.getStatement(cleanLan, filters),
       ])
+      setLan(cleanLan)
       setAccount(accountRes.data)
       setSchedule(scheduleRes.data || [])
       setStatement(statementRes.data || [])
@@ -80,6 +90,45 @@ const LoanServicing = () => {
       toast.error(error.response?.data?.message || 'Failed to load LAN')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const getReportFileName = (headers, fallbackName) => {
+    const disposition = headers?.['content-disposition'] || headers?.['Content-Disposition'] || ''
+    const match = disposition.match(/filename\*?=(?:UTF-8'')?["']?([^"';]+)["']?/i)
+    if (match?.[1]) {
+      return decodeURIComponent(match[1])
+    }
+    return fallbackName
+  }
+
+  const downloadScfReport = async (report) => {
+    const cleanLan = lan.trim().toUpperCase()
+    if (!cleanLan) {
+      toast.info('Enter a LAN')
+      return
+    }
+
+    try {
+      setDownloadingReport(report.id)
+      const response = await loanServicingService.downloadScfReport(report.id, { ...filters, lan: cleanLan })
+      const blob = new Blob([response.data], {
+        type: response.headers?.['content-type'] || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      })
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = getReportFileName(response.headers, `${cleanLan}_${report.fileName}`)
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(url)
+      toast.success(`${report.label} generated`)
+    } catch (error) {
+      console.error('SCF report download failed:', error)
+      toast.error(error.response?.data?.message || 'Failed to generate SCF report')
+    } finally {
+      setDownloadingReport(null)
     }
   }
 
@@ -258,14 +307,28 @@ const LoanServicing = () => {
                 placeholder="Enter LAN"
                 className="min-w-0 flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm"
               />
-              <button
-                type="button"
-                onClick={loadLan}
-                className="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
-              >
-                <FiSearch />
-                Search
-              </button>
+              <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                <button
+                  type="button"
+                  onClick={loadLan}
+                  className="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
+                >
+                  <FiSearch />
+                  Search
+                </button>
+                {scfReportExports.map((report) => (
+                  <button
+                    key={report.id}
+                    type="button"
+                    onClick={() => downloadScfReport(report)}
+                    disabled={Boolean(downloadingReport) || !lan.trim()}
+                    className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-300"
+                  >
+                    <FiDownload className={downloadingReport === report.id ? 'animate-pulse' : ''} />
+                    {report.label}
+                  </button>
+                ))}
+              </div>
             </div>
           </section>
 
