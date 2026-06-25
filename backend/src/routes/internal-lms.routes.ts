@@ -21,6 +21,12 @@ const REPORT_ROLES = [
   ROLES.CFO,
 ];
 
+const REPORT_EXPORT_ROLES = [
+  ROLES.OPERATIONS_TEAM_L1,
+  ROLES.OPERATIONS_TEAM_L2,
+  ROLES.OPERATIONS_HEAD,
+];
+
 const getReportFilters = (req: Request) => ({
   startDate: req.query.startDate as string | undefined,
   endDate: req.query.endDate as string | undefined,
@@ -197,7 +203,7 @@ router.get(
 
 router.get(
   '/reports/scf-15d/export',
-  roleMiddleware(REPORT_ROLES),
+  roleMiddleware(REPORT_EXPORT_ROLES),
   async (req: Request, res: Response) => {
     try {
       const filters = getLoanSpecificReportFilters(req);
@@ -211,7 +217,7 @@ router.get(
 
 router.get(
   '/reports/scf-as-of-now/export',
-  roleMiddleware(REPORT_ROLES),
+  roleMiddleware(REPORT_EXPORT_ROLES),
   async (req: Request, res: Response) => {
     try {
       const filters = getLoanSpecificReportFilters(req);
@@ -225,7 +231,7 @@ router.get(
 
 router.get(
   '/reports/scf-collections/export',
-  roleMiddleware(REPORT_ROLES),
+  roleMiddleware(REPORT_EXPORT_ROLES),
   async (req: Request, res: Response) => {
     try {
       const filters = getLoanSpecificReportFilters(req);
@@ -239,7 +245,7 @@ router.get(
 
 router.get(
   '/reports/scf-soa/export',
-  roleMiddleware(REPORT_ROLES),
+  roleMiddleware(REPORT_EXPORT_ROLES),
   async (req: Request, res: Response) => {
     try {
       const filters = getLoanSpecificReportFilters(req);

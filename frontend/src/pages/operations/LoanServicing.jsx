@@ -8,9 +8,9 @@ import { loanServicingService } from '../../services/loanServicingService'
 import { formatCurrency, formatDate } from '../../utils/format'
 
 const tabs = [
-  { id: 'portfolio', label: 'Portfolio' },
-  { id: 'disbursements', label: 'Disbursements' },
-  { id: 'collections', label: 'Collections' },
+  { id: 'portfolio', label: 'Portfolio Report' },
+  { id: 'disbursements', label: 'Disbursement Report' },
+  { id: 'collections', label: 'Collection Report' },
   { id: 'lan', label: 'LAN Workbench' },
 ]
 
@@ -202,8 +202,8 @@ const LoanServicing = () => {
     <div className="space-y-6">
       <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-slate-950">Loan Servicing</h1>
-          <p className="mt-1 text-sm text-slate-500">Loan accounts, demand, collections, allocation, and servicing reports.</p>
+          <h1 className="text-3xl font-bold text-slate-950">Operations Reports</h1>
+          <p className="mt-1 text-sm text-slate-500">Portfolio, disbursement, collection, and LAN-wise SCF report generation.</p>
         </div>
 
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
