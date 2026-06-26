@@ -46,7 +46,6 @@ import CEOPendingApprovals from './pages/management/CEOPendingApprovals'
 import OperationsDashboard from './pages/operations/OperationsWorkbench'
 import OperationsCaseScreen from './pages/operations/OperationsCaseScreen'
 import RepaymentUpload from './pages/operations/RepaymentUpload'
-import LoanServicing from './pages/operations/LoanServicing'
 import OpsLoanSearch from './pages/operations/OpsLoanSearch'
 import SupplierDashboard from './pages/supplier/SupplierDashboard'
 import SupplierCreate from './pages/supplier/SupplierCreate'
@@ -335,20 +334,6 @@ function App() {
                 ]}
               >
                 <OpsLoanSearch />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="operations/loan-servicing"
-            element={
-              <ProtectedRoute
-                allowedRoles={[
-                  ROLES.OPERATIONS_TEAM_L1,
-                  ROLES.OPERATIONS_TEAM_L2,
-                  ROLES.OPERATIONS_HEAD,
-                ]}
-              >
-                <LoanServicing />
               </ProtectedRoute>
             }
           />
