@@ -124,12 +124,14 @@ const OpsLoanSearch = () => {
   ]
 
   const statementColumns = [
-    { key: 'valueDate', label: 'Date', render: (value) => formatDate(value) },
-    { key: 'entryType', label: 'Type' },
+    { key: 'lan', label: 'LAN' },
+    { key: 'product', label: 'Product' },
+    { key: 'invoiceId', label: 'Invoice ID' },
+    { key: 'transactionDate', label: 'Transaction Date', render: (value) => formatDate(value) },
+    { key: 'remarks', label: 'Remarks' },
     { key: 'debit', label: 'Debit', render: (value) => formatCurrency(value) },
     { key: 'credit', label: 'Credit', render: (value) => formatCurrency(value) },
-    { key: 'runningBalance', label: 'Balance', render: (value) => formatCurrency(value) },
-    { key: 'narration', label: 'Narration' },
+    { key: 'closingBalance', label: 'Closing Balance', render: (value) => formatCurrency(value) },
   ]
 
   return (

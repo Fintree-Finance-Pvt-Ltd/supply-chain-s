@@ -50,6 +50,19 @@ type WorkbookSheet = {
   rows: WorkbookCellValue[][];
 };
 
+type LedgerStatementSourceRow = {
+  id: string;
+  sequence: number;
+  sortOrder: number;
+  lan: string;
+  product: string;
+  invoiceId: string | number | null;
+  transactionDate: Date;
+  remarks: string;
+  debit: number;
+  credit: number;
+};
+
 const CLOSED_DEMAND_STATUSES = [DEMAND_STATUS.PAID, DEMAND_STATUS.REVERSED];
 const DEFAULT_BILL_TENURE_DAYS = 90;
 const DEFAULT_ACCRUAL_RULES: AccrualRules = {
@@ -891,44 +904,146 @@ export class InternalLmsService {
   }
 
   async getStatement(lan: string, filters?: { startDate?: string; endDate?: string }): Promise<any> {
-    const entries = await this.ledgerRepository.find({
-      where: { lan },
-      order: { valueDate: 'ASC', id: 'ASC' },
+    const cleanLan = String(lan || '').trim().toUpperCase();
+    const loanAccount = await this.loanAccountRepository.findOne({
+      where: { lanId: cleanLan },
+      relations: ['partner'],
+    });
+    const product = this.getProductName(loanAccount);
+
+    const [disbursements, demands, repayments] = await Promise.all([
+      this.disbursementRepository.find({
+        where: { lan: cleanLan, status: DISBURSEMENT_STATUS.POSTED },
+        relations: ['invoice'],
+        order: { disbursementDate: 'ASC', id: 'ASC' },
+      }),
+      this.demandRepository.find({
+        where: { lan: cleanLan, status: Not(In([DEMAND_STATUS.REVERSED])) },
+        relations: ['invoice'],
+        order: { demandDate: 'ASC', id: 'ASC' },
+      }),
+      this.repaymentRepository.find({
+        where: { lan: cleanLan, status: Not(In([REPAYMENT_STATUS.REVERSED])) },
+        relations: ['allocations', 'allocations.invoice', 'allocations.demand', 'allocations.demand.invoice'],
+        order: { repaymentDate: 'ASC', id: 'ASC' },
+      }),
+    ]);
+
+    const getInvoiceId = (invoice: Invoice | null | undefined, invoiceId: number | null | undefined): string | number | null => (
+      invoice?.invoiceNumber || invoiceId || null
+    );
+    const getRepaymentInvoiceIds = (repayment: Repayment): string | null => {
+      const invoiceIds = (repayment.allocations || [])
+        .map(allocation => (
+          allocation.invoice?.invoiceNumber ||
+          allocation.demand?.invoice?.invoiceNumber ||
+          allocation.invoiceId ||
+          allocation.demand?.invoiceId ||
+          null
+        ))
+        .filter((value): value is string | number => value !== null && value !== undefined)
+        .map(value => String(value));
+
+      return Array.from(new Set(invoiceIds)).join(', ') || null;
+    };
+
+    const statementRows: LedgerStatementSourceRow[] = [];
+
+    disbursements.forEach((disbursement) => {
+      statementRows.push({
+        id: `DISBURSEMENT-${disbursement.id}`,
+        sequence: disbursement.id,
+        sortOrder: 1,
+        lan: cleanLan,
+        product,
+        invoiceId: getInvoiceId(disbursement.invoice, disbursement.invoiceId),
+        transactionDate: disbursement.disbursementDate,
+        remarks: 'Disbursement',
+        debit: this.roundMoney(this.toNumber(disbursement.disbursementAmount)),
+        credit: 0,
+      });
     });
 
-    let runningBalance = 0;
-    const statementRows = entries
-      .filter(entry => entry.entryType !== LEDGER_ENTRY_TYPE.DEMAND)
-      .map(entry => {
-        runningBalance = this.roundMoney(
-          runningBalance + this.toNumber(entry.debit) - this.toNumber(entry.credit),
-        );
-        return { entry, runningBalance };
+    demands.forEach((demand) => {
+      const interestDue = this.roundMoney(this.toNumber(demand.interestDue));
+      const penalDue = this.roundMoney(this.toNumber(demand.penalDue));
+      const invoiceId = getInvoiceId(demand.invoice, demand.invoiceId);
+
+      if (interestDue > 0) {
+        statementRows.push({
+          id: `INTEREST-${demand.id}`,
+          sequence: demand.id,
+          sortOrder: 2,
+          lan: cleanLan,
+          product,
+          invoiceId,
+          transactionDate: demand.demandDate,
+          remarks: 'Interest Charged',
+          debit: interestDue,
+          credit: 0,
+        });
+      }
+
+      if (penalDue > 0) {
+        statementRows.push({
+          id: `PENAL-${demand.id}`,
+          sequence: demand.id,
+          sortOrder: 3,
+          lan: cleanLan,
+          product,
+          invoiceId,
+          transactionDate: demand.demandDate,
+          remarks: 'Penal Charges',
+          debit: penalDue,
+          credit: 0,
+        });
+      }
+    });
+
+    repayments.forEach((repayment) => {
+      statementRows.push({
+        id: `COLLECTION-${repayment.id}`,
+        sequence: repayment.id,
+        sortOrder: 4,
+        lan: cleanLan,
+        product,
+        invoiceId: getRepaymentInvoiceIds(repayment),
+        transactionDate: repayment.repaymentDate,
+        remarks: 'Collection',
+        debit: 0,
+        credit: this.roundMoney(this.toNumber(repayment.amount)),
       });
+    });
 
     const startTime = filters?.startDate ? this.toDateOnly(filters.startDate).getTime() : null;
     const endTime = filters?.endDate ? this.toDateOnly(filters.endDate).getTime() : null;
-    const filtered = statementRows.filter(({ entry }) => {
-      const valueTime = this.toDateOnly(entry.valueDate).getTime();
-      if (startTime !== null && valueTime < startTime) return false;
-      if (endTime !== null && valueTime > endTime) return false;
-      return true;
-    });
+    const filtered = statementRows
+      .filter((row) => {
+        const valueTime = this.toDateOnly(row.transactionDate).getTime();
+        if (startTime !== null && valueTime < startTime) return false;
+        if (endTime !== null && valueTime > endTime) return false;
+        return true;
+      })
+      .sort((a, b) => {
+        const dateDiff = this.toDateOnly(a.transactionDate).getTime() - this.toDateOnly(b.transactionDate).getTime();
+        return dateDiff || a.sortOrder - b.sortOrder || a.sequence - b.sequence;
+      });
+
+    let closingBalance = 0;
 
     return {
       success: true,
-      data: filtered.map(({ entry, runningBalance }) => ({
-        id: entry.id,
-        lan: entry.lan,
-        valueDate: entry.valueDate,
-        entryType: entry.entryType,
-        debit: this.toNumber(entry.debit),
-        credit: this.toNumber(entry.credit),
-        runningBalance,
-        narration: entry.narration,
-        referenceType: entry.referenceType,
-        referenceId: entry.referenceId,
-      })),
+      data: filtered.map(({ sortOrder, sequence, ...row }) => {
+        closingBalance = this.roundMoney(closingBalance + row.debit - row.credit);
+        return {
+          ...row,
+          closingBalance,
+          valueDate: row.transactionDate,
+          entryType: row.remarks,
+          runningBalance: closingBalance,
+          narration: row.remarks,
+        };
+      }),
     };
   }
 
