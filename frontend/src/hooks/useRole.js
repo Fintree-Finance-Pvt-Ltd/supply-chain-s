@@ -8,6 +8,7 @@ export const ROLE_MENU_CONFIG = {
     { path: '/admin/users', label: 'User Management', icon: 'FiUsers' },
     { path: '/admin/roles', label: 'Role Management', icon: 'FiShield' },
     { path: '/admin/approval-flows', label: 'Approval Flows', icon: 'FiGitBranch' },
+    { path: '/admin/partners', label: 'Partner Management', icon: 'FiBriefcase' },
   ],
   [ROLES.RELATIONSHIP_MANAGER]: [
     { path: '/rm/dashboard', label: 'Dashboard', icon: 'FiHome' },
@@ -85,6 +86,7 @@ const getIconComponent = (iconName) => {
     FiBarChart: () => import('react-icons/fi').then((mod) => mod.FiBarChart),
     FiFolder: () => import('react-icons/fi').then((mod) => mod.FiFolder),
     FiDollarSign: () => import('react-icons/fi').then((mod) => mod.FiDollarSign),
+    FiBriefcase: () => import('react-icons/fi').then((mod) => mod.FiBriefcase),
   }
   return icons[iconName]
 }

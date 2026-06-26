@@ -19,6 +19,7 @@ import UserManagement from './pages/admin/UserManagement'
 import RoleManagement from './pages/admin/RoleManagement'
 import ApprovalFlowConfig from './pages/admin/ApprovalFlowConfig'
 import CaseAuditDetail from './pages/admin/CaseAuditDetail'
+import PartnerManagement from './pages/admin/PartnerManagement'
 
 // SuperAdmin Pages
 import SuperAdminDashboard from './pages/superadmin/SuperAdminCommandCenter'
@@ -157,6 +158,14 @@ function App() {
             element={
               <ProtectedRoute allowedRoles={[ROLES.ADMIN]}>
                 <ApprovalFlowConfig />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="admin/partners"
+            element={
+              <ProtectedRoute allowedRoles={[ROLES.ADMIN]}>
+                <PartnerManagement />
               </ProtectedRoute>
             }
           />

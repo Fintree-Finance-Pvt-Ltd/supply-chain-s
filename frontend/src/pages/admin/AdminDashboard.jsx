@@ -1,6 +1,6 @@
 import { useNavigate, Link } from 'react-router-dom'
 import { useState, useEffect } from 'react'
-import { FiUsers, FiShield, FiGitBranch, FiBarChart, FiEye } from 'react-icons/fi'
+import { FiUsers, FiShield, FiGitBranch, FiBarChart, FiEye, FiBriefcase } from 'react-icons/fi'
 import { customerService } from '../../services/customerService'
 import DataTable from '../../components/DataTable'
 import StatusBadge from '../../components/StatusBadge'
@@ -52,6 +52,7 @@ const AdminDashboard = () => {
     { path: '/admin/users', label: 'Manage Users', icon: FiUsers },
     { path: '/admin/roles', label: 'Manage Roles', icon: FiShield },
     { path: '/admin/approval-flows', label: 'Configure Approval Flows', icon: FiGitBranch },
+    { path: '/admin/partners', label: 'Manage Partners', icon: FiBriefcase },
   ]
 
   return (
@@ -90,7 +91,7 @@ const AdminDashboard = () => {
 
       <div className="card">
         <h2 className="text-xl font-semibold text-gray-900 mb-4">System Management</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
           {quickActions.map((action, index) => (
             <Link
               key={index}
