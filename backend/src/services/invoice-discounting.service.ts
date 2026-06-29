@@ -6,6 +6,7 @@ import { SupplierBankDetail } from "../entities/SupplierBankDetail";
 import { CaseWorkflow } from "../entities/CaseWorkflow";
 import { CaseStatusHistory } from "../entities/CaseStatusHistory";
 import { LoanAccount } from "../entities/LoanAccount";
+import { DEMAND_STATUS, LoanDemand } from "../entities/InternalLms";
 import { CreditSanction } from "../entities/CreditSanction";
 import { Notification } from "../entities/Notification";
 import { NodemailerProvider } from "../integrations/notifications/email/nodemailer.provider";
@@ -70,6 +71,7 @@ export class InvoiceDiscountingService {
   private workflowRepository = AppDataSource.getRepository(CaseWorkflow);
   private historyRepository = AppDataSource.getRepository(CaseStatusHistory);
   private loanAccountRepository = AppDataSource.getRepository(LoanAccount);
+  private loanDemandRepository = AppDataSource.getRepository(LoanDemand);
   private creditSanctionRepository =
     AppDataSource.getRepository(CreditSanction);
   private notificationRepository = AppDataSource.getRepository(Notification);
@@ -552,6 +554,23 @@ export class InvoiceDiscountingService {
     return loanAccount;
   }
 
+  private async validateNoCustomerDpd(customerId: number): Promise<void> {
+    const dpdCount = await this.loanDemandRepository
+      .createQueryBuilder("demand")
+      .innerJoin("demand.loanAccount", "loanAccount")
+      .where("loanAccount.customerId = :customerId", { customerId })
+      .andWhere("demand.status NOT IN (:...closedStatuses)", {
+        closedStatuses: [DEMAND_STATUS.PAID, DEMAND_STATUS.REVERSED],
+      })
+      .andWhere("DATE(demand.dueDate) < CURDATE()")
+      .andWhere("demand.outstandingAmount > 0")
+      .getCount();
+
+    if (dpdCount > 0) {
+      throw new Error("Customer has invoice on DPD. Clear overdue amount before creating a new invoice.");
+    }
+  }
+
   private async reserveInvoiceLimit(invoice: Invoice): Promise<void> {
     if (!invoice.loanAccountId) {
       throw new Error("Invoice is not linked to a LAN");
@@ -694,6 +713,7 @@ export class InvoiceDiscountingService {
     if (!loanAccount) {
       throw new Error("Invalid Loan Account Number (LAN) for this customer");
     }
+    await this.validateNoCustomerDpd(data.customerId);
 
 
 let existingInvoices = await this.invoiceRepository
@@ -848,6 +868,7 @@ if (existingInvoices.length > 0) {
     if (invoice.status !== "DRAFT") {
       throw new Error("Can only save draft invoices");
     }
+    await this.validateNoCustomerDpd(invoice.customerId);
     await this.validateSplitInvoiceDisbursement({
       supplierId: invoice.supplierId,
       loanAccountId: invoice.loanAccountId,
@@ -877,6 +898,7 @@ if (existingInvoices.length > 0) {
     if (invoice.status !== "DRAFT") {
       throw new Error("Can only submit draft invoices");
     }
+    await this.validateNoCustomerDpd(invoice.customerId);
 
     const previousStatus = invoice.status;
     await this.reserveInvoiceLimit(invoice);
