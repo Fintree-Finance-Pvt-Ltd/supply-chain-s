@@ -488,7 +488,7 @@ if (invoiceFiles.length === 0) {
       loadInvoices();
     } catch (error) {
       console.error("Error saving invoice:", error);
-      toast.error("Error saving invoice");
+      toast.error(error?.response?.data?.message || error?.message || "Error saving invoice");
     } finally {
       setLoading(false);
     }
@@ -563,7 +563,7 @@ if (invoiceFiles.length === 0) {
         loadInvoices();
       } catch (error) {
         console.error("Error submitting invoice:", error);
-        toast.error("Error submitting invoice");
+        toast.error(error?.response?.data?.message || error?.message || "Error submitting invoice");
       } finally {
         setLoading(false);
       }
@@ -594,7 +594,7 @@ if (invoiceFiles.length === 0) {
         loadInvoices();
       } catch (error) {
         console.error("Error submitting invoice:", error);
-        toast.error("Error submitting invoice");
+        toast.error(error?.response?.data?.message || error?.message || "Error submitting invoice");
       } finally {
         setLoading(false);
       }

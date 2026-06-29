@@ -257,6 +257,7 @@ export class InvoiceDiscountingService {
       invoice.status = "REJECTED_BY_CUSTOMER";
       invoice.customerApprovalStatus = "rejected";
       invoice.approvedVia = "email";
+      await this.releaseInvoiceLimit(invoice);
     }
 
     invoice.customerRemarks = remarks || "";
@@ -506,6 +507,102 @@ export class InvoiceDiscountingService {
     return { baseInvoiceNumber, existingInvoices: invoices };
   }
 
+  private getLoanAccountLimitSummary(loanAccount: LoanAccount): {
+    sanctionedAmount: number;
+    utilizedLimit: number;
+    unutilizedLimit: number;
+  } {
+    const sanctionedAmount = this.roundMoney(this.toNumber(loanAccount.sanctionedAmount));
+    const utilizedLimit = this.roundMoney(this.toNumber(loanAccount.utilizedLimit));
+    const computedUnutilized = sanctionedAmount - utilizedLimit;
+    const storedUnutilized = this.toNumber(loanAccount.unutilizedLimit);
+    const rawUnutilized =
+      loanAccount.unutilizedLimit === null ||
+      loanAccount.unutilizedLimit === undefined ||
+      storedUnutilized <= 0
+        ? computedUnutilized
+        : storedUnutilized;
+    const unutilizedLimit = this.roundMoney(Math.max(rawUnutilized, 0));
+
+    return { sanctionedAmount, utilizedLimit, unutilizedLimit };
+  }
+
+  private async assertDisbursementWithinLanLimit(
+    loanAccountId: number,
+    disbursementAmount: number,
+  ): Promise<LoanAccount> {
+    const loanAccount = await this.loanAccountRepository.findOne({
+      where: { id: loanAccountId },
+    });
+
+    if (!loanAccount) {
+      throw new Error("Loan account not found for limit validation");
+    }
+
+    const requestedAmount = this.roundMoney(this.toNumber(disbursementAmount));
+    const { sanctionedAmount, utilizedLimit, unutilizedLimit } =
+      this.getLoanAccountLimitSummary(loanAccount);
+
+    if (requestedAmount > unutilizedLimit + 0.01) {
+      throw new Error(
+        `Disbursement amount cannot exceed available unutilized limit. Sanction Amount: ${sanctionedAmount}, Utilized Limit: ${utilizedLimit}, Unutilized Limit: ${unutilizedLimit}, Requested: ${requestedAmount}`,
+      );
+    }
+
+    return loanAccount;
+  }
+
+  private async reserveInvoiceLimit(invoice: Invoice): Promise<void> {
+    if (!invoice.loanAccountId) {
+      throw new Error("Invoice is not linked to a LAN");
+    }
+
+    const loanAccount = await this.assertDisbursementWithinLanLimit(
+      invoice.loanAccountId,
+      this.toNumber(invoice.disbursementAmount),
+    );
+    const disbursementAmount = this.roundMoney(this.toNumber(invoice.disbursementAmount));
+    const { sanctionedAmount, utilizedLimit } = this.getLoanAccountLimitSummary(loanAccount);
+    const totalUtilized = this.roundMoney(utilizedLimit + disbursementAmount);
+    const totalUnutilized = this.roundMoney(Math.max(sanctionedAmount - totalUtilized, 0));
+
+    loanAccount.utilizedLimit = totalUtilized;
+    loanAccount.unutilizedLimit = totalUnutilized;
+    await this.loanAccountRepository.save(loanAccount);
+
+    invoice.sanctionAmount = sanctionedAmount;
+    invoice.utilizedLimit = disbursementAmount;
+    invoice.unutilizedLimit = totalUnutilized;
+  }
+
+  private async releaseInvoiceLimit(invoice: Invoice): Promise<void> {
+    if (!invoice.loanAccountId) return;
+
+    const reservedAmount = this.roundMoney(this.toNumber(invoice.utilizedLimit));
+    if (reservedAmount <= 0) return;
+
+    const loanAccount = await this.loanAccountRepository.findOne({
+      where: { id: invoice.loanAccountId },
+    });
+
+    if (!loanAccount) {
+      throw new Error("Loan account not found for limit release");
+    }
+
+    const { sanctionedAmount, utilizedLimit } = this.getLoanAccountLimitSummary(loanAccount);
+    const totalUtilized = this.roundMoney(
+      utilizedLimit + 0.01 >= reservedAmount ? utilizedLimit - reservedAmount : utilizedLimit,
+    );
+    const totalUnutilized = this.roundMoney(Math.max(sanctionedAmount - totalUtilized, 0));
+
+    loanAccount.utilizedLimit = totalUtilized;
+    loanAccount.unutilizedLimit = totalUnutilized;
+    await this.loanAccountRepository.save(loanAccount);
+
+    invoice.utilizedLimit = 0;
+    invoice.unutilizedLimit = totalUnutilized;
+  }
+
   // STEP 1: RM - Get Customer and LAN Selection
   async getCustomersByRM(rmId: number) {
     return this.customerRepository.find({
@@ -630,6 +727,11 @@ const splitValidation = await this.validateSplitInvoiceDisbursement({
   invoiceAmount: data.invoiceAmount,
   disbursementAmount: data.disbursementAmount,
 });
+const limitLoanAccount = await this.assertDisbursementWithinLanLimit(
+  data.loanAccountId,
+  data.disbursementAmount,
+);
+const { sanctionedAmount } = this.getLoanAccountLimitSummary(limitLoanAccount);
 const baseInvoiceNumber = splitValidation.baseInvoiceNumber;
 existingInvoices = splitValidation.existingInvoices;
 
@@ -690,6 +792,7 @@ if (existingInvoices.length > 0) {
 
   // ✅ auto generated invoice number
   invoiceNumber: finalInvoiceNumber,
+  sanctionAmount: sanctionedAmount,
         // ✅ save uploaded invoice path
   invoiceFilePath: data.invoiceFilePath,
       invoiceDate: new Date(data.invoiceDate),
@@ -754,6 +857,11 @@ if (existingInvoices.length > 0) {
       disbursementAmount: data.disbursementAmount ?? invoice.disbursementAmount,
       excludeInvoiceId: invoice.id,
     });
+    const limitLoanAccount = await this.assertDisbursementWithinLanLimit(
+      invoice.loanAccountId,
+      data.disbursementAmount ?? invoice.disbursementAmount,
+    );
+    data.sanctionAmount = this.getLoanAccountLimitSummary(limitLoanAccount).sanctionedAmount;
     Object.assign(invoice, data);
     if (data.invoiceDate) {
       invoice.invoiceDate = new Date(data.invoiceDate);
@@ -771,79 +879,10 @@ if (existingInvoices.length > 0) {
     }
 
     const previousStatus = invoice.status;
-
-      // ✅ Store utilized limit = disbursement amount
-invoice.utilizedLimit = Number(
-  invoice.disbursementAmount || 0
-);
-
-invoice.unutilizedLimit =
-  Number(invoice.sanctionAmount || 0) -
-  Number(invoice.disbursementAmount || 0);
+    await this.reserveInvoiceLimit(invoice);
 
     invoice.status = "PENDING_CUSTOMER_APPROVAL";
     await this.invoiceRepository.save(invoice);
-
-    const loanAccountRepository =
-  AppDataSource.getRepository(LoanAccount);
-
-const loanAccount = await loanAccountRepository.findOne({
-  where: {
-    id: invoice.loanAccountId,
-  },
-});
-
-if (loanAccount) {
-
-  // ✅ utilized = disbursement amount
-  // loanAccount.utilizedLimit = Number(
-  //   invoice.disbursementAmount || 0
-  // );
-
-  // // ✅ unutilized = sanction - utilized
-  // loanAccount.unutilizedLimit =
-  //   Number(invoice.sanctionAmount || 0) -
-  //   Number(invoice.disbursementAmount || 0);
-
-
-  // existing utilized from DB
-const existingUtilized = Number(
-  loanAccount.utilizedLimit || 0
-);
- 
-
-// current invoice disbursement
-const currentDisbursement = Number(
-  invoice.disbursementAmount || 0
-);
-
-// ✅ add previous + current
-const totalUtilized =
-  existingUtilized + currentDisbursement;
-
-  
-// sanction amount
-const sanctionAmount = Number(
-  invoice.sanctionAmount || 0
-);
-
-// remaining limit
-const totalUnutilized =
-  sanctionAmount - totalUtilized;
-
-// save
-loanAccount.utilizedLimit =
-  totalUtilized;
-
-loanAccount.unutilizedLimit =
-  totalUnutilized;
-
-await loanAccountRepository.save(
-  loanAccount
-);
-
-  await loanAccountRepository.save(loanAccount);
-}
 
     const workflow = await this.createOrGetWorkflow(invoiceId);
     workflow.currentStatus = "PENDING_CUSTOMER_APPROVAL";
@@ -941,6 +980,7 @@ await loanAccountRepository.save(
       invoice.status = "REJECTED_BY_CUSTOMER";
       invoice.customerApprovalStatus = "rejected";
       invoice.approvedVia = "mobile";
+      await this.releaseInvoiceLimit(invoice);
     }
     invoice.customerRemarks = remarks || "";
 
@@ -1021,6 +1061,9 @@ await loanAccountRepository.save(
     const newStatus =
       action === "approve" ? "PENDING_OPS_L2_APPROVAL" : "REJECTED";
     invoice.status = newStatus;
+    if (action === "reject") {
+      await this.releaseInvoiceLimit(invoice);
+    }
     await this.invoiceRepository.save(invoice);
 
     const workflow = await this.createOrGetWorkflow(invoiceId);
@@ -1072,6 +1115,9 @@ await loanAccountRepository.save(
     const previousStatus = invoice.status;
     const newStatus = action === "approve" ? "PENDING_MD_APPROVAL" : "REJECTED";
     invoice.status = newStatus;
+    if (action === "reject") {
+      await this.releaseInvoiceLimit(invoice);
+    }
     await this.invoiceRepository.save(invoice);
 
     const workflow = await this.createOrGetWorkflow(invoiceId);
@@ -1124,6 +1170,9 @@ await loanAccountRepository.save(
     const newStatus =
       action === "approve" ? "PENDING_OPS_HEAD_APPROVAL" : "REJECTED";
     invoice.status = newStatus;
+    if (action === "reject") {
+      await this.releaseInvoiceLimit(invoice);
+    }
     await this.invoiceRepository.save(invoice);
 
     const workflow = await this.createOrGetWorkflow(invoiceId);
@@ -1176,6 +1225,9 @@ await loanAccountRepository.save(
     const newStatus =
       action === "approve" ? "DISBURSEMENT_DATA_ENTRY" : "REJECTED";
     invoice.status = newStatus;
+    if (action === "reject") {
+      await this.releaseInvoiceLimit(invoice);
+    }
     await this.invoiceRepository.save(invoice);
 
     const workflow = await this.createOrGetWorkflow(invoiceId);
@@ -1574,6 +1626,7 @@ await loanAccountRepository.save(
 
   } else {
     invoice.status = "REJECTED";
+    await this.releaseInvoiceLimit(invoice);
   }
 
   await this.invoiceRepository.save(invoice);
