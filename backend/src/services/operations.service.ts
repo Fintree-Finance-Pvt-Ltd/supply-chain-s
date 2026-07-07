@@ -21,7 +21,7 @@ import {
 import { EntityManager, In, Repository } from 'typeorm';
 import { ApprovalService } from './approval.service';
 import { ADDRESS_TYPES, CASE_STATUS, COMPANY_TYPES, KYC_TYPES } from '../config/constants';
-import { internalLmsService } from './loan-calculation.service';
+import { loanManagementService } from './loan-management.service';
 import axios from 'axios';
 import path from 'path';
 import * as yauzl from 'yauzl';
@@ -1374,15 +1374,15 @@ export class OperationsService {
   }
 
   /**
-   * Post repayment data into the internal LMS ledger/allocation engine.
+   * Post repayment data into the loan management ledger/allocation engine.
    */
   private async sendToLMSApi(repayments: RepaymentRecord[]): Promise<any> {
-    console.log('[Repayment Upload] Posting to internal LMS:', JSON.stringify({ repayments }, null, 2));
+    console.log('[Repayment Upload] Posting to loan management:', JSON.stringify({ repayments }, null, 2));
 
     const results = [];
     for (const repayment of repayments) {
       try {
-        const posted = await internalLmsService.recordCollection({
+        const posted = await loanManagementService.recordCollection({
           lan: repayment.lan,
           collectionDate: repayment.collection_date,
           collectionUtr: repayment.collection_utr,
@@ -1409,11 +1409,11 @@ export class OperationsService {
 
     const failed = results.filter((result) => result.status === 'failed');
     if (failed.length > 0) {
-      throw new Error(`Internal LMS repayment posting failed: ${failed.map((item) => `${item.lan}/${item.collection_utr}: ${item.message}`).join('; ')}`);
+      throw new Error(`Loan Management repayment posting failed: ${failed.map((item) => `${item.lan}/${item.collection_utr}: ${item.message}`).join('; ')}`);
     }
 
     return {
-      message: 'Repayments posted to internal LMS successfully',
+      message: 'Repayments posted to loan management successfully',
       total: results.length,
       success_count: results.length,
       failed_count: 0,

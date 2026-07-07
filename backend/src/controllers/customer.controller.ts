@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import { CustomerService } from '../services/customer.service';
 import { TaskDistributionService } from '../services/task-distribution.service';
 import { LMSDataSource } from '../config/lmsDatabase';
-import { internalLmsService } from '../services/loan-calculation.service';
+import { loanManagementService } from '../services/loan-management.service';
 
 export class CustomerController {
   private customerService: CustomerService;
@@ -517,7 +517,7 @@ export class CustomerController {
         return;
       }
 
-      const dashboard = await internalLmsService.getCustomerDashboard(Number(partnerLoanId));
+      const dashboard = await loanManagementService.getCustomerDashboard(Number(partnerLoanId));
 
       res.json({
         success: true,
@@ -547,7 +547,7 @@ getLoanList = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    const result = await internalLmsService.getCustomerLoanSummary(Number(partnerLoanId));
+    const result = await loanManagementService.getCustomerLoanSummary(Number(partnerLoanId));
 
     if (!result.success) {
       res.status(500).json(result);
@@ -681,7 +681,7 @@ async getLoanSchedule(req: Request, res: Response) {
       });
     }
 
-    const result = await internalLmsService.getDemandSchedule(String(lan));
+    const result = await loanManagementService.getDemandSchedule(String(lan));
 
     return res.json(result);
 
@@ -707,7 +707,7 @@ async getLoanSchedule(req: Request, res: Response) {
         return;
       }
 
-      const result = await internalLmsService.getStatementByLoanAccountId(parseInt(id as string, 10), {
+      const result = await loanManagementService.getStatementByLoanAccountId(parseInt(id as string, 10), {
         startDate: startDate as string,
         endDate: endDate as string,
       });
@@ -735,7 +735,7 @@ async getLoanSchedule(req: Request, res: Response) {
         return;
       }
 
-      const preview = await internalLmsService.getForeclosurePreview(lan);
+      const preview = await loanManagementService.getForeclosurePreview(lan);
 
       res.json(preview);
     } catch (error: any) {
@@ -780,7 +780,7 @@ async getLoanSchedule(req: Request, res: Response) {
         });
         return;
       }
-      const result = await internalLmsService.getTransactionsByLan(lan);
+      const result = await loanManagementService.getTransactionsByLan(lan);
 
       if (!result) {
         res.status(500).json({
@@ -826,7 +826,7 @@ async getLoanSchedule(req: Request, res: Response) {
         return;
       }
 
-      const result = await internalLmsService.getCollectionDetail(lan, utr);
+      const result = await loanManagementService.getCollectionDetail(lan, utr);
 
       res.json(result);
     } catch (error: any) {

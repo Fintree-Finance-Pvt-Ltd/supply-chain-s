@@ -16,7 +16,7 @@ import migrationRoutes from './migration.routes';
 import onboardingRoutes from './onboarding.routes';
 import partnerRoutes from './partner.routes';
 import invoiceDisbursementRoutes from './invoice-disbursement.routes';
-import internalLmsRoutes from './internal-lms.routes';
+import loanManagementRoutes from './loan-management.routes';
 import superAdminRoutes from './superadmin.routes';
 import taskDistributionRoutes from './task-distribution.routes';
 import { authMiddleware } from '../middlewares/auth.middleware';
@@ -54,8 +54,8 @@ router.use('/debug', debugRoutes);
 router.use('/migration', migrationRoutes);
 router.use('/partners', partnerRoutes);
 router.use('/v1/invoice-disbursement', invoiceDisbursementRoutes);
-router.use('/loan-servicing', internalLmsRoutes);
-router.use('/internal-lms', internalLmsRoutes); // Backward-compatible alias
+router.use('/loan-servicing', loanManagementRoutes);
+router.use('/internal-lms', loanManagementRoutes); // Backward-compatible alias
 
 // SUPERADMIN Routes - Global Analytics, RBAC, Rewards, Task Tracking
 // Apply authMiddleware first to authenticate the user, then superAdminRoutes for authorization

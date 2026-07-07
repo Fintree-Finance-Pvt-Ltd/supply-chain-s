@@ -1,11 +1,11 @@
 import { Router } from 'express';
-import { InternalLmsController } from '../controllers/internal-lms.controller';
+import { LoanManagementController } from '../controllers/loan-management.controller';
 import { authMiddleware } from '../middlewares/auth.middleware';
 import { roleMiddleware } from '../middlewares/role.middleware';
 import { ROLES } from '../config/constants';
 
 const router = Router();
-const internalLmsController = new InternalLmsController();
+const loanManagementController = new LoanManagementController();
 
 const OPS_ROLES = [
   ROLES.OPERATIONS_TEAM_L1,
@@ -33,79 +33,79 @@ router.use(authMiddleware);
 router.post(
   '/invoices/:invoiceId/book',
   roleMiddleware([ROLES.OPERATIONS_TEAM_L2, ROLES.OPERATIONS_HEAD, ROLES.SUPERADMIN]),
-  internalLmsController.bookInvoiceDisbursement,
+  loanManagementController.bookInvoiceDisbursement,
 );
 
 router.post(
   '/collections',
   roleMiddleware(OPS_ROLES),
-  internalLmsController.recordCollection,
+  loanManagementController.recordCollection,
 );
 
 router.get(
   '/accounts/:lan',
   roleMiddleware(OPS_ROLES),
-  internalLmsController.getLoanAccountSummary,
+  loanManagementController.getLoanAccountSummary,
 );
 
 router.get(
   '/accounts/:lan/schedule',
   roleMiddleware(OPS_ROLES),
-  internalLmsController.getDemandSchedule,
+  loanManagementController.getDemandSchedule,
 );
 
 router.get(
   '/accounts/:lan/statement',
   roleMiddleware(OPS_ROLES),
-  internalLmsController.getStatement,
+  loanManagementController.getStatement,
 );
 
 router.get(
   '/collections/:lan/:utr',
   roleMiddleware(OPS_ROLES),
-  internalLmsController.getCollectionDetail,
+  loanManagementController.getCollectionDetail,
 );
 
 router.get(
   '/reports/portfolio',
   roleMiddleware(REPORT_ROLES),
-  internalLmsController.getPortfolioReport,
+  loanManagementController.getPortfolioReport,
 );
 
 router.get(
   '/reports/disbursements',
   roleMiddleware(REPORT_ROLES),
-  internalLmsController.getDisbursementReport,
+  loanManagementController.getDisbursementReport,
 );
 
 router.get(
   '/reports/collections',
   roleMiddleware(REPORT_ROLES),
-  internalLmsController.getCollectionReport,
+  loanManagementController.getCollectionReport,
 );
 
 router.get(
   '/reports/scf-15d/export',
   roleMiddleware(REPORT_EXPORT_ROLES),
-  internalLmsController.exportScf15DReport,
+  loanManagementController.exportScf15DReport,
 );
 
 router.get(
   '/reports/scf-as-of-now/export',
   roleMiddleware(REPORT_EXPORT_ROLES),
-  internalLmsController.exportScfAsOfNowReport,
+  loanManagementController.exportScfAsOfNowReport,
 );
 
 router.get(
   '/reports/scf-collections/export',
   roleMiddleware(REPORT_EXPORT_ROLES),
-  internalLmsController.exportScfCollectionsReport,
+  loanManagementController.exportScfCollectionsReport,
 );
 
 router.get(
   '/reports/scf-soa/export',
   roleMiddleware(REPORT_EXPORT_ROLES),
-  internalLmsController.exportScfSoaReport,
+  loanManagementController.exportScfSoaReport,
 );
 
 export default router;

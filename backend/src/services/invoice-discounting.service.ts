@@ -6,11 +6,11 @@ import { SupplierBankDetail } from "../entities/SupplierBankDetail";
 import { CaseWorkflow } from "../entities/CaseWorkflow";
 import { CaseStatusHistory } from "../entities/CaseStatusHistory";
 import { LoanAccount } from "../entities/LoanAccount";
-import { DEMAND_STATUS, LoanDemand } from "../entities/InternalLms";
+import { DEMAND_STATUS, LoanDemand } from "../entities/LoanManagement";
 import { CreditSanction } from "../entities/CreditSanction";
 import { Notification } from "../entities/Notification";
 import { NodemailerProvider } from "../integrations/notifications/email/nodemailer.provider";
-import { internalLmsService } from "./loan-calculation.service";
+import { loanManagementService } from "./loan-management.service";
 import axios from "axios";
 import crypto from "crypto";
 
@@ -1618,9 +1618,9 @@ if (existingInvoices.length > 0) {
 
     // 🔴 FIRST send to LMS before making ANY DB updates
     try {
-      console.log(`[Internal LMS] Booking invoice ${invoiceId} after final OPS L2 approval...`);
+      console.log(`[Loan Management] Booking invoice ${invoiceId} after final OPS L2 approval...`);
 
-      const booking = await internalLmsService.bookInvoiceDisbursement(invoiceId, userId);
+      const booking = await loanManagementService.bookInvoiceDisbursement(invoiceId, userId);
       lmsResult = {
         success: true,
         lmsResponse: {
@@ -1635,12 +1635,12 @@ if (existingInvoices.length > 0) {
         throw new Error(lmsResult.error || "LMS send failed");
       }
 
-      console.log(`[Internal LMS] Invoice ${invoiceId} booked successfully`);
+      console.log(`[Loan Management] Invoice ${invoiceId} booked successfully`);
     } catch (error: any) {
-      console.error(`[Internal LMS] Error booking invoice ${invoiceId}:`, error.message);
+      console.error(`[Loan Management] Error booking invoice ${invoiceId}:`, error.message);
 
       // ⛔ STOP EXECUTION — nothing should change
-      throw new Error(`Internal LMS booking failed. Approval halted. Reason: ${error.message}`);
+      throw new Error(`Loan Management booking failed. Approval halted. Reason: ${error.message}`);
     }
 
     // ✅ Only update AFTER LMS success

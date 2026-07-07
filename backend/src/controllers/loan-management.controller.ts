@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { internalLmsService } from '../services/loan-calculation.service';
+import { loanManagementService } from '../services/loan-management.service';
 
 const getReportFilters = (req: Request) => ({
   startDate: req.query.startDate as string | undefined,
@@ -34,7 +34,7 @@ const sendReportError = (res: Response, error: any, fallbackMessage: string): vo
   res.status(message.includes('LAN is required') ? 400 : 500).json({ success: false, message });
 };
 
-export class InternalLmsController {
+export class LoanManagementController {
   bookInvoiceDisbursement = async (req: Request, res: Response): Promise<void> => {
     try {
       const invoiceId = Number(req.params.invoiceId);
@@ -43,7 +43,7 @@ export class InternalLmsController {
         return;
       }
 
-      const result = await internalLmsService.bookInvoiceDisbursement(invoiceId, req.userId);
+      const result = await loanManagementService.bookInvoiceDisbursement(invoiceId, req.userId);
       res.json({ success: true, data: result });
     } catch (error: any) {
       res.status(400).json({ success: false, message: error.message || 'Failed to book invoice' });
@@ -53,7 +53,7 @@ export class InternalLmsController {
   recordCollection = async (req: Request, res: Response): Promise<void> => {
     try {
       const { lan, collectionDate, collectionUtr, collectionAmount } = req.body;
-      const result = await internalLmsService.recordCollection({
+      const result = await loanManagementService.recordCollection({
         lan,
         collectionDate,
         collectionUtr,
@@ -68,7 +68,7 @@ export class InternalLmsController {
 
   getLoanAccountSummary = async (req: Request, res: Response): Promise<void> => {
     try {
-      const result = await internalLmsService.getLoanAccountSummary(req.params.lan);
+      const result = await loanManagementService.getLoanAccountSummary(req.params.lan);
       res.json({ success: true, data: result });
     } catch (error: any) {
       res.status(404).json({ success: false, message: error.message || 'LAN not found' });
@@ -77,7 +77,7 @@ export class InternalLmsController {
 
   getDemandSchedule = async (req: Request, res: Response): Promise<void> => {
     try {
-      const result = await internalLmsService.getDemandSchedule(req.params.lan);
+      const result = await loanManagementService.getDemandSchedule(req.params.lan);
       res.json(result);
     } catch (error: any) {
       res.status(500).json({ success: false, message: error.message || 'Failed to fetch schedule' });
@@ -86,7 +86,7 @@ export class InternalLmsController {
 
   getStatement = async (req: Request, res: Response): Promise<void> => {
     try {
-      const result = await internalLmsService.getStatement(req.params.lan, {
+      const result = await loanManagementService.getStatement(req.params.lan, {
         startDate: req.query.startDate as string | undefined,
         endDate: req.query.endDate as string | undefined,
       });
@@ -98,7 +98,7 @@ export class InternalLmsController {
 
   getCollectionDetail = async (req: Request, res: Response): Promise<void> => {
     try {
-      const result = await internalLmsService.getCollectionDetail(req.params.lan, req.params.utr);
+      const result = await loanManagementService.getCollectionDetail(req.params.lan, req.params.utr);
       res.json(result);
     } catch (error: any) {
       res.status(500).json({ success: false, message: error.message || 'Failed to fetch collection detail' });
@@ -107,7 +107,7 @@ export class InternalLmsController {
 
   getPortfolioReport = async (_req: Request, res: Response): Promise<void> => {
     try {
-      const result = await internalLmsService.getPortfolioReport();
+      const result = await loanManagementService.getPortfolioReport();
       res.json(result);
     } catch (error: any) {
       res.status(500).json({ success: false, message: error.message || 'Failed to fetch portfolio report' });
@@ -116,7 +116,7 @@ export class InternalLmsController {
 
   getDisbursementReport = async (req: Request, res: Response): Promise<void> => {
     try {
-      const result = await internalLmsService.getDisbursementReport({
+      const result = await loanManagementService.getDisbursementReport({
         startDate: req.query.startDate as string | undefined,
         endDate: req.query.endDate as string | undefined,
       });
@@ -128,7 +128,7 @@ export class InternalLmsController {
 
   getCollectionReport = async (req: Request, res: Response): Promise<void> => {
     try {
-      const result = await internalLmsService.getCollectionReport({
+      const result = await loanManagementService.getCollectionReport({
         startDate: req.query.startDate as string | undefined,
         endDate: req.query.endDate as string | undefined,
       });
@@ -141,7 +141,7 @@ export class InternalLmsController {
   exportScf15DReport = async (req: Request, res: Response): Promise<void> => {
     try {
       const filters = getLoanSpecificReportFilters(req);
-      const workbook = await internalLmsService.generateScf15DReportWorkbook(filters);
+      const workbook = await loanManagementService.generateScf15DReportWorkbook(filters);
       sendWorkbook(res, workbook, `${getSafeFilePrefix(filters.lan)}_SCF_15D_Report.xlsx`);
     } catch (error: any) {
       sendReportError(res, error, 'Failed to generate SCF 15D report');
@@ -151,7 +151,7 @@ export class InternalLmsController {
   exportScfAsOfNowReport = async (req: Request, res: Response): Promise<void> => {
     try {
       const filters = getLoanSpecificReportFilters(req);
-      const workbook = await internalLmsService.generateScfAsOfNowReportWorkbook(filters);
+      const workbook = await loanManagementService.generateScfAsOfNowReportWorkbook(filters);
       sendWorkbook(res, workbook, `${getSafeFilePrefix(filters.lan)}_SCF_As_of_Now_Format.xlsx`);
     } catch (error: any) {
       sendReportError(res, error, 'Failed to generate SCF as-of-now report');
@@ -161,7 +161,7 @@ export class InternalLmsController {
   exportScfCollectionsReport = async (req: Request, res: Response): Promise<void> => {
     try {
       const filters = getLoanSpecificReportFilters(req);
-      const workbook = await internalLmsService.generateScfCollectionReportWorkbook(filters);
+      const workbook = await loanManagementService.generateScfCollectionReportWorkbook(filters);
       sendWorkbook(res, workbook, `${getSafeFilePrefix(filters.lan)}_SCF_Collection_Format.xlsx`);
     } catch (error: any) {
       sendReportError(res, error, 'Failed to generate SCF collection report');
@@ -171,7 +171,7 @@ export class InternalLmsController {
   exportScfSoaReport = async (req: Request, res: Response): Promise<void> => {
     try {
       const filters = getLoanSpecificReportFilters(req);
-      const workbook = await internalLmsService.generateScfSoaReportWorkbook(filters);
+      const workbook = await loanManagementService.generateScfSoaReportWorkbook(filters);
       sendWorkbook(res, workbook, `${getSafeFilePrefix(filters.lan)}_SCF_SOA.xlsx`);
     } catch (error: any) {
       sendReportError(res, error, 'Failed to generate SCF SOA report');

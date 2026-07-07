@@ -52,7 +52,7 @@ import {
   Repayment,
   RepaymentAllocation,
   ReportRun,
-} from '../entities/InternalLms';
+} from '../entities/LoanManagement';
 import { PerformanceMetricsCache, RewardConfiguration, RewardPoint, TaskBucketMapping, TaskTimeTracking } from '../entities';
 
 // Export entities array for use in DataSource

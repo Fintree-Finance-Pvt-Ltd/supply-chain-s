@@ -51,7 +51,7 @@ export {
   REPAYMENT_STATUS,
   ReportRun,
   REPORT_RUN_STATUS,
-} from './InternalLms';
+} from './LoanManagement';
 
 // SUPERADMIN Analytics & RBAC Entities
 export { TaskTimeTracking } from './TaskTimeTracking';

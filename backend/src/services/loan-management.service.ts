@@ -82,7 +82,7 @@ type AccruedDemandCharges = {
   dayCount: number;
 };
 
-export class InternalLmsService {
+export class LoanManagementService {
   private loanAccountRepository = AppDataSource.getRepository(LoanAccount);
   private invoiceRepository = AppDataSource.getRepository(Invoice);
   private disbursementRepository = AppDataSource.getRepository(LoanDisbursement);
@@ -344,7 +344,7 @@ export class InternalLmsService {
           order: { id: 'ASC' },
         });
         if (!existingDemand) {
-          throw new Error(`Internal LMS disbursement ${existing.id} exists without a demand`);
+          throw new Error(`Loan Management disbursement ${existing.id} exists without a demand`);
         }
         const snapshot = await this.refreshSnapshot(manager, existing.loanAccountId);
         return { disbursement: existing, demand: existingDemand, snapshot, alreadyBooked: true };
@@ -355,7 +355,7 @@ export class InternalLmsService {
         relations: ['loanAccount', 'loanAccount.partner', 'supplier', 'customer'],
       });
       console.log(invoice)
-      if (!invoice) throw new Error('Invoice not found for internal LMS booking');
+      if (!invoice) throw new Error('Invoice not found for loan management booking');
       if (!invoice.loanAccountId) throw new Error('Invoice is not linked to a LAN');
       if (!invoice.disbursementDate) throw new Error('Disbursement date is required before LMS booking');
       if (!invoice.disbursementUtr) throw new Error('Disbursement UTR is required before LMS booking');
@@ -364,7 +364,7 @@ export class InternalLmsService {
         where: { id: invoice.loanAccountId },
         relations: ['partner'],
       });
-      if (!loanAccount) throw new Error('Loan account not found for internal LMS booking');
+      if (!loanAccount) throw new Error('Loan account not found for loan management booking');
       if (String(loanAccount.status || '').toLowerCase() !== 'active') {
         throw new Error(`LAN ${loanAccount.lanId} is not active`);
       }
@@ -1873,4 +1873,4 @@ export class InternalLmsService {
   }
 }
 
-export const internalLmsService = new InternalLmsService();
+export const loanManagementService = new LoanManagementService();
