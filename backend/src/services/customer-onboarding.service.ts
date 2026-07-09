@@ -17,7 +17,6 @@ import { DEFAULT_PARTNER_CODES, ROLES } from "../config/constants";
 import { WorkflowValidatorService } from "./workflow-validator.service";
 import { AuditService } from "./audit.service";
 import { RewardService } from "./reward.service";
-import axios from "axios";
 
 import { getRepository } from "typeorm";
 import { User } from "../entities/User";
@@ -2598,7 +2597,7 @@ Fintree Finance Pvt. Ltd.
   //   console.log(`[LMS Supply Chain] Triggering LMS integration for customer ${customerId} after successful onboarding`);
 
   //   try {
-  //     const lmsResult = await this.sendCustomerToLMS(customerId);
+  //     const localResult = await this.completeCustomerInLocalLoanManagement(customerId);
   //     if (lmsResult.success) {
   //       console.log(`[LMS Supply Chain] Successfully sent customer ${customerId} to LMS: ${lmsResult.message}`);
   //     } else {
@@ -2620,35 +2619,33 @@ Fintree Finance Pvt. Ltd.
     const previousStatus = workflow.currentStatus;
 
     console.log(
-      `[LMS Supply Chain] Triggering LMS integration for customer ${customerId}`,
+      `[Loan Management] Completing customer ${customerId} in the local system`,
     );
 
-    // 🚨 BLOCK WORKFLOW UNTIL LMS SUCCESS
-    let lmsResult;
-
+    // Keep approval blocked until local loan management setup succeeds.
     try {
-      lmsResult = await this.sendCustomerToLMS(customerId);
+      const localResult = await this.completeCustomerInLocalLoanManagement(customerId);
 
-      if (!lmsResult.success) {
-        throw new Error(lmsResult.message || "Customer sync failed with LMS");
+      if (!localResult.success) {
+        throw new Error(localResult.message || "Customer local completion failed");
       }
 
       console.log(
-        `[LMS Supply Chain] Successfully sent customer ${customerId} to LMS`,
+        `[Loan Management] Customer ${customerId} completed in the local system`,
       );
-    } catch (lmsError: any) {
+    } catch (localError: any) {
       console.error(
-        `[LMS Supply Chain] LMS integration failed for customer ${customerId}:`,
-        lmsError.message,
+        `[Loan Management] Local completion failed for customer ${customerId}:`,
+        localError.message,
       );
 
-      // 🚫 STOP APPROVAL FLOW HERE
+      // Stop approval if local loan management setup failed.
       throw new Error(
-        `Ops Head approval blocked: LMS sync failed → ${lmsError.message}`,
+        `Ops Head approval blocked: local loan management completion failed -> ${localError.message}`,
       );
     }
 
-    // ✅ ONLY RUNS IF LMS SUCCESS
+    // Only runs after local loan management setup succeeds.
     workflow.currentStatus = "completed";
     workflow.currentApproverRoleName = "None";
     workflow.isCompleted = true;
@@ -3115,249 +3112,69 @@ async updateBankDetails(customerId: number, data: any) {
   return await this.customerRepository.save(customer);
 }
   /**
-   * Send customer data to LMS after successful onboarding
-   * This is called after opsHeadApprove completes the onboarding process
-   * Does NOT break LOS flow if LMS call fails - just logs the error
+   * Complete customer loan setup inside this system.
+   * The old external LMS push has been removed.
    */
-  async sendCustomerToLMS(customerId: number): Promise<{
+  async completeCustomerInLocalLoanManagement(customerId: number): Promise<{
     success: boolean;
     message: string;
     response?: any;
   }> {
     console.log(
-      `[LMS Supply Chain] Starting LMS integration for customer ${customerId}`,
+      `[Loan Management] Starting local customer completion for ${customerId}`,
     );
 
     try {
-      // Fetch customer with all related data
       const customer = await this.customerRepository.findOne({
         where: { id: customerId },
       });
 
       if (!customer) {
-        console.error(`[LMS Supply Chain] Customer not found: ${customerId}`);
+        console.error(`[Loan Management] Customer not found: ${customerId}`);
         return { success: false, message: "Customer not found" };
       }
 
-      console.log(
-        `[LMS Supply Chain] Customer found: ${customer.name}, Status: ${customer.status}`,
-      );
-
-      // Get applicant KYC details (PAN, Aadhaar)
-      const applicantKycDetails = await this.kycDetailRepository.find({
-        where: { customerId, applicantType: "applicant" },
-      });
-
-      const applicant = await this.ApplicantRepository.findOne({
-        where: { customerId },
-        select: ["aadhaarNumber", "pan"],
-      });
-
-      const applicantPan =
-        applicant?.pan ||
-        applicantKycDetails.find((k) => k.kycType === "PAN")?.kycNumber ||
-        "";
-      const applicantAadhaar =
-        applicant?.aadhaarNumber ||
-        applicantKycDetails.find((k) => k.kycType === "AADHAAR")?.kycNumber ||
-        "";
-
-      // Get applicant address
-      const applicantAddress = await this.customerAddressRepository.findOne({
-        where: { customerId, type: "Residence" as any },
-      });
-      const applicantAddressStr = applicantAddress
-        ? `${applicantAddress.fullAddress}, ${applicantAddress.city}, ${applicantAddress.state} - ${applicantAddress.pincode}`
-        : "";
-
-      // Get co-applicant if exists
-      const coApplicant = await this.coApplicantRepository.findOne({
-        where: { customerId },
-        select: ["pan"],
-      });
-
-      let coApplicantData: LMSSupplyChainPayload["co_applicant"] | undefined;
-      if (coApplicant) {
-        const coApplicantKycDetails = await this.kycDetailRepository.find({
-          where: { coApplicantId: coApplicant.id },
-        });
-
-        const coApplicantPan =
-          coApplicant?.pan ||
-          coApplicantKycDetails.find((k) => k.kycType === "PAN")?.kycNumber ||
-          "";
-        const coApplicantAadhaar =
-          coApplicantKycDetails.find((k) => k.kycType === "AADHAAR")
-            ?.kycNumber || "";
-
-        coApplicantData = {
-          name: coApplicant.name || "",
-          pan: coApplicantPan,
-          aadhaar: coApplicantAadhaar,
-          mobile: coApplicant.mobile || "",
-          address: "", // Co-applicant address not available in current schema
-        };
-      }
-
-      // Get company address
-      const companyAddress = await this.customerAddressRepository.findOne({
-        where: { customerId, type: "Shop" as any },
-      });
-      const companyAddressStr = companyAddress
-        ? `${companyAddress.fullAddress}, ${companyAddress.city}, ${companyAddress.state} - ${companyAddress.pincode}`
-        : applicantAddressStr;
-
-      // Get loan accounts (LANs) for this customer - these represent the sanctions
       const loanAccounts = await this.loanAccountRepository.find({
         where: { customerId, status: "active", isOnboarded: false },
-        relations: ["partner"],
       });
 
-      console.log(
-        `[LMS Supply Chain] Found ${loanAccounts.length} loan accounts for customer ${customerId}`,
-      );
-
       if (loanAccounts.length === 0) {
-        console.warn(
-          `[LMS Supply Chain] No active loan accounts found for customer ${customerId}`,
-        );
+        const alreadyOnboardedLoanAccount = await this.loanAccountRepository.findOne({
+          where: { customerId, status: "active", isOnboarded: true } as any,
+        });
+
+        if (alreadyOnboardedLoanAccount) {
+          return {
+            success: true,
+            message: "Customer already available in local loan management",
+            response: { alreadyCompleted: true },
+          };
+        }
+
         return { success: false, message: "No active loan accounts found" };
       }
 
-      // Get sanctions for all loan accounts
-      const sanctions = await Promise.all(
-        loanAccounts.map(async (loanAccount) => {
-          // Get the credit sanction for this loan account
-          const creditSanction = await this.sanctionRepository.findOne({
-            where: {
-              customerId,
-              partner: loanAccount.lender,
-              status: "approved",
-            },
-            order: { createdAt: "DESC" },
-          });
-
-          return {
-            lan: loanAccount.lanId,
-            lender: loanAccount.partner?.code || "",
-            sanction_amount: Number(loanAccount.sanctionedAmount),
-            tenure_months: creditSanction?.tenure || 0,
-            interest_rate: Number(creditSanction?.interestRate || 0),
-            penal_rate: Number(creditSanction?.penalCharges || 0),
-            processing_fee: Number(creditSanction?.processingFees || 0),
-          };
-        }),
-      );
-
-      console.log(
-        `[LMS Supply Chain] Prepared ${sanctions.length} sanctions for customer ${customerId}`,
-      );
-
-      // Build the LMS payload
-      const payload: LMSSupplyChainPayload = {
-        partner_loan_id: String(customerId),
-        applicant: {
-          name: customer.name || applicant?.name || "",
-          pan: applicantPan ?? customer.pan,
-          aadhaar: applicantAadhaar,
-          mobile: customer.mobile,
-          address: applicantAddressStr,
-        },
-        co_applicant: coApplicantData,
-        company: {
-          name: customer.companyName || customer.companyName,
-          pan: customer.companyPan,
-          gst: customer.gstNumber,
-          address: companyAddressStr,
-        },
-        sanctions: sanctions,
-      };
-
-      console.log(
-        `[LMS Supply Chain] Payload prepared for customer ${customerId}:`,
-        JSON.stringify(payload, null, 2),
-      );
-
-      // Send to LMS API
-      const baseUrl = process.env.LMS_API_BASE_URL;
-      const apiKey = process.env.LMS_API_KEY;
-
-      if (!baseUrl || !apiKey) {
-        console.warn(
-          `[LMS Supply Chain] LMS API configuration missing. Set LMS_API_BASE_URL and LMS_API_KEY in environment.`,
-        );
-        throw new Error(
-          "LMS API configuration missing. Set LMS_API_BASE_URL and LMS_API_KEY in environment.",
-        );
-      }
-
-      console.log(
-        `[LMS Supply Chain] Calling LMS API at: ${baseUrl}v1/supply-chain`,
-      );
-      let response;
-      try {
-        response = await axios.post<any>(
-          `${baseUrl}loan-booking/v1/supply-chain`,
-          payload,
-          {
-            headers: {
-              "Content-Type": "application/json",
-              "x-api-key": apiKey,
-            },
-            timeout: 30000, // 30 second timeout
-          },
-        );
-
-        console.log(
-          `[LMS Supply Chain] LMS API response status: ${response.status}`,
-        );
-        await this.loanAccountRepository.update(
-          { customerId, status: "active", isOnboarded: false },
-          { isOnboarded: true },
-        );
-      } catch (error: any) {
-        if (error.response) {
-          throw new Error(
-            `LMS API Error: ${error.response.status} - ${JSON.stringify(error.response.data)}`,
-          );
-        } else if (error.request) {
-          throw new Error("LMS API unreachable - no response received");
-        } else {
-          throw new Error(`Failed to send to LMS: ${error.message}`);
-        }
-      }
-
-      console.log(
-        `[LMS Supply Chain] LMS response for customer ${customerId}:`,
-        JSON.stringify(response.data),
+      await this.loanAccountRepository.update(
+        { id: In(loanAccounts.map((loanAccount) => loanAccount.id)) },
+        { isOnboarded: true },
       );
 
       return {
-        success: response.data?.success ?? true,
-        message: response.data?.message || "Customer sent to LMS successfully",
-        response,
+        success: true,
+        message: "Customer completed in local loan management",
+        response: {
+          completedLoanAccounts: loanAccounts.map((loanAccount) => loanAccount.lanId),
+        },
       };
     } catch (error: any) {
-      // Log error but don't throw - we don't want to break the LOS flow
       console.error(
-        `[LMS Supply Chain] Error sending customer ${customerId} to LMS:`,
+        `[Loan Management] Error completing customer ${customerId} locally:`,
         error.message,
       );
 
-      if (error.response) {
-        console.error(
-          `[LMS Supply Chain] LMS API error response:`,
-          JSON.stringify(error.response.data),
-        );
-      } else if (error.request) {
-        console.error(
-          `[LMS Supply Chain] LMS API unreachable - no response received`,
-        );
-      }
-
       return {
         success: false,
-        message: error.message || "Failed to send to LMS",
+        message: error.message || "Failed to complete customer locally",
       };
     }
   }

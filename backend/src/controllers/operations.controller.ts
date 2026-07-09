@@ -143,6 +143,34 @@ export class OperationsController {
     }
   };
 
+  downloadCustomerMigrationTemplate = async (_req: Request, res: Response): Promise<void> => {
+    try {
+      const workbook = await this.operationsService.generateCustomerMigrationTemplateWorkbook();
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', 'attachment; filename="customer_migration_format.xlsx"');
+      res.send(workbook);
+    } catch (error: any) {
+      res.status(500).json({
+        success: false,
+        message: error.message || 'Failed to generate customer migration template',
+      });
+    }
+  };
+
+  downloadInvoiceMigrationTemplate = async (_req: Request, res: Response): Promise<void> => {
+    try {
+      const workbook = await this.operationsService.generateInvoiceMigrationTemplateWorkbook();
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', 'attachment; filename="invoice_migration_format.xlsx"');
+      res.send(workbook);
+    } catch (error: any) {
+      res.status(500).json({
+        success: false,
+        message: error.message || 'Failed to generate invoice migration template',
+      });
+    }
+  };
+
   migrateSuppliers = async (req: Request, res: Response): Promise<void> => {
     try {
       if (!req.userId) {
@@ -168,6 +196,35 @@ export class OperationsController {
       res.status(400).json({
         success: false,
         message: error.message || 'Failed to migrate suppliers',
+      });
+    }
+  };
+
+  migrateInvoices = async (req: Request, res: Response): Promise<void> => {
+    try {
+      if (!req.userId) {
+        res.status(401).json({
+          success: false,
+          message: 'Authentication required',
+        });
+        return;
+      }
+
+      if (!req.file) {
+        res.status(400).json({
+          success: false,
+          message: 'Excel file is required',
+        });
+        return;
+      }
+
+      const result = await this.operationsService.migrateInvoicesFromExcel(req.file, req.userId);
+
+      res.json(result);
+    } catch (error: any) {
+      res.status(400).json({
+        success: false,
+        message: error.message || 'Failed to migrate invoices',
       });
     }
   };

@@ -145,6 +145,9 @@ DASHBOARD_OPERATIONS_SUPPLIERS: '/workflows/suppliers/dashboard/operations',
   REPAYMENT_LENDERS: '/operations/repayments/lenders',
   REPAYMENT_LANS: '/operations/repayments/lans',
   CUSTOMER_MIGRATION_UPLOAD: '/operations/migrations/customers',
+  CUSTOMER_MIGRATION_TEMPLATE: '/operations/migrations/customers/template',
+  INVOICE_MIGRATION_UPLOAD: '/operations/migrations/invoices',
+  INVOICE_MIGRATION_TEMPLATE: '/operations/migrations/invoices/template',
   SUPPLIER_MIGRATION_UPLOAD: '/operations/migrations/suppliers',
 
   // Loan Servicing

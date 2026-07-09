@@ -8,7 +8,6 @@ import { SupplierDocument } from "../entities/SupplierDocument";
 import { SanctionLimitHistory } from "../entities/SanctionLimitHistory";
 import { LoanAccount } from "../entities/LoanAccount";
 import { ChequeParserService } from "./cheque-parser.service";
-import axios from "axios";
 
 export class SupplierOnboardingService {
   private supplierRepository = AppDataSource.getRepository(Supplier);
@@ -25,81 +24,19 @@ export class SupplierOnboardingService {
   MAX_SUPPLIERS_PER_LAN = 20;
   MIN_SUPPLIERS_PER_LAN = 10;
 
-  // Track which supplier bank accounts have been pushed to LMS to avoid duplicates
-  private lmsPushedBankAccounts = new Set<string>();
-
   /**
-   * Push supplier to LMS after successful onboarding
-   * This is called after supplier status becomes COMPLETED
+   * Supplier onboarding is now fully local. Keep this hook for the existing
+   * approval flow, but do not push anything to the old external LMS.
    */
-  private async pushSupplierToLMS(
+  private async completeSupplierLocally(
     supplier: Supplier,
     bankDetail: SupplierBankDetail | null,
     partnerLoanId: string,
   ): Promise<void> {
-    // Check for duplicate - avoid pushing same bank account twice
-    const bankAccountKey = `${partnerLoanId}_${bankDetail?.bankAccountNumber}`;
-    if (this.lmsPushedBankAccounts.has(bankAccountKey)) {
-      console.log(
-        `[LMS Supplier] Already pushed supplier ${supplier.id} with bank account ${bankDetail?.bankAccountNumber} to LMS, skipping`,
-      );
-      return;
-    }
-
-    try {
-      const baseUrl = process.env.LMS_API_BASE_URL;
-      const apiKey = process.env.LMS_API_KEY;
-
-      if (!baseUrl || !apiKey) {
-        console.warn(
-          `[LMS Supplier] LMS API configuration missing. Set LMS_API_BASE_URL and LMS_API_KEY in environment.`,
-        );
-        return;
-      }
-
-      const lmsPayload = {
-        partner_loan_id: partnerLoanId,
-        suppliers: [
-          {
-            supplier_name: supplier.supplierName,
-            mobile_number: supplier.contactNumber || "",
-            bank_account_number: bankDetail?.bankAccountNumber || "",
-            ifsc_code: bankDetail?.ifscCode || "",
-            bank_name: bankDetail?.bankName || "",
-            account_holder_name: bankDetail?.accountHolderName || "",
-          },
-        ],
-      };
-
-      console.log(
-        `[LMS Supplier] Pushing supplier ${supplier.id} to LMS:`,
-        JSON.stringify(lmsPayload),
-      );
-
-      await axios.post(
-        `${baseUrl}loan-booking/v1/supplier-onboarding`,
-        lmsPayload,
-        {
-          headers: {
-            "Content-Type": "application/json",
-            "x-api-key": apiKey,
-          },
-          timeout: 30000,
-        },
-      );
-
-      // Mark as pushed to avoid duplicate
-      this.lmsPushedBankAccounts.add(bankAccountKey);
-      console.log(
-        `[LMS Supplier] Successfully pushed supplier ${supplier.id} to LMS`,
-      );
-    } catch (error: any) {
-      // Log error but do NOT break the LOS flow
-      console.error(
-        `[LMS Supplier] Failed to push supplier ${supplier.id} to LMS:`,
-        error.response?.data || error.message,
-      );
-    }
+    console.log(
+      `[Loan Management] Supplier ${supplier.id} completed locally for ${partnerLoanId}`,
+      { bankAccountNumber: bankDetail?.bankAccountNumber || null },
+    );
   }
 
   private async getOrCreateWorkflow(
@@ -331,13 +268,11 @@ export class SupplierOnboardingService {
 
         const partnerLoanId = String(supplier.customerId);
 
-        // Push to LMS
-        await this.pushSupplierToLMS(supplier, bankDetail, partnerLoanId);
-      } catch (lmsError) {
-        // Log error but don't break the flow - LMS failure should not affect LOS
+        await this.completeSupplierLocally(supplier, bankDetail, partnerLoanId);
+      } catch (localError) {
         console.error(
-          `[LMS Supplier] Error pushing supplier ${supplier.id} to LMS:`,
-          lmsError,
+          `[Loan Management] Error completing supplier ${supplier.id} locally:`,
+          localError,
         );
       }
     }
@@ -743,13 +678,11 @@ export class SupplierOnboardingService {
 
         const partnerLoanId = loanAccount?.lanId || String(supplier.customerId);
 
-        // Push to LMS
-        await this.pushSupplierToLMS(supplier, bankDetail, partnerLoanId);
-      } catch (lmsError) {
-        // Log error but don't break the flow - LMS failure should not affect LOS
+        await this.completeSupplierLocally(supplier, bankDetail, partnerLoanId);
+      } catch (localError) {
         console.error(
-          `[LMS Supplier] Error pushing supplier ${supplier.id} to LMS:`,
-          lmsError,
+          `[Loan Management] Error completing supplier ${supplier.id} locally:`,
+          localError,
         );
       }
     }

@@ -67,6 +67,33 @@ export const operationsService = {
     }
   },
 
+  uploadInvoiceMigration: async (file) => {
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+
+      const response = await api.post(API_ENDPOINTS.INVOICE_MIGRATION_UPLOAD, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
+
+      return response.data
+    } catch (error) {
+      if (error.response?.data) return error.response.data
+      const message = error.message || 'Failed to migrate invoices'
+      throw new Error(message)
+    }
+  },
+
+  downloadMigrationTemplate: async (type) => {
+    const endpoint =
+      type === 'customer'
+        ? API_ENDPOINTS.CUSTOMER_MIGRATION_TEMPLATE
+        : API_ENDPOINTS.INVOICE_MIGRATION_TEMPLATE
+
+    const response = await api.get(endpoint, { responseType: 'blob' })
+    return response
+  },
+
   uploadSupplierMigration: async (file) => {
     try {
       const formData = new FormData()

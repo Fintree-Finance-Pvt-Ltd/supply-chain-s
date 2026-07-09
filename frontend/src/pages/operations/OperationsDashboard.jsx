@@ -191,7 +191,7 @@ const OperationsDashboard = () => {
     },
     {
       key: "lmsStatus",
-      label: "LMS",
+      label: "System",
       render: (value) => (
         <span
           className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-bold ${
@@ -203,7 +203,7 @@ const OperationsDashboard = () => {
           }`}
         >
           {value === "SENT" ? <FiCheckCircle /> : <FiAlertTriangle />}
-          {value}
+          {value === "SENT" ? "DONE" : value}
         </span>
       ),
     },
@@ -346,7 +346,7 @@ const OperationsDashboard = () => {
                     </p>
                   </div>
                   <div className="rounded-lg bg-emerald-50 px-4 py-2">
-                    <p className="text-xs text-emerald-500">LMS Sent</p>
+                    <p className="text-xs text-emerald-500">Done</p>
                     <p className="font-black text-emerald-700">
                       {migrationResult.summary.lmsSent}
                     </p>

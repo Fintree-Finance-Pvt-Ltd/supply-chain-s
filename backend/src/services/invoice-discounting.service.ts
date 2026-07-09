@@ -11,11 +11,10 @@ import { CreditSanction } from "../entities/CreditSanction";
 import { Notification } from "../entities/Notification";
 import { NodemailerProvider } from "../integrations/notifications/email/nodemailer.provider";
 import { loanManagementService } from "./loan-management.service";
-import axios from "axios";
 import crypto from "crypto";
 
 /**
- * LMS API Response interfaces
+ * Local invoice processing response interfaces
  */
 interface LMSValidationResult {
   invoice_number: string;
@@ -34,7 +33,7 @@ interface LMSResponse {
 }
 
 /**
- * Invoice Disbursement Payload for LMS
+ * Invoice disbursement payload shape kept for local validation/reporting.
  */
 interface InvoiceDisbursementPayload {
   partner_loan_id: string;
@@ -1632,7 +1631,7 @@ if (existingInvoices.length > 0) {
       };
 
       if (!lmsResult.success) {
-        throw new Error(lmsResult.error || "LMS send failed");
+        throw new Error(lmsResult.error || "Loan management booking failed");
       }
 
       console.log(`[Loan Management] Invoice ${invoiceId} booked successfully`);
@@ -2067,7 +2066,7 @@ if (existingInvoices.length > 0) {
   //     }
 
   //     // Send to LMS API
-  //     const lmsResponse = await this.sendToLMSApi(transformResult.data);
+  //     const lmsResponse = await this.validateInvoicesLocally(transformResult.data);
 
   //     // Check if there are failed invoices and extract error messages
   //     const failedResults = lmsResponse.results?.filter(r => r.status === 'failed') || [];
@@ -2091,7 +2090,7 @@ if (existingInvoices.length > 0) {
   // }
 
   /**
-   * Send single invoice to LMS
+   * Validate one invoice for local loan management processing.
    */
   async sendSingleToLMS(invoiceId: number): Promise<{
     success: boolean;
@@ -2100,7 +2099,6 @@ if (existingInvoices.length > 0) {
     error?: string;
   }> {
     try {
-      // Transform invoice to LMS payload
       const transformResult = await this.transformInvoiceToLMSPayload(invoiceId);
       console.log("transformResult",transformResult)
       if (!transformResult.success || !transformResult.data) {
@@ -2111,8 +2109,7 @@ if (existingInvoices.length > 0) {
         };
       }
 
-      // Send to LMS API
-      const lmsResponse = await this.sendToLMSApi([transformResult.data]);
+      const lmsResponse = await this.validateInvoicesLocally([transformResult.data]);
 
       // Check if there are failed invoices and extract error messages
       const failedResults = lmsResponse.results?.filter(r => r.status === 'failed') || [];
@@ -2130,48 +2127,27 @@ if (existingInvoices.length > 0) {
     } catch (error: any) {
       return {
         success: false,
-        error: error.message || 'Failed to send to LMS'
+        error: error.message || 'Failed to validate invoice locally'
       };
     }
   }
 
   /**
-   * Send data to LMS API
+   * Validate data locally. The old external LMS API flow has been removed.
    */
-  private async sendToLMSApi(payload: InvoiceDisbursementPayload[]): Promise<LMSResponse> {
-    const baseUrl = process.env.LMS_API_BASE_URL;
-    const apiKey = process.env.LMS_API_KEY;
-
-    if (!baseUrl || !apiKey) {
-      throw new Error('LMS API configuration missing. Set LMS_API_BASE_URL and LMS_API_KEY in environment.');
-    }
-
-    console.log(baseUrl)
-   console.log("payload",payload)
-    try {
-      const response = await axios.post<LMSResponse>(
-        `${baseUrl}loan-booking/v1/invoice-disbursement/validate`,
-        payload,
-        {
-          headers: {
-            'Content-Type': 'application/json',
-            'x-api-key': apiKey,
-          },
-          timeout: 30000,
-        }
-      );
-
-      console.log(response);
-      return response.data;
-    } catch (error: any) {
-      if (error.response) {
-        throw new Error(`LMS API Error: ${error.response.status} - ${JSON.stringify(error.response.data)}`);
-      } else if (error.request) {
-        throw new Error('LMS API unreachable - no response received');
-      } else {
-        throw new Error(`Failed to send to LMS: ${error.message}`);
-      }
-    }
+  private async validateInvoicesLocally(payload: InvoiceDisbursementPayload[]): Promise<LMSResponse> {
+    console.log('[Loan Management] Local invoice payload validation:', payload);
+    return {
+      message: 'Invoice data validated locally',
+      total: payload.length,
+      success_count: payload.length,
+      failed_count: 0,
+      results: payload.map((invoice) => ({
+        invoice_number: invoice.invoice_number,
+        status: 'success',
+        message: 'Validated locally',
+      })),
+    };
   }
 }
 

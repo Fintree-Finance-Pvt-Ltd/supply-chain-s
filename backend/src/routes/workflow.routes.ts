@@ -2291,20 +2291,20 @@ router.post('/invoices/:invoiceId/final-ops-l2', checkRole(['operations_team_l1'
       remarks || ''
     );
 
-    // Include LMS result in response if invoice was approved
-    const lmsInfo = approved && result.lmsResult ? {
-      lmsSent: result.lmsResult.success,
-      lmsError: result.lmsResult.error,
-      lmsResponse: result.lmsResult.lmsResponse
+    // Include local loan management result in response if invoice was approved
+    const loanManagementInfo = approved && result.lmsResult ? {
+      booked: result.lmsResult.success,
+      error: result.lmsResult.error,
+      response: result.lmsResult.lmsResponse
     } : null;
 
     res.json({
       success: true,
       message: approved 
-        ? 'Invoice finalized, activated and sent to LMS' 
+        ? 'Invoice finalized, activated and booked locally' 
         : 'Invoice rejected at final verification',
       data: result,
-      lmsInfo,
+      loanManagementInfo,
     });
   } catch (error: any) {
     res.status(400).json({ success: false, message: error.message });

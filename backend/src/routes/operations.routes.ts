@@ -13,11 +13,30 @@ router.use(authMiddleware);
 // IMPORTANT: More specific routes must come BEFORE generic /:id route
 
 // Data Migration Routes (OPS only)
+router.get(
+  '/migrations/customers/template',
+  roleMiddleware([ROLES.OPERATIONS_TEAM_L1, ROLES.OPERATIONS_TEAM_L2, ROLES.OPERATIONS_HEAD]),
+  operationsController.downloadCustomerMigrationTemplate
+);
+
+router.get(
+  '/migrations/invoices/template',
+  roleMiddleware([ROLES.OPERATIONS_TEAM_L1, ROLES.OPERATIONS_TEAM_L2, ROLES.OPERATIONS_HEAD]),
+  operationsController.downloadInvoiceMigrationTemplate
+);
+
 router.post(
   '/migrations/customers',
   roleMiddleware([ROLES.OPERATIONS_TEAM_L1, ROLES.OPERATIONS_TEAM_L2, ROLES.OPERATIONS_HEAD]),
   upload.single('file'),
   operationsController.migrateCustomers
+);
+
+router.post(
+  '/migrations/invoices',
+  roleMiddleware([ROLES.OPERATIONS_TEAM_L1, ROLES.OPERATIONS_TEAM_L2, ROLES.OPERATIONS_HEAD]),
+  upload.single('file'),
+  operationsController.migrateInvoices
 );
 
 router.post(
