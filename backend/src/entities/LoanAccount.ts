@@ -7,6 +7,7 @@ import {
   JoinColumn,
   OneToMany,
   Unique,
+  Index,
 } from 'typeorm';
 import { Customer } from './Customer';
 import { Partner } from './Partner';
@@ -43,6 +44,10 @@ export class LoanAccount {
 
   @Column({ type: 'varchar', length: 50, unique: true })
   lanId: string; // Loan Account Number (auto-generated)
+
+  @Index('idx_loan_accounts_partner_lan_id')
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  partnerLanId: string | null; // Old partner LAN used only for migration mapping
 
   @Column({ type: 'decimal', precision: 15, scale: 2 })
   sanctionedAmount: number;

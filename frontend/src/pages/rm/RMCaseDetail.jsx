@@ -82,7 +82,7 @@ const RMCaseDetail = () => {
         parseFloat(partnerSanctions[partner.code].interestRate) || 0,
 
       penalCharges:
-      (parseFloat(partnerSanctions[partner.code].penalCharges) || 0) / 12,
+        parseFloat(partnerSanctions[partner.code].penalCharges) || 0,
 
       processingFees:
         parseFloat(partnerSanctions[partner.code].processingFees) || 0,
