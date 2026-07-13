@@ -692,13 +692,6 @@ const CreditCaseDetail = () => {
         partner: partner.code,
         sanctionAmount:
           parseFloat(partnerSanctions[partner.code].sanctionAmount) || 0,
-        tenure: parseInt(partnerSanctions[partner.code].tenor) || 0,
-        interestRate: parseFloat(partnerSanctions[partner.code].roi) || 0,
-        penalCharges:
-          parseFloat(partnerSanctions[partner.code].penalCharges) || 0,
-        processingFees:
-          parseFloat(partnerSanctions[partner.code].processingFees) || 0,
-        conditions: partnerSanctions[partner.code].conditions,
       }));
 
       if (sanctionsArray.length === 0) {
