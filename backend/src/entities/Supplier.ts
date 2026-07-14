@@ -31,6 +31,9 @@ export class Supplier {
   @Column({ type: 'varchar', length: 50, unique: true })
   supplierCode: string;
 
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  partnerLoanId: string | null;
+
   @Column({ type: 'varchar', length: 255 })
   email: string;
 

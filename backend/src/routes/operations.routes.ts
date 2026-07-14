@@ -25,6 +25,12 @@ router.get(
   operationsController.downloadInvoiceMigrationTemplate
 );
 
+router.get(
+  '/migrations/suppliers/template',
+  roleMiddleware([ROLES.OPERATIONS_TEAM_L1, ROLES.OPERATIONS_TEAM_L2, ROLES.OPERATIONS_HEAD]),
+  operationsController.downloadSupplierMigrationTemplate
+);
+
 router.post(
   '/migrations/customers',
   roleMiddleware([ROLES.OPERATIONS_TEAM_L1, ROLES.OPERATIONS_TEAM_L2, ROLES.OPERATIONS_HEAD]),

@@ -85,10 +85,16 @@ export const operationsService = {
   },
 
   downloadMigrationTemplate: async (type) => {
-    const endpoint =
-      type === 'customer'
-        ? API_ENDPOINTS.CUSTOMER_MIGRATION_TEMPLATE
-        : API_ENDPOINTS.INVOICE_MIGRATION_TEMPLATE
+    const templateEndpoints = {
+      customer: API_ENDPOINTS.CUSTOMER_MIGRATION_TEMPLATE,
+      supplier: API_ENDPOINTS.SUPPLIER_MIGRATION_TEMPLATE,
+      invoice: API_ENDPOINTS.INVOICE_MIGRATION_TEMPLATE,
+    }
+    const endpoint = templateEndpoints[type]
+
+    if (!endpoint) {
+      throw new Error('Unsupported migration format')
+    }
 
     const response = await api.get(endpoint, { responseType: 'blob' })
     return response

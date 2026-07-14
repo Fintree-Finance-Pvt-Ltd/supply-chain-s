@@ -274,7 +274,7 @@ router.post('/customers/:customerId/credit-l1', checkRole(['credit_team_l1', 'cr
 
     // Check if user is trying to modify sanction data
     const isModifyingSanctions = approved && partnerSanctions && Array.isArray(partnerSanctions) && partnerSanctions.length > 0;
-    
+    console.log("isModifyingSanctions", isModifyingSanctions, partnerSanctions)
     // Credit team can only modify sanctionAmount (not tenure, ROI, etc.)
     // Check if user has L1 role
     if (isModifyingSanctions && userRoles.includes('credit_team_l1')) {

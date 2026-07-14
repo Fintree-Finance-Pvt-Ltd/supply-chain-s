@@ -34,11 +34,22 @@ const migrationUploads = [
     id: "customer",
     label: "Customer Excel",
     fileName: "customer_migration_format.xlsx",
+    resultLabel: "Customer",
+    description: "Customer onboarding, sanction, generated LAN, and bank data.",
+  },
+  {
+    id: "supplier",
+    label: "Supplier Excel",
+    fileName: "supplier_migration_format.xlsx",
+    resultLabel: "Supplier",
+    description: "Supplier onboarding mapped to generated customer LANs.",
   },
   {
     id: "invoice",
     label: "Invoice Excel",
     fileName: "invoice_migration_format.xlsx",
+    resultLabel: "Invoice",
+    description: "Invoice onboarding and final Ops L2 booking by generated LAN.",
   },
 ];
 
@@ -75,6 +86,7 @@ const OpsLoanSearch = () => {
   const [downloadingTemplate, setDownloadingTemplate] = useState(null);
   const [migrationFiles, setMigrationFiles] = useState({
     customer: null,
+    supplier: null,
     invoice: null,
   });
   const [migrationUploading, setMigrationUploading] = useState(null);
@@ -200,10 +212,14 @@ const OpsLoanSearch = () => {
 
     try {
       setMigrationUploading(upload.id);
-      const response =
-        upload.id === "customer"
-          ? await operationsService.uploadCustomerMigration(file)
-          : await operationsService.uploadInvoiceMigration(file);
+      let response;
+      if (upload.id === "customer") {
+        response = await operationsService.uploadCustomerMigration(file);
+      } else if (upload.id === "supplier") {
+        response = await operationsService.uploadSupplierMigration(file);
+      } else {
+        response = await operationsService.uploadInvoiceMigration(file);
+      }
 
       setMigrationResult({
         type: upload.id,
@@ -441,7 +457,7 @@ const OpsLoanSearch = () => {
         </div>
       </section>
 
-      {/* <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
+      <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
         <div className="border-b border-slate-100 px-5 py-4">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -449,7 +465,7 @@ const OpsLoanSearch = () => {
                 Old Data Migration
               </h2>
               <p className="text-sm text-slate-500">
-                Upload customers first; invoices must use the generated system LAN.
+                Upload customers first, then suppliers, then invoices by the generated system LAN.
               </p>
             </div>
             {migrationResult?.summary && (
@@ -479,16 +495,14 @@ const OpsLoanSearch = () => {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 divide-y divide-slate-100 lg:grid-cols-2 lg:divide-x lg:divide-y-0">
+        <div className="grid grid-cols-1 divide-y divide-slate-100 xl:grid-cols-3 xl:divide-x xl:divide-y-0">
           {migrationUploads.map((upload) => (
             <div key={upload.id} className="p-5">
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <h3 className="font-bold text-slate-950">{upload.label}</h3>
                   <p className="text-sm text-slate-500">
-                    {upload.id === "customer"
-                      ? "New customer onboarding and generated partner LAN."
-                      : "Final Ops L2 invoice booking by generated LAN."}
+                    {upload.description}
                   </p>
                 </div>
                 <FiFileText className="h-5 w-5 text-slate-500" />
@@ -545,14 +559,15 @@ const OpsLoanSearch = () => {
           <div className="border-t border-slate-100">
             <div className="px-5 py-4">
               <h3 className="text-base font-bold text-slate-950">
-                {migrationResult.type === "customer" ? "Customer" : "Invoice"}{" "}
+                {migrationUploads.find((upload) => upload.id === migrationResult.type)
+                  ?.resultLabel || "Migration"}{" "}
                 Upload Result
               </h3>
             </div>
             <DataTable data={migrationResult.results} columns={migrationColumns} />
           </div>
         )}
-      </section> */}
+      </section>
 
       {loading && (
         <div className="flex justify-center py-12">

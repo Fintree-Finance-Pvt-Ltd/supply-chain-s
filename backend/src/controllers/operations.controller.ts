@@ -171,6 +171,20 @@ export class OperationsController {
     }
   };
 
+  downloadSupplierMigrationTemplate = async (_req: Request, res: Response): Promise<void> => {
+    try {
+      const workbook = await this.operationsService.generateSupplierMigrationTemplateWorkbook();
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', 'attachment; filename="supplier_migration_format.xlsx"');
+      res.send(workbook);
+    } catch (error: any) {
+      res.status(500).json({
+        success: false,
+        message: error.message || 'Failed to generate supplier migration template',
+      });
+    }
+  };
+
   migrateSuppliers = async (req: Request, res: Response): Promise<void> => {
     try {
       if (!req.userId) {

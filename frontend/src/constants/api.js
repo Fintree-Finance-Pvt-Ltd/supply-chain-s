@@ -149,6 +149,7 @@ DASHBOARD_OPERATIONS_SUPPLIERS: '/workflows/suppliers/dashboard/operations',
   INVOICE_MIGRATION_UPLOAD: '/operations/migrations/invoices',
   INVOICE_MIGRATION_TEMPLATE: '/operations/migrations/invoices/template',
   SUPPLIER_MIGRATION_UPLOAD: '/operations/migrations/suppliers',
+  SUPPLIER_MIGRATION_TEMPLATE: '/operations/migrations/suppliers/template',
 
   // Loan Servicing
   LOAN_SERVICING_ACCOUNT: (lan) => `/loan-servicing/accounts/${lan}`,

@@ -836,6 +836,7 @@ export class OperationsService {
   private getCustomerMigrationHeaders(): string[] {
     return [
       'partner_loan_id',
+      'partner_lan_id',
       'lender_type',
       'customer_name',
       'mobile',
@@ -879,7 +880,7 @@ export class OperationsService {
 
   private getInvoiceMigrationHeaders(): string[] {
     return [
-      'lan_id',
+      'partner_lan_id',
       'invoice_number',
       'invoice_date',
       'invoice_amount',
@@ -887,7 +888,7 @@ export class OperationsService {
       'disbursement_utr',
       'disbursement_date',
       'invoice_due_date',
-      'supplier_code',
+      'partner_supplier_id',
       'supplier_name',
       'supplier_gst_number',
       'supplier_pan_number',
@@ -907,10 +908,30 @@ export class OperationsService {
     ];
   }
 
+  private getSupplierMigrationHeaders(): string[] {
+    return [
+      'partner_lan_id',
+      'partner_supplier_id',
+      'supplier_name',
+      'email',
+      'contact_number',
+      'address',
+      'gst_number',
+      'pan_number',
+      'bank_account_number',
+      'ifsc_code',
+      'bank_name',
+      'account_holder_name',
+      'micr_code',
+      'cheque_number',
+    ];
+  }
+
   async generateCustomerMigrationTemplateWorkbook(): Promise<Buffer> {
     const customerHeaders = this.getCustomerMigrationHeaders();
     const sampleCustomerRow: Record<string, WorkbookCellValue> = {
       partner_loan_id: 'OLD-LOAN-1001',
+      partner_lan_id: 'OLD-LAN-1001',
       lender_type: 'MFL',
       customer_name: 'Rahul Traders',
       mobile: '9876543210',
@@ -992,6 +1013,7 @@ export class OperationsService {
         rows: [
           ['field', 'required', 'notes'],
           ['lender_type', 'yes', 'Matched from live system partners by partner code, LAN prefix, or partner name. Workbook tabs are ignored'],
+          ['partner_lan_id', 'no', 'Old partner LAN from source system; invoices can use this when system LAN is not available'],
           ['customer_name', 'no', 'Applicant/proprietor name when available; defaults to Migrated Customer + partner_loan_id'],
           ['mobile', 'no', 'Primary mobile number when available; blank/NA is accepted for old migrated data'],
           ['sanction_amount', 'yes', 'Approved partner sanction limit'],
@@ -1006,6 +1028,49 @@ export class OperationsService {
     ]);
   }
 
+  async generateSupplierMigrationTemplateWorkbook(): Promise<Buffer> {
+    return this.createXlsxWorkbook([
+      {
+        name: 'Supplier Upload',
+        rows: [
+          this.getSupplierMigrationHeaders(),
+          [
+            'OLD-LAN-1001',
+            'OLD-SUP-1001',
+            'Metro Suppliers',
+            'supplier@example.com',
+            '9876543220',
+            '77 Industrial Area, Mumbai',
+            '27ABCDE9999F1Z5',
+            'ABCDE9999F',
+            '555555555555',
+            'ICIC0001234',
+            'ICICI Bank',
+            'Metro Suppliers',
+            '123456789',
+            'CHQ-1001',
+          ],
+        ],
+      },
+      {
+        name: 'Field Guide',
+        rows: [
+          ['field', 'required', 'notes'],
+          ['partner_lan_id', 'yes', 'Old partner LAN from the source system; system LAN is resolved from loan accounts'],
+          ['partner_supplier_id', 'yes', 'Old supplier ID from the source system; stored for invoice mapping'],
+          ['supplier_name', 'yes', 'Supplier onboarding name; the system generates supplier_code after upload'],
+          ['email/contact_number/address', 'no', 'Supplier contact profile details'],
+          ['gst_number/pan_number', 'no', 'Supplier GST and PAN when available'],
+          ['bank_account_number', 'yes', 'Supplier bank account number'],
+          ['ifsc_code', 'yes', '11-character IFSC code'],
+          ['bank_name', 'yes', 'Supplier bank name'],
+          ['account_holder_name', 'yes', 'Name on supplier bank account'],
+          ['micr_code/cheque_number', 'no', 'Optional cheque details'],
+        ],
+      },
+    ]);
+  }
+
   async generateInvoiceMigrationTemplateWorkbook(): Promise<Buffer> {
     return this.createXlsxWorkbook([
       {
@@ -1013,7 +1078,7 @@ export class OperationsService {
         rows: [
           this.getInvoiceMigrationHeaders(),
           [
-            'FFPL10000107',
+            'OLD-LAN-1001',
             'OLD-INV-1001',
             '2026-06-01',
             100000,
@@ -1021,7 +1086,7 @@ export class OperationsService {
             'UTR-OLD-INV-1001',
             '2026-06-05',
             '2026-09-03',
-            'SUP-OLD-001',
+            'OLD-SUP-1001',
             'Metro Suppliers',
             '27ABCDE9999F1Z5',
             'ABCDE9999F',
@@ -1045,7 +1110,7 @@ export class OperationsService {
         name: 'Field Guide',
         rows: [
           ['field', 'required', 'notes'],
-          ['lan_id', 'yes', 'Generated system LAN from customer upload; invoice will be booked against this loan account'],
+          ['partner_lan_id', 'yes', 'Old partner LAN from the source system; system LAN is resolved from loan accounts'],
           ['invoice_number', 'yes', 'Must be unique in the current system'],
           ['invoice_date', 'yes', 'Use YYYY-MM-DD'],
           ['invoice_amount', 'yes', 'Original invoice value'],
@@ -1053,7 +1118,7 @@ export class OperationsService {
           ['disbursement_utr', 'yes', 'Must be unique in internal LMS disbursements'],
           ['disbursement_date', 'yes', 'Use YYYY-MM-DD'],
           ['invoice_due_date', 'no', 'Defaults to disbursement_date + 90 days'],
-          ['supplier_name or supplier_code', 'yes', 'Existing supplier is reused; supplier_name creates a completed migrated supplier if missing'],
+          ['partner_supplier_id', 'yes', 'Old supplier ID from the source system; existing migrated supplier is reused by this ID'],
           ['roi_percentage/penal_charges/service_fee', 'no', 'Defaults from approved customer partner sanction when blank'],
         ],
       },
@@ -1116,11 +1181,11 @@ export class OperationsService {
 
   private validateSupplierMigrationRow(row: ExcelRow): string[] {
     const errors: string[] = [];
-    if (!this.getCell(row, ['lan_id', 'lan', 'lanid', 'loan_account_number'])) {
-      errors.push('lan_id is required');
+    if (!this.getCell(row, ['partner_lan_id', 'partner_lan', 'old_lan_id'])) {
+      errors.push('partner_lan_id is required');
     }
-    if (!this.getCell(row, ['partner_loan_id'])) {
-      errors.push('partner_loan_id is required');
+    if (!this.getCell(row, ['partner_supplier_id', 'supplier_partner_id', 'partner_id', 'partner_loan_id'])) {
+      errors.push('partner_supplier_id is required');
     }
 
     const requiredFields: Array<[string[], string]> = [
@@ -1146,7 +1211,8 @@ export class OperationsService {
   private validateInvoiceMigrationRow(row: ExcelRow): string[] {
     const errors: string[] = [];
     const requiredFields: Array<[string[], string]> = [
-      [['lan_id', 'lan', 'lanid', 'loan_account_number'], 'lan_id'],
+      [['partner_lan_id', 'partner_lan', 'old_lan_id'], 'partner_lan_id'],
+      [['partner_supplier_id', 'supplier_partner_id', 'supplier_partner_loan_id', 'partner_id'], 'partner_supplier_id'],
       [['invoice_number'], 'invoice_number'],
       [['invoice_date'], 'invoice_date'],
       [['invoice_amount'], 'invoice_amount'],
@@ -1158,14 +1224,6 @@ export class OperationsService {
     requiredFields.forEach(([aliases, label]) => {
       if (!this.getCell(row, aliases)) errors.push(`${label} is required`);
     });
-
-    if (
-      !this.getCell(row, ['supplier_code']) &&
-      !this.getCell(row, ['supplier_name']) &&
-      !this.getCell(row, ['supplier_gst_number', 'supplier_gst'])
-    ) {
-      errors.push('supplier_code, supplier_name, or supplier_gst_number is required');
-    }
 
     const invoiceAmount = this.toNumber(this.getCell(row, ['invoice_amount']));
     const disbursementAmount = this.toNumber(this.getCell(row, ['disbursement_amount']));
@@ -1212,6 +1270,164 @@ export class OperationsService {
     if (value !== undefined && value !== null && String(value).trim() !== '') {
       target[key] = value;
     }
+  }
+
+  private normalizeMigrationIdentityValue(value: string): string {
+    const raw = String(value || '').trim();
+    if (!raw || raw === '0' || this.isBlankMigrationValue(raw)) return '';
+    return raw.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  }
+
+  private normalizeMigrationNameValue(value: string): string {
+    const raw = String(value || '').trim();
+    if (!raw || raw === '0' || this.isBlankMigrationValue(raw)) return '';
+
+    return raw
+      .toUpperCase()
+      .replace(/&/g, ' AND ')
+      .replace(/[^A-Z0-9]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  private getIdentityCell(row: ExcelRow, aliases: string[]): string {
+    return this.normalizeMigrationIdentityValue(this.getCell(row, aliases));
+  }
+
+  private getMigrationCoApplicantPans(row: ExcelRow): string[] {
+    const pans: string[] = [];
+
+    for (let index = 1; index <= this.migrationRepeatCount; index += 1) {
+      pans.push(
+        this.normalizeMigrationIdentityValue(
+          this.getIndexedCell(row, ['co_applicant', 'coapplicant'], index, 'pan', [
+            'co_applicant_pan',
+            'coapplicant_pan',
+          ]),
+        ),
+      );
+    }
+
+    return Array.from(new Set(pans.filter(Boolean)));
+  }
+
+  private ensureSingleMigrationCustomerMatch(matches: Customer[], matchBy: string): Customer | null {
+    const uniqueMatches = Array.from(
+      matches.reduce<Map<number, Customer>>((acc, customer) => {
+        if (customer?.id) acc.set(customer.id, customer);
+        return acc;
+      }, new Map()).values(),
+    );
+
+    if (uniqueMatches.length > 1) {
+      throw new Error(`Multiple customers matched by ${matchBy}; review this row manually`);
+    }
+
+    return uniqueMatches[0] || null;
+  }
+
+  private async findMigratedCustomerByPanValues(
+    manager: EntityManager,
+    panValues: string[],
+  ): Promise<Customer | null> {
+    const uniquePanValues = Array.from(new Set(panValues.filter(Boolean)));
+    if (uniquePanValues.length === 0) return null;
+
+    const customerRepo = manager.getRepository(Customer);
+    const applicantRepo = manager.getRepository(Applicant);
+    const coApplicantRepo = manager.getRepository(CoApplicant);
+    const matches: Customer[] = [];
+
+    const customerMatches = await customerRepo
+      .createQueryBuilder('customer')
+      .where("UPPER(REPLACE(customer.companyPan, ' ', '')) IN (:...panValues)", { panValues: uniquePanValues })
+      .orWhere("UPPER(REPLACE(customer.pan, ' ', '')) IN (:...panValues)", { panValues: uniquePanValues })
+      .getMany();
+    matches.push(...customerMatches);
+
+    const applicantMatches = await applicantRepo
+      .createQueryBuilder('applicant')
+      .leftJoinAndSelect('applicant.customer', 'customer')
+      .where("UPPER(REPLACE(applicant.pan, ' ', '')) IN (:...panValues)", { panValues: uniquePanValues })
+      .getMany();
+    matches.push(
+      ...applicantMatches
+        .map((applicant) => applicant.customer)
+        .filter((customer): customer is Customer => Boolean(customer)),
+    );
+
+    const coApplicantMatches = await coApplicantRepo
+      .createQueryBuilder('coApplicant')
+      .leftJoinAndSelect('coApplicant.customer', 'customer')
+      .where("UPPER(REPLACE(coApplicant.pan, ' ', '')) IN (:...panValues)", { panValues: uniquePanValues })
+      .getMany();
+    matches.push(
+      ...coApplicantMatches
+        .map((coApplicant) => coApplicant.customer)
+        .filter((customer): customer is Customer => Boolean(customer)),
+    );
+
+    return this.ensureSingleMigrationCustomerMatch(matches, 'PAN');
+  }
+
+  private async findMigratedCustomerByName(
+    manager: EntityManager,
+    companyName: string,
+    customerName: string,
+  ): Promise<Customer | null> {
+    const customerRepo = manager.getRepository(Customer);
+    const customers = await customerRepo.find();
+    const normalizedCompanyName = this.normalizeMigrationNameValue(companyName);
+    const normalizedCustomerName = this.normalizeMigrationNameValue(customerName);
+
+    if (normalizedCompanyName) {
+      const companyMatches = customers.filter(
+        (customer) => this.normalizeMigrationNameValue(customer.companyName || '') === normalizedCompanyName,
+      );
+      const companyMatch = this.ensureSingleMigrationCustomerMatch(companyMatches, 'company_name');
+      if (companyMatch) return companyMatch;
+    }
+
+    if (normalizedCustomerName) {
+      const customerMatches = customers.filter((customer) =>
+        [customer.customerName, customer.name]
+          .map((value) => this.normalizeMigrationNameValue(value || ''))
+          .includes(normalizedCustomerName),
+      );
+      return this.ensureSingleMigrationCustomerMatch(customerMatches, 'customer_name');
+    }
+
+    return null;
+  }
+
+  private async findExistingMigratedCustomer(
+    manager: EntityManager,
+    row: ExcelRow,
+    gstNumber: string,
+    companyPan: string,
+    pan: string,
+    companyName: string,
+    customerName: string,
+  ): Promise<Customer | null> {
+    const customerRepo = manager.getRepository(Customer);
+
+    if (gstNumber) {
+      const gstMatches = await customerRepo
+        .createQueryBuilder('customer')
+        .where("UPPER(REPLACE(customer.gstNumber, ' ', '')) = :gstNumber", { gstNumber })
+        .getMany();
+      const gstMatch = this.ensureSingleMigrationCustomerMatch(gstMatches, 'gst_number');
+      if (gstMatch) return gstMatch;
+    }
+
+    const panMatch = await this.findMigratedCustomerByPanValues(manager, [
+      companyPan,
+      pan,
+      ...this.getMigrationCoApplicantPans(row),
+    ]);
+    if (panMatch) return panMatch;
+
+    return this.findMigratedCustomerByName(manager, companyName, customerName);
   }
 
   private async upsertKycDetail(
@@ -1445,17 +1661,18 @@ export class OperationsService {
     const historyRepo = manager.getRepository(CaseStatusHistory);
 
     const partnerLoanId = this.getCell(row, ['partner_loan_id']);
+    const partnerLanId = this.getCell(row, ['partner_lan_id', 'partner_lan', 'old_lan_id']) || partnerLoanId;
     const customerName = this.getMigratedCustomerName(row);
     const mobile = this.getCell(row, ['mobile', 'customer_mobile']);
     const email = this.getCell(row, ['email', 'customer_email']);
-    const pan = this.getCell(row, ['pan', 'applicant_pan']);
-    const aadhaar = this.getCell(row, ['aadhaar_number', 'applicant_aadhaar']);
+    const pan = this.getIdentityCell(row, ['pan', 'applicant_pan']);
+    const aadhaar = this.getIdentityCell(row, ['aadhaar_number', 'applicant_aadhaar']);
     const companyType = this.normalizeCompanyType(this.getCell(row, ['company_type']));
     const companyName = this.getCell(row, ['company_name']);
     const companyMobile = this.getCell(row, ['company_mobile']);
     const companyEmail = this.getCell(row, ['company_email']);
-    const companyPan = this.getCell(row, ['company_pan']);
-    const gstNumber = this.getCell(row, ['gst_number', 'gst']);
+    const companyPan = this.getIdentityCell(row, ['company_pan']);
+    const gstNumber = this.getIdentityCell(row, ['gst_number', 'gst']);
     const lenderType = this.getCell(row, ['lender_type', 'lender_name', 'partner_name', 'lender']);
     const providedLanId = this.getCell(row, ['lan_id', 'lan', 'loan_account_number']);
     const sanctionAmount = this.toNumber(this.getCell(row, ['sanction_amount', 'sanctioned_amount'])) || 0;
@@ -1470,10 +1687,15 @@ export class OperationsService {
     const partner = await this.resolveMigrationPartner(manager, lenderType);
     const lenderCode = partner.code.toUpperCase();
 
-    let customer: Customer | null = null;
-    if (gstNumber) {
-      customer = await customerRepo.findOne({ where: { gstNumber } });
-    }
+    let customer = await this.findExistingMigratedCustomer(
+      manager,
+      row,
+      gstNumber,
+      companyPan,
+      pan,
+      companyName,
+      customerName,
+    );
 
     if (!customer) {
       customer = customerRepo.create({
@@ -1617,6 +1839,7 @@ export class OperationsService {
     loanAccount.customerId = savedCustomer.id;
     loanAccount.partnerId = partner.id;
     loanAccount.lender = lenderCode;
+    loanAccount.partnerLanId = partnerLanId || loanAccount.partnerLanId || null;
     loanAccount.sanctionedAmount = sanctionAmount;
     loanAccount.status = 'active';
     if (isNewLoanAccount) loanAccount.isOnboarded = false;
@@ -1676,26 +1899,46 @@ export class OperationsService {
     const workflowRepo = manager.getRepository(CaseWorkflow);
     const historyRepo = manager.getRepository(CaseStatusHistory);
 
-    const lanId = this.getCell(row, ['lan_id', 'lan', 'lanid', 'loan_account_number']);
-    const partnerLoanId = this.getCell(row, ['partner_loan_id']);
+    const partnerLanId = this.getCell(row, ['partner_lan_id', 'partner_lan', 'old_lan_id']);
+    const partnerSupplierId = this.getCell(row, [
+      'partner_supplier_id',
+      'supplier_partner_id',
+      'partner_id',
+      'partner_loan_id',
+    ]);
     const supplierName = this.getCell(row, ['supplier_name']);
 
-    const loanAccount = await loanAccountRepo.findOne({ where: { lanId } });
+    const loanAccount = await loanAccountRepo.findOne({ where: { partnerLanId } });
     if (!loanAccount) {
-      throw new Error(`LAN ${lanId} was not found in loan accounts`);
+      throw new Error(`Partner LAN ${partnerLanId} was not found in loan accounts`);
     }
 
     const customer = await customerRepo.findOne({ where: { id: loanAccount.customerId } });
     if (!customer) {
-      throw new Error(`Customer for LAN ${lanId} was not found`);
+      throw new Error(`Customer for partner LAN ${partnerLanId} was not found`);
     }
 
-    const supplier = supplierRepo.create({
-      supplierCode: `SUP-TEMP-${Date.now()}-${Math.floor(Math.random() * 1000000)}`,
-      customerId: customer.id,
-    } as Partial<Supplier>);
+    let supplier = partnerSupplierId
+      ? await supplierRepo.findOne({ where: { customerId: customer.id, partnerLoanId: partnerSupplierId } as any })
+      : null;
+    if (!supplier) {
+      const supplierGst = this.getCell(row, ['gst_number', 'supplier_gst']);
+      if (supplierGst) {
+        supplier = await supplierRepo.findOne({ where: { customerId: customer.id, gstNumber: supplierGst } as any });
+      }
+    }
+
+    const isNewSupplier = !supplier;
+    if (!supplier) {
+      supplier = supplierRepo.create({
+        supplierCode: `SUP-TEMP-${Date.now()}-${Math.floor(Math.random() * 1000000)}`,
+        customerId: customer.id,
+        partnerLoanId: partnerSupplierId,
+      } as Partial<Supplier>);
+    }
 
     supplier.customerId = customer.id;
+    supplier.partnerLoanId = partnerSupplierId;
     supplier.supplierName = supplierName;
     supplier.email = this.getCell(row, ['email', 'supplier_email']);
     supplier.contactNumber = this.getCell(row, ['contact_number', 'mobile_number', 'mobile']);
@@ -1706,8 +1949,10 @@ export class OperationsService {
     supplier.status = 'COMPLETED';
     supplier.isActive = true;
     const savedSupplier = await supplierRepo.save(supplier);
-    savedSupplier.supplierCode = this.buildGeneratedSupplierCode(savedSupplier.id);
-    await supplierRepo.save(savedSupplier);
+    if (isNewSupplier) {
+      savedSupplier.supplierCode = this.buildGeneratedSupplierCode(savedSupplier.id);
+      await supplierRepo.save(savedSupplier);
+    }
 
     let bankDetail = await supplierBankRepo.findOne({ where: { supplierId: savedSupplier.id } });
     if (!bankDetail) {
@@ -1754,7 +1999,7 @@ export class OperationsService {
     return {
       supplierId: savedSupplier.id,
       supplierCode: savedSupplier.supplierCode,
-      partnerLoanId,
+      partnerLoanId: partnerSupplierId,
     };
   }
 
@@ -1818,12 +2063,22 @@ export class OperationsService {
     const historyRepo = manager.getRepository(CaseStatusHistory);
 
     const supplierCode = this.getCell(row, ['supplier_code']);
+    const supplierPartnerId = this.getCell(row, [
+      'supplier_partner_id',
+      'partner_supplier_id',
+      'supplier_partner_loan_id',
+      'partner_id',
+    ]);
     const supplierName = this.getCell(row, ['supplier_name']);
     const supplierGst = this.getCell(row, ['supplier_gst_number', 'supplier_gst']);
     const supplierPan = this.getCell(row, ['supplier_pan_number', 'supplier_pan']);
 
     let supplier: Supplier | null = null;
-    if (supplierCode) {
+    if (supplierPartnerId) {
+      supplier = await supplierRepo.findOne({ where: { customerId, partnerLoanId: supplierPartnerId } as any });
+    }
+
+    if (!supplier && supplierCode) {
       supplier = await supplierRepo.findOne({ where: { supplierCode } });
       if (supplier && supplier.customerId !== customerId) {
         throw new Error(`Supplier code ${supplierCode} belongs to another customer`);
@@ -1847,6 +2102,7 @@ export class OperationsService {
       supplier = supplierRepo.create({
         customerId,
         supplierCode: supplierCode || `SUP-MIG-${Date.now()}-${Math.floor(Math.random() * 100000)}`,
+        partnerLoanId: supplierPartnerId || null,
         supplierName,
         email: '',
         contactNumber: '',
@@ -1857,6 +2113,7 @@ export class OperationsService {
     }
 
     supplier.customerId = customerId;
+    supplier.partnerLoanId = supplierPartnerId || supplier.partnerLoanId || null;
     supplier.supplierName = supplierName || supplier.supplierName;
     supplier.email = this.getCell(row, ['supplier_email', 'email']) || supplier.email || '';
     supplier.contactNumber = this.getCell(row, ['supplier_mobile', 'supplier_contact_number', 'contact_number']) || supplier.contactNumber || '';
@@ -1917,29 +2174,29 @@ export class OperationsService {
   ): Promise<{ loanAccount: LoanAccount; customer: Customer; lanId: string }> {
     const loanAccountRepo = manager.getRepository(LoanAccount);
     const customerRepo = manager.getRepository(Customer);
-    const providedLanId = this.getCell(row, ['lan_id', 'lan', 'lanid', 'loan_account_number']).toUpperCase();
+    const partnerLanId = this.getCell(row, ['partner_lan_id', 'partner_lan', 'old_lan_id']).toUpperCase();
 
-    if (!providedLanId) {
-      throw new Error('lan_id is required');
+    if (!partnerLanId) {
+      throw new Error('partner_lan_id is required');
     }
 
     const loanAccount = await loanAccountRepo.findOne({
-      where: { lanId: providedLanId },
+      where: { partnerLanId },
       relations: ['partner'],
     });
     if (!loanAccount) {
-      throw new Error(`LAN ${providedLanId} was not found`);
+      throw new Error(`Partner LAN ${partnerLanId} was not found`);
     }
 
     const customer = await customerRepo.findOne({ where: { id: loanAccount.customerId } });
     if (!customer) {
-      throw new Error(`Customer for LAN ${providedLanId} was not found`);
+      throw new Error(`Customer for LAN ${loanAccount.lanId} was not found`);
     }
     if (customer.status !== CASE_STATUS.COMPLETED) {
-      throw new Error(`Customer for LAN ${providedLanId} is not completed/onboarded`);
+      throw new Error(`Customer for LAN ${loanAccount.lanId} is not completed/onboarded`);
     }
 
-    return { loanAccount, customer, lanId: providedLanId };
+    return { loanAccount, customer, lanId: loanAccount.lanId };
   }
 
   private async saveMigratedInvoiceRow(
@@ -2257,7 +2514,7 @@ export class OperationsService {
     for (const row of rows) {
       const rowNumber = Number(row.__rowNumber);
       const name = this.getCell(row, ['supplier_name']);
-      const reference = this.getCell(row, ['lan_id', 'lan', 'lanid', 'loan_account_number']) || `Row ${rowNumber}`;
+      const reference = this.getCell(row, ['partner_lan_id', 'partner_lan', 'old_lan_id']) || `Row ${rowNumber}`;
       const validationErrors = this.validateSupplierMigrationRow(row);
 
       if (validationErrors.length > 0) {
@@ -2322,7 +2579,7 @@ export class OperationsService {
       const rowNumber = Number(row.__rowNumber);
       const reference = this.getCell(row, ['invoice_number']) || `Row ${rowNumber}`;
       const customerReference =
-        this.getCell(row, ['lan_id', 'lan', 'lanid', 'loan_account_number']) ||
+        this.getCell(row, ['partner_lan_id', 'partner_lan', 'old_lan_id']) ||
         `Row ${rowNumber}`;
       const validationErrors = this.validateInvoiceMigrationRow(row);
 
