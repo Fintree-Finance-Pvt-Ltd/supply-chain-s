@@ -50,6 +50,18 @@ export const operationsService = {
     }
   },
 
+  searchLoanCustomers: async (params = {}) => {
+    try {
+      const response = await api.get(API_ENDPOINTS.OPERATIONS_LOAN_CUSTOMERS, { params })
+      return {
+        data: response.data.success ? response.data.data : []
+      }
+    } catch (error) {
+      console.error('Error searching loan customers:', error)
+      throw error
+    }
+  },
+
   uploadCustomerMigration: async (file) => {
     try {
       const formData = new FormData()

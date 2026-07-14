@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   FiAlertTriangle,
   FiCheckCircle,
@@ -75,9 +75,31 @@ const getReportFileName = (headers, fallbackName) => {
   return fallbackName;
 };
 
+const getCustomerDisplayName = (customer) =>
+  customer?.companyName ||
+  customer?.customerName ||
+  customer?.customerCode ||
+  "Selected customer";
+
+const getLoanAccounts = (customer) =>
+  Array.isArray(customer?.loanAccounts) ? customer.loanAccounts : [];
+
+const getLanOptionLabel = (loanAccount) =>
+  [
+    loanAccount.lanId,
+    loanAccount.partnerName || loanAccount.lender,
+    loanAccount.status,
+  ]
+    .filter(Boolean)
+    .join(" - ");
+
 const OpsLoanSearch = () => {
   const [filters, setFilters] = useState({ startDate: "", endDate: "" });
   const [lan, setLan] = useState("");
+  const [customerSearch, setCustomerSearch] = useState("");
+  const [customerMatches, setCustomerMatches] = useState([]);
+  const [customerSearchLoading, setCustomerSearchLoading] = useState(false);
+  const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [account, setAccount] = useState(null);
   const [schedule, setSchedule] = useState([]);
   const [statement, setStatement] = useState([]);
@@ -105,8 +127,47 @@ const OpsLoanSearch = () => {
     );
   }, [schedule]);
 
-  const loadLan = async () => {
-    const cleanLan = lan.trim().toUpperCase();
+  useEffect(() => {
+    const search = customerSearch.trim();
+    if (search.length < 2 || selectedCustomer) {
+      setCustomerMatches([]);
+      setCustomerSearchLoading(false);
+      return undefined;
+    }
+
+    let cancelled = false;
+    const timer = window.setTimeout(async () => {
+      try {
+        setCustomerSearchLoading(true);
+        const response = await operationsService.searchLoanCustomers({
+          companyName: search,
+          limit: 8,
+        });
+
+        if (!cancelled) {
+          setCustomerMatches(response.data || []);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          console.error("Customer loan search failed:", error);
+          setCustomerMatches([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setCustomerSearchLoading(false);
+        }
+      }
+    }, 250);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [customerSearch, selectedCustomer]);
+
+  const loadLan = async (targetLan) => {
+    const lanToSearch = typeof targetLan === "string" ? targetLan : lan;
+    const cleanLan = lanToSearch.trim().toUpperCase();
     if (!cleanLan) {
       toast.info("Enter a LAN");
       return;
@@ -130,6 +191,40 @@ const OpsLoanSearch = () => {
       );
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleCustomerSelect = (customer) => {
+    const loanAccounts = getLoanAccounts(customer);
+    setSelectedCustomer(customer);
+    setCustomerSearch(getCustomerDisplayName(customer));
+    setCustomerMatches([]);
+
+    if (loanAccounts.length === 0) {
+      setLan("");
+      setAccount(null);
+      setSchedule([]);
+      setStatement([]);
+      toast.info("No LAN found for selected customer");
+      return;
+    }
+
+    if (loanAccounts.length === 1) {
+      setLan(loanAccounts[0].lanId);
+      loadLan(loanAccounts[0].lanId);
+      return;
+    }
+
+    setLan("");
+    setAccount(null);
+    setSchedule([]);
+    setStatement([]);
+  };
+
+  const handleSelectedCustomerLanChange = (value) => {
+    setLan(value);
+    if (value) {
+      loadLan(value);
     }
   };
 
@@ -367,7 +462,7 @@ const OpsLoanSearch = () => {
             Customer Loan Search
           </h1>
           <p className="mt-1 text-sm text-slate-500">
-            Search any customer LAN, view loan details, and generate SCF
+            Search by company name or customer LAN, view loan details, and generate SCF
             reports.
           </p>
         </div>
@@ -404,7 +499,7 @@ const OpsLoanSearch = () => {
           </div>
           <button
             type="button"
-            onClick={loadLan}
+            onClick={() => loadLan()}
             disabled={loading || !lan.trim()}
             className="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:bg-slate-300"
           >
@@ -415,7 +510,82 @@ const OpsLoanSearch = () => {
       </div>
 
       <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="flex flex-col gap-3 lg:flex-row">
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(220px,320px)]">
+          <div className="relative">
+            <label className="mb-1 block text-xs font-semibold uppercase text-slate-500">
+              Company
+            </label>
+            <input
+              type="text"
+              value={customerSearch}
+              onChange={(event) => {
+                setCustomerSearch(event.target.value);
+                setSelectedCustomer(null);
+              }}
+              placeholder="Search company name"
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
+            />
+            {customerSearch.trim().length >= 2 && !selectedCustomer && (
+              <div className="absolute left-0 right-0 z-20 mt-2 max-h-64 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg">
+                {customerSearchLoading ? (
+                  <div className="px-3 py-2 text-sm text-slate-500">
+                    Searching...
+                  </div>
+                ) : customerMatches.length > 0 ? (
+                  customerMatches.map((customer) => {
+                    const loanAccounts = getLoanAccounts(customer);
+                    return (
+                      <button
+                        key={customer.customerId}
+                        type="button"
+                        onClick={() => handleCustomerSelect(customer)}
+                        className="block w-full px-3 py-2 text-left hover:bg-slate-50"
+                      >
+                        <span className="block text-sm font-semibold text-slate-900">
+                          {getCustomerDisplayName(customer)}
+                        </span>
+                        <span className="block text-xs text-slate-500">
+                          {customer.customerCode || `Customer #${customer.customerId}`} -{" "}
+                          {loanAccounts.length} LAN
+                          {loanAccounts.length === 1 ? "" : "s"}
+                        </span>
+                      </button>
+                    );
+                  })
+                ) : (
+                  <div className="px-3 py-2 text-sm text-slate-500">
+                    No matching customers
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-semibold uppercase text-slate-500">
+              Customer LAN
+            </label>
+            <select
+              value={selectedCustomer ? lan : ""}
+              onChange={(event) =>
+                handleSelectedCustomerLanChange(event.target.value)
+              }
+              disabled={!selectedCustomer || loading}
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-100 disabled:bg-slate-50 disabled:text-slate-400"
+            >
+              <option value="">
+                {selectedCustomer ? "Select LAN" : "Select customer"}
+              </option>
+              {getLoanAccounts(selectedCustomer).map((loanAccount) => (
+                <option key={loanAccount.id} value={loanAccount.lanId}>
+                  {getLanOptionLabel(loanAccount)}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div className="mt-4 flex flex-col gap-3 lg:flex-row">
           <input
             type="text"
             value={lan}
@@ -428,7 +598,7 @@ const OpsLoanSearch = () => {
           />
           <button
             type="button"
-            onClick={loadLan}
+            onClick={() => loadLan()}
             disabled={loading}
             className="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:bg-slate-300"
           >
@@ -457,7 +627,7 @@ const OpsLoanSearch = () => {
         </div>
       </section>
 
-      <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
+      {/* <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
         <div className="border-b border-slate-100 px-5 py-4">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -567,7 +737,7 @@ const OpsLoanSearch = () => {
             <DataTable data={migrationResult.results} columns={migrationColumns} />
           </div>
         )}
-      </section>
+      </section> */}
 
       {loading && (
         <div className="flex justify-center py-12">

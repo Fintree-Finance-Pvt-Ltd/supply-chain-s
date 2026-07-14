@@ -136,6 +136,7 @@ DASHBOARD_OPERATIONS_SUPPLIERS: '/workflows/suppliers/dashboard/operations',
   // Operations
   OPERATIONS_PENDING: '/operations/pending',
   OPERATIONS_BY_ID: (id) => `/operations/${id}`,
+  OPERATIONS_LOAN_CUSTOMERS: '/operations/loan-search/customers',
 
   // Repayment Uploads
   REPAYMENTS_UPLOAD: '/operations/repayments/upload',

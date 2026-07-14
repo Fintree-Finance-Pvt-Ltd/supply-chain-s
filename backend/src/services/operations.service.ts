@@ -86,6 +86,26 @@ interface MigrationUploadResult {
   results: MigrationRowResult[];
 }
 
+interface LoanSearchLoanAccount {
+  id: number;
+  lanId: string;
+  partnerLanId: string | null;
+  lender: string | null;
+  partnerName: string | null;
+  status: string | null;
+  sanctionedAmount: number | null;
+  disbursedAmount: number | null;
+}
+
+interface LoanSearchCustomer {
+  customerId: number;
+  companyName: string | null;
+  customerName: string | null;
+  customerCode: string | null;
+  status: string | null;
+  loanAccounts: LoanSearchLoanAccount[];
+}
+
 export class OperationsService {
   private operationsCheckRepository: Repository<OperationsCheck>;
   private customerRepository: Repository<Customer>;
@@ -2641,6 +2661,111 @@ export class OperationsService {
     }
 
     return this.buildMigrationResult('Invoice', rows.length, results);
+  }
+
+  async searchLoanCustomers(search: string, limit = 8): Promise<LoanSearchCustomer[]> {
+    const searchTerm = String(search || '').trim();
+    if (!searchTerm) return [];
+
+    const take = Math.min(Math.max(Number(limit) || 8, 1), 20);
+    const likeSearch = `%${searchTerm}%`;
+
+    const matchingCustomers = await this.customerRepository
+      .createQueryBuilder('customer')
+      .innerJoin('customer.loanAccounts', 'loanAccount')
+      .select('customer.id', 'customerId')
+      .addSelect(
+        "COALESCE(NULLIF(customer.companyName, ''), NULLIF(customer.customerName, ''), customer.name)",
+        'displayName',
+      )
+      .where(
+        `(
+          customer.companyName LIKE :search OR
+          customer.customerName LIKE :search OR
+          customer.name LIKE :search OR
+          customer.customerCode LIKE :search OR
+          loanAccount.lanId LIKE :search OR
+          loanAccount.partnerLanId LIKE :search
+        )`,
+        { search: likeSearch },
+      )
+      .groupBy('customer.id')
+      .addGroupBy('customer.companyName')
+      .addGroupBy('customer.customerName')
+      .addGroupBy('customer.name')
+      .orderBy('displayName', 'ASC')
+      .limit(take)
+      .getRawMany();
+
+    const customerIds = matchingCustomers
+      .map((row: any) => Number(row.customerId))
+      .filter((id: number) => Number.isInteger(id) && id > 0);
+
+    if (customerIds.length === 0) return [];
+
+    const rows = await this.customerRepository
+      .createQueryBuilder('customer')
+      .innerJoin('customer.loanAccounts', 'loanAccount')
+      .leftJoin('loanAccount.partner', 'partner')
+      .select('customer.id', 'customerId')
+      .addSelect('customer.companyName', 'companyName')
+      .addSelect('customer.customerName', 'customerName')
+      .addSelect('customer.customerCode', 'customerCode')
+      .addSelect('customer.status', 'customerStatus')
+      .addSelect('loanAccount.id', 'loanAccountId')
+      .addSelect('loanAccount.lanId', 'lanId')
+      .addSelect('loanAccount.partnerLanId', 'partnerLanId')
+      .addSelect('loanAccount.lender', 'lender')
+      .addSelect('loanAccount.status', 'loanStatus')
+      .addSelect('loanAccount.sanctionedAmount', 'sanctionedAmount')
+      .addSelect('loanAccount.disbursedAmount', 'disbursedAmount')
+      .addSelect('partner.name', 'partnerName')
+      .where('customer.id IN (:...customerIds)', { customerIds })
+      .orderBy('customer.companyName', 'ASC')
+      .addOrderBy('customer.customerName', 'ASC')
+      .addOrderBy('loanAccount.createdAt', 'DESC')
+      .getRawMany();
+
+    const order = new Map(customerIds.map((id, index) => [id, index]));
+    const grouped = new Map<number, LoanSearchCustomer>();
+
+    rows.forEach((row: any) => {
+      const customerId = Number(row.customerId);
+      if (!Number.isInteger(customerId) || customerId <= 0) return;
+
+      if (!grouped.has(customerId)) {
+        grouped.set(customerId, {
+          customerId,
+          companyName: row.companyName || null,
+          customerName: row.customerName || null,
+          customerCode: row.customerCode || null,
+          status: row.customerStatus || null,
+          loanAccounts: [],
+        });
+      }
+
+      const loanAccountId = Number(row.loanAccountId);
+      if (Number.isInteger(loanAccountId) && row.lanId) {
+        grouped.get(customerId)!.loanAccounts.push({
+          id: loanAccountId,
+          lanId: String(row.lanId),
+          partnerLanId: row.partnerLanId || null,
+          lender: row.lender || null,
+          partnerName: row.partnerName || null,
+          status: row.loanStatus || null,
+          sanctionedAmount: row.sanctionedAmount === null || row.sanctionedAmount === undefined
+            ? null
+            : Number(row.sanctionedAmount),
+          disbursedAmount: row.disbursedAmount === null || row.disbursedAmount === undefined
+            ? null
+            : Number(row.disbursedAmount),
+        });
+      }
+    });
+
+    return Array.from(grouped.values())
+      .filter((customer) => customer.loanAccounts.length > 0)
+      .sort((a, b) => (order.get(a.customerId) ?? 0) - (order.get(b.customerId) ?? 0));
   }
 
   /**

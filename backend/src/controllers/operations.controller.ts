@@ -376,6 +376,25 @@ export class OperationsController {
     }
   };
 
+  searchLoanCustomers = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const search = String(req.query.companyName || req.query.q || '');
+      const parsedLimit = Number(req.query.limit);
+      const limit = Number.isInteger(parsedLimit) && parsedLimit > 0 ? parsedLimit : 8;
+      const customers = await this.operationsService.searchLoanCustomers(search, limit);
+
+      res.json({
+        success: true,
+        data: customers,
+      });
+    } catch (error: any) {
+      res.status(500).json({
+        success: false,
+        message: error.message || 'Failed to search loan customers',
+      });
+    }
+  };
+
   // Get available lenders for dropdown
   getLenders = async (req: Request, res: Response): Promise<void> => {
     try {

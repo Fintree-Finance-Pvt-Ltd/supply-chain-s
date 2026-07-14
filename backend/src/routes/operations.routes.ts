@@ -90,6 +90,12 @@ router.post(
   operationsController.retryRepaymentUpload
 );
 
+router.get(
+  '/loan-search/customers',
+  roleMiddleware([ROLES.OPERATIONS_TEAM_L1, ROLES.OPERATIONS_TEAM_L2, ROLES.OPERATIONS_HEAD]),
+  operationsController.searchLoanCustomers
+);
+
 // Operations check routes
 router.get(
   '/pending',
