@@ -1805,7 +1805,7 @@ Remaining Allowed: ₹${formatINR(
               }}
             >
               <FiDollarSign style={{ marginRight: "8px", color: "#6366f1" }} />
-              ROI (%)
+              ROI (%) (Yearly)
             </label>
             <input
               type="number"
@@ -1837,7 +1837,7 @@ Remaining Allowed: ₹${formatINR(
               }}
             >
               <FiDollarSign style={{ marginRight: "8px", color: "#6366f1" }} />
-              Penal Charges (%)
+              Penal Charges (%) (Yearly)
             </label>
             <input
               type="number"
@@ -1869,7 +1869,7 @@ Remaining Allowed: ₹${formatINR(
               }}
             >
               <FiDollarSign style={{ marginRight: "8px", color: "#6366f1" }} />
-             Service Fee
+             Service Fee (%) (Yearly)
             </label>
             
             <input
@@ -2175,9 +2175,9 @@ Remaining Allowed: ₹${formatINR(
               <th style={{ padding: "16px 24px", textAlign: "left", fontSize: "12px", textTransform: "uppercase", letterSpacing: "0.05em", color: "#202b3a", fontWeight: "700" }}>Supplier</th>
               <th style={{ padding: "16px 24px", textAlign: "right", fontSize: "12px", textTransform: "uppercase", letterSpacing: "0.05em", color: "#202b3a", fontWeight: "700" }}>Amount</th>
               <th style={{ padding: "16px 24px", textAlign: "right", fontSize: "12px", textTransform: "uppercase", letterSpacing: "0.05em", color: "#202b3a", fontWeight: "700" }}>Disbursement</th>
-              <th style={{ padding: "16px 24px", textAlign: "right", fontSize: "12px", textTransform: "uppercase", letterSpacing: "0.05em", color: "#202b3a", fontWeight: "700" }}>ROI %</th>
-              <th style={{ padding: "16px 24px", textAlign: "right", fontSize: "12px", textTransform: "uppercase", letterSpacing: "0.05em", color: "#202b3a", fontWeight: "700" }}>Penal %</th>
-              <th style={{ padding: "16px 24px", textAlign: "right", fontSize: "12px", textTransform: "uppercase", letterSpacing: "0.05em", color: "#202b3a", fontWeight: "700" }}>Service Fee</th>
+              <th style={{ padding: "16px 24px", textAlign: "right", fontSize: "12px", textTransform: "uppercase", letterSpacing: "0.05em", color: "#202b3a", fontWeight: "700" }}>ROI % (Yearly)</th>
+              <th style={{ padding: "16px 24px", textAlign: "right", fontSize: "12px", textTransform: "uppercase", letterSpacing: "0.05em", color: "#202b3a", fontWeight: "700" }}>Penal % (Yearly)</th>
+              <th style={{ padding: "16px 24px", textAlign: "right", fontSize: "12px", textTransform: "uppercase", letterSpacing: "0.05em", color: "#202b3a", fontWeight: "700" }}>Service Fee % (Yearly)</th>
               <th style={{ padding: "16px 24px", textAlign: "center", fontSize: "12px", textTransform: "uppercase", letterSpacing: "0.05em", color: "#202b3a", fontWeight: "700" }}>Status</th>
               <th style={{ padding: "16px 24px", textAlign: "center", fontSize: "12px", textTransform: "uppercase", letterSpacing: "0.05em", color: "#202b3a", fontWeight: "700" }}>Actions</th>
             </tr>
@@ -2341,9 +2341,9 @@ Remaining Allowed: ₹${formatINR(
     </div>
     
     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "20px" }}>
-        <div style={{ fontSize: "13px" }}><span style={{ color: "#94a3b8" }}>ROI:</span> <span style={{ fontWeight: "600" }}>{inv.roiPercentage}%</span></div>
-        <div style={{ fontSize: "13px" }}><span style={{ color: "#94a3b8" }}>Penal:</span> <span style={{ fontWeight: "600" }}>{inv.penalCharges}%</span></div>
-        <div style={{ fontSize: "13px" }}><span style={{ color: "#94a3b8" }}>Service Fee:</span> <span style={{ fontWeight: "600" }}>{inv.serviceFee}</span></div>
+        <div style={{ fontSize: "13px" }}><span style={{ color: "#94a3b8" }}>ROI (Yearly):</span> <span style={{ fontWeight: "600" }}>{inv.roiPercentage}%</span></div>
+        <div style={{ fontSize: "13px" }}><span style={{ color: "#94a3b8" }}>Penal (Yearly):</span> <span style={{ fontWeight: "600" }}>{inv.penalCharges}%</span></div>
+        <div style={{ fontSize: "13px" }}><span style={{ color: "#94a3b8" }}>Service Fee (Yearly):</span> <span style={{ fontWeight: "600" }}>{inv.serviceFee}%</span></div>
     </div>
 
     {/* DOCUMENTS */}
