@@ -901,6 +901,7 @@ export class OperationsService {
   private getInvoiceMigrationHeaders(): string[] {
     return [
       'partner_lan_id',
+      'supplier_code',
       'invoice_number',
       'invoice_date',
       'invoice_amount',
@@ -908,17 +909,6 @@ export class OperationsService {
       'disbursement_utr',
       'disbursement_date',
       'invoice_due_date',
-      'partner_supplier_id',
-      'supplier_name',
-      'supplier_gst_number',
-      'supplier_pan_number',
-      'supplier_email',
-      'supplier_mobile',
-      'supplier_address',
-      'supplier_bank_account_number',
-      'supplier_ifsc_code',
-      'supplier_bank_name',
-      'supplier_account_holder_name',
       'roi_percentage',
       'penal_charges',
       'service_fee',
@@ -1099,6 +1089,7 @@ export class OperationsService {
           this.getInvoiceMigrationHeaders(),
           [
             'OLD-LAN-1001',
+            'SUP-1001',
             'OLD-INV-1001',
             '2026-06-01',
             100000,
@@ -1106,17 +1097,6 @@ export class OperationsService {
             'UTR-OLD-INV-1001',
             '2026-06-05',
             '2026-09-03',
-            'OLD-SUP-1001',
-            'Metro Suppliers',
-            '27ABCDE9999F1Z5',
-            'ABCDE9999F',
-            'supplier@example.com',
-            '9876543220',
-            '77 Industrial Area, Mumbai',
-            '555555555555',
-            'ICIC0001234',
-            'ICICI Bank',
-            'Metro Suppliers',
             18,
             24,
             0,
@@ -1131,6 +1111,7 @@ export class OperationsService {
         rows: [
           ['field', 'required', 'notes'],
           ['partner_lan_id', 'yes', 'Old partner LAN from the source system; system LAN is resolved from loan accounts'],
+          ['supplier_code', 'yes', 'Existing supplier code from this system; supplier must belong to the resolved customer/LAN'],
           ['invoice_number', 'yes', 'Must be unique in the current system'],
           ['invoice_date', 'yes', 'Use YYYY-MM-DD'],
           ['invoice_amount', 'yes', 'Original invoice value'],
@@ -1138,7 +1119,6 @@ export class OperationsService {
           ['disbursement_utr', 'yes', 'Must be unique in internal LMS disbursements'],
           ['disbursement_date', 'yes', 'Use YYYY-MM-DD'],
           ['invoice_due_date', 'no', 'Defaults to disbursement_date + 90 days'],
-          ['partner_supplier_id', 'yes', 'Old supplier ID from the source system; existing migrated supplier is reused by this ID'],
           ['roi_percentage/penal_charges/service_fee', 'no', 'Defaults from approved customer partner sanction when blank'],
         ],
       },
@@ -1232,7 +1212,7 @@ export class OperationsService {
     const errors: string[] = [];
     const requiredFields: Array<[string[], string]> = [
       [['partner_lan_id', 'partner_lan', 'old_lan_id'], 'partner_lan_id'],
-      [['partner_supplier_id', 'supplier_partner_id', 'supplier_partner_loan_id', 'partner_id'], 'partner_supplier_id'],
+      [['supplier_code'], 'supplier_code'],
       [['invoice_number'], 'invoice_number'],
       [['invoice_date'], 'invoice_date'],
       [['invoice_amount'], 'invoice_amount'],
@@ -1276,11 +1256,6 @@ export class OperationsService {
       }
     } catch (error: any) {
       errors.push(error.message);
-    }
-
-    const ifsc = this.getCell(row, ['supplier_ifsc_code', 'supplier_bank_ifsc_code']);
-    if (ifsc && ifsc.length !== 11) {
-      errors.push('supplier_ifsc_code must be 11 characters');
     }
 
     return errors;
@@ -2041,151 +2016,30 @@ export class OperationsService {
     });
   }
 
-  private async upsertSupplierBankFromInvoiceRow(
-    manager: EntityManager,
-    supplierId: number,
-    row: ExcelRow,
-  ): Promise<void> {
-    const bankAccountNumber = this.getCell(row, ['supplier_bank_account_number', 'bank_account_number']);
-    const ifscCode = this.getCell(row, ['supplier_ifsc_code', 'supplier_bank_ifsc_code', 'ifsc_code']).toUpperCase();
-    const bankName = this.getCell(row, ['supplier_bank_name', 'bank_name']);
-    const accountHolderName = this.getCell(row, ['supplier_account_holder_name', 'account_holder_name']);
-    const hasAnyBankField = [bankAccountNumber, ifscCode, bankName, accountHolderName].some(Boolean);
-
-    if (!hasAnyBankField) return;
-    if (!bankAccountNumber || !ifscCode || !bankName || !accountHolderName) {
-      throw new Error('All supplier bank fields are required when any supplier bank field is provided');
-    }
-
-    const supplierBankRepo = manager.getRepository(SupplierBankDetail);
-    let bankDetail = await supplierBankRepo.findOne({ where: { supplierId } });
-    if (!bankDetail) {
-      bankDetail = supplierBankRepo.create({ supplierId } as Partial<SupplierBankDetail>);
-    }
-
-    bankDetail.bankAccountNumber = bankAccountNumber;
-    bankDetail.ifscCode = ifscCode;
-    bankDetail.bankName = bankName;
-    bankDetail.accountHolderName = accountHolderName;
-    bankDetail.micrCode = this.getCell(row, ['supplier_micr_code', 'micr_code']) || bankDetail.micrCode || '';
-    bankDetail.chequeNumber = this.getCell(row, ['supplier_cheque_number', 'cheque_number']) || bankDetail.chequeNumber || '';
-    await supplierBankRepo.save(bankDetail);
-  }
-
-  private async resolveOrCreateMigratedInvoiceSupplier(
+  private async resolveMigratedInvoiceSupplier(
     manager: EntityManager,
     row: ExcelRow,
     customerId: number,
-    userId: number,
   ): Promise<Supplier> {
     const supplierRepo = manager.getRepository(Supplier);
-    const workflowRepo = manager.getRepository(CaseWorkflow);
-    const historyRepo = manager.getRepository(CaseStatusHistory);
-
     const supplierCode = this.getCell(row, ['supplier_code']);
-    const supplierPartnerId = this.getCell(row, [
-      'supplier_partner_id',
-      'partner_supplier_id',
-      'supplier_partner_loan_id',
-      'partner_id',
-    ]);
-    const supplierName = this.getCell(row, ['supplier_name']);
-    const supplierGst = this.getCell(row, ['supplier_gst_number', 'supplier_gst']);
-    const supplierPan = this.getCell(row, ['supplier_pan_number', 'supplier_pan']);
 
-    let supplier: Supplier | null = null;
-    if (supplierPartnerId) {
-      supplier = await supplierRepo.findOne({ where: { customerId, partnerLoanId: supplierPartnerId } as any });
+    if (!supplierCode) {
+      throw new Error('supplier_code is required');
     }
 
-    if (!supplier && supplierCode) {
-      supplier = await supplierRepo.findOne({ where: { supplierCode } });
-      if (supplier && supplier.customerId !== customerId) {
-        throw new Error(`Supplier code ${supplierCode} belongs to another customer`);
-      }
-    }
-
-    if (!supplier && supplierGst) {
-      supplier = await supplierRepo.findOne({ where: { customerId, gstNumber: supplierGst } as any });
-    }
-
-    if (!supplier && supplierName) {
-      supplier = await supplierRepo.findOne({ where: { customerId, supplierName } as any });
-    }
-
-    const isNewSupplier = !supplier;
+    const supplier = await supplierRepo.findOne({ where: { supplierCode } });
     if (!supplier) {
-      if (!supplierName) {
-        throw new Error('supplier_name is required when supplier is not already onboarded');
-      }
-
-      supplier = supplierRepo.create({
-        customerId,
-        supplierCode: supplierCode || `SUP-MIG-${Date.now()}-${Math.floor(Math.random() * 100000)}`,
-        partnerLoanId: supplierPartnerId || null,
-        supplierName,
-        email: '',
-        contactNumber: '',
-        status: 'COMPLETED',
-        isActive: true,
-        createdByUserId: userId,
-      } as Partial<Supplier>);
+      throw new Error(`Supplier code ${supplierCode} was not found`);
+    }
+    if (supplier.customerId !== customerId) {
+      throw new Error(`Supplier code ${supplierCode} belongs to another customer`);
+    }
+    if (supplier.status !== 'COMPLETED' || !supplier.isActive) {
+      throw new Error(`Supplier code ${supplierCode} must be completed and active`);
     }
 
-    supplier.customerId = customerId;
-    supplier.partnerLoanId = supplierPartnerId || supplier.partnerLoanId || null;
-    supplier.supplierName = supplierName || supplier.supplierName;
-    supplier.email = this.getCell(row, ['supplier_email', 'email']) || supplier.email || '';
-    supplier.contactNumber = this.getCell(row, ['supplier_mobile', 'supplier_contact_number', 'contact_number']) || supplier.contactNumber || '';
-    supplier.address = this.getCell(row, ['supplier_address', 'address']) || supplier.address || '';
-    supplier.gstNumber = supplierGst || supplier.gstNumber || null as any;
-    supplier.panNumber = supplierPan || supplier.panNumber || null as any;
-    supplier.status = 'COMPLETED';
-    supplier.isActive = true;
-    supplier.createdByUserId = supplier.createdByUserId || userId;
-
-    const savedSupplier = await supplierRepo.save(supplier);
-    if (isNewSupplier && !supplierCode) {
-      savedSupplier.supplierCode = this.buildGeneratedSupplierCode(savedSupplier.id);
-      await supplierRepo.save(savedSupplier);
-    }
-
-    await this.upsertSupplierBankFromInvoiceRow(manager, savedSupplier.id, row);
-
-    let workflow = await workflowRepo.findOne({
-      where: { supplierId: savedSupplier.id, workflowType: 'SUPPLIER_ONBOARDING' as any },
-    });
-    if (!workflow) {
-      workflow = workflowRepo.create({
-        workflowType: 'SUPPLIER_ONBOARDING',
-        customerId,
-        supplierId: savedSupplier.id,
-      } as Partial<CaseWorkflow>);
-    }
-
-    workflow.customerId = customerId;
-    workflow.currentStatus = CASE_STATUS.COMPLETED;
-    workflow.currentApproverRoleName = 'None';
-    workflow.isCompleted = true;
-    workflow.completedDate = workflow.completedDate || new Date();
-    workflow.remarks = workflow.remarks || 'Supplier migrated through invoice upload';
-    await workflowRepo.save(workflow);
-
-    if (isNewSupplier) {
-      await historyRepo.save(
-        historyRepo.create({
-          customerId,
-          supplierId: savedSupplier.id,
-          caseWorkflowId: workflow.id,
-          status: CASE_STATUS.COMPLETED,
-          previousStatus: null,
-          changedBy: userId,
-          remarks: 'Supplier migrated through invoice upload',
-        } as any),
-      );
-    }
-
-    return savedSupplier;
+    return supplier;
   }
 
   private async resolveMigratedInvoiceLoanAccount(
@@ -2251,7 +2105,7 @@ export class OperationsService {
       throw new Error(`Disbursement UTR ${disbursementUtr} already exists in internal LMS`);
     }
 
-    const supplier = await this.resolveOrCreateMigratedInvoiceSupplier(manager, row, customer.id, userId);
+    const supplier = await this.resolveMigratedInvoiceSupplier(manager, row, customer.id);
     const sanction = await this.getApprovedSanctionForLoan(manager, customer.id, loanAccount);
     const roiPercentage =
       this.toNumber(this.getCell(row, ['roi_percentage', 'roi'])) ??
