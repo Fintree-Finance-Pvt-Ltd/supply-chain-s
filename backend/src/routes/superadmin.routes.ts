@@ -35,6 +35,17 @@ const parseDateQuery = (value: unknown, endOfDay = false): Date | undefined => {
   return date;
 };
 
+const parseDashboardPeriod = (value: unknown): number | 'all' => {
+  if (!value || Array.isArray(value)) return 30;
+
+  const normalizedValue = String(value).trim().toLowerCase();
+  if (['all', 'all_time', 'all-time'].includes(normalizedValue)) {
+    return 'all';
+  }
+
+  return Math.min(parsePositiveInt(value, 30), 365);
+};
+
 // ==========================================
 // SUPERADMIN Dashboard & Analytics Routes
 // ==========================================
@@ -45,10 +56,8 @@ const parseDateQuery = (value: unknown, endOfDay = false): Date | undefined => {
  */
 router.get('/dashboard', roleMiddleware([ROLES.SUPERADMIN]), async (req: Request, res: Response) => {
   try {
-    const days = req.query.days
-      ? Math.min(parsePositiveInt(req.query.days, 30), 365)
-      : 30;
-    const analytics = await superAdminAnalyticsService.getCompleteAnalytics(days);
+    const period = parseDashboardPeriod(req.query.period || req.query.days);
+    const analytics = await superAdminAnalyticsService.getCompleteAnalytics(period);
     res.json({
       success: true,
       data: analytics,
@@ -624,8 +633,8 @@ router.get('/user-performance/list', roleMiddleware([ROLES.SUPERADMIN]), async (
     } = req.query;
 
     const filters = {
-      startDate: startDate ? new Date(startDate as string) : undefined,
-      endDate: endDate ? new Date(endDate as string) : undefined,
+      startDate: parseDateQuery(startDate),
+      endDate: parseDateQuery(endDate, true),
       stage: stage as string,
       userId: userId ? parseInt(userId as string) : undefined,
       limit: limit ? parseInt(limit as string) : 20,
@@ -664,8 +673,8 @@ router.get('/user-performance/:userId', roleMiddleware([ROLES.SUPERADMIN]), asyn
     const { startDate, endDate, stage } = req.query;
 
     const filters = {
-      startDate: startDate ? new Date(startDate as string) : undefined,
-      endDate: endDate ? new Date(endDate as string) : undefined,
+      startDate: parseDateQuery(startDate),
+      endDate: parseDateQuery(endDate, true),
       stage: stage as string,
     };
 

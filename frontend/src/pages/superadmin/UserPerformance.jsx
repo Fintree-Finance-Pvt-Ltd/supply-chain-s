@@ -90,6 +90,33 @@ const getCompletionRate = (completed, total) => {
   return Math.round((completed / total) * 100)
 }
 
+const TOP_PERFORMER_ROLES = new Set([
+  'operations_team_l1',
+  'operations_team_l2',
+  'operations_head',
+  'credit_team_l1',
+  'credit_team_l2',
+  'credit_head',
+])
+
+const TOP_PERFORMER_EXCLUDED_ROLES = new Set([
+  'relationship_manager',
+  'ceo',
+  'md',
+  'admin',
+  'superadmin',
+])
+
+const isRelationshipManager = (user) =>
+  (user?.roles || [user?.primaryRole]).includes('relationship_manager')
+
+const isCreditOpsPerformer = (user) => {
+  const roles = user?.roles || [user?.primaryRole].filter(Boolean)
+  return roles.some((role) => TOP_PERFORMER_ROLES.has(role)) &&
+    !roles.some((role) => TOP_PERFORMER_EXCLUDED_ROLES.has(role)) &&
+    Number(user?.totalRewards || user?.totalPoints || 0) > 0
+}
+
 const MetricCard = ({ title, value, caption, icon: Icon, tone = 'blue' }) => {
   const tones = {
     blue: 'bg-blue-50 text-blue-700 ring-blue-100',
@@ -221,6 +248,10 @@ const UserPerformance = () => {
     () => ['startDate', 'endDate', 'stage', 'userId'].filter((key) => filters[key]).length,
     [filters]
   )
+  const summaryTopPerformers = useMemo(
+    () => (summary?.topPerformers || []).filter(isCreditOpsPerformer),
+    [summary]
+  )
 
   const pageStart = total === 0 ? 0 : filters.offset + 1
   const pageEnd = Math.min(filters.offset + filters.limit, total)
@@ -286,23 +317,33 @@ const UserPerformance = () => {
           <div className="mb-4 flex items-center justify-between">
             <div>
               <h2 className="text-lg font-bold text-slate-950">Top Performers</h2>
-              <p className="text-sm text-slate-500">By calculated efficiency score.</p>
+              <p className="text-sm text-slate-500">Credit, ops, and non-RM users by calculated efficiency score.</p>
             </div>
             <FiStar className="h-5 w-5 text-amber-500" />
           </div>
-          {summary?.topPerformers?.length ? (
+          {summaryTopPerformers.length ? (
             <div className="space-y-3">
-              {summary.topPerformers.map((user, index) => (
+              {summaryTopPerformers.map((user, index) => (
                 <div key={user.userId} className="flex items-center justify-between gap-3 border-b border-slate-100 pb-3 last:border-0 last:pb-0">
                   <div className="flex min-w-0 items-center gap-3">
                     <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-50 text-sm font-bold text-blue-700">
                       {index + 1}
                     </span>
-                    <p className="truncate text-sm font-semibold text-slate-900">{user.userName}</p>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-slate-900">{user.userName}</p>
+                      <p className="text-xs text-slate-500">
+                        {formatNumber(user.completedCases)} completed, {formatNumber(user.totalRewards)} pts
+                      </p>
+                    </div>
                   </div>
-                  <span className={`rounded-full px-2.5 py-1 text-xs font-bold ring-1 ${getScoreColor(user.efficiencyScore)}`}>
-                    {Number(user.efficiencyScore || 0).toFixed(1)}
-                  </span>
+                  <div className="shrink-0 text-right">
+                    <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-bold ring-1 ${getScoreColor(user.efficiencyScore)}`}>
+                      {Number(user.efficiencyScore || 0).toFixed(1)}
+                    </span>
+                    {isRelationshipManager(user) && Number(user.rmPoints || 0) > 0 && (
+                      <p className="mt-1 text-xs font-semibold text-amber-600">{formatNumber(user.rmPoints)} RM pts</p>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
@@ -355,13 +396,14 @@ const UserPerformance = () => {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[900px] text-left">
+            <table className="w-full min-w-[980px] text-left">
               <thead className="bg-slate-50 text-xs font-semibold uppercase text-slate-500">
                 <tr>
                   <th className="px-5 py-3">User</th>
                   <th className="px-5 py-3">Roles</th>
                   <th className="px-5 py-3 text-right">Workload</th>
                   <th className="px-5 py-3 text-right">Rewards</th>
+                  <th className="px-5 py-3 text-right">RM Points</th>
                   <th className="px-5 py-3 text-right">Avg Time</th>
                   <th className="px-5 py-3">Completion</th>
                   <th className="px-5 py-3 text-center">Score</th>
@@ -392,6 +434,9 @@ const UserPerformance = () => {
                         <p className="text-xs text-slate-500">{formatNumber(user.pendingCases)} pending</p>
                       </td>
                       <td className="px-5 py-4 text-right font-bold text-amber-600">{formatNumber(user.totalRewards)}</td>
+                      <td className="px-5 py-4 text-right font-bold text-slate-900">
+                        {isRelationshipManager(user) ? formatNumber(user.rmPoints) : '-'}
+                      </td>
                       <td className="px-5 py-4 text-right text-sm font-semibold text-slate-700">{formatTime(user.avgCompletionTime)}</td>
                       <td className="px-5 py-4">
                         <div className="min-w-[130px]">
@@ -666,11 +711,12 @@ const UserDetailDrawer = ({ user, loading, onClose }) => {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+            <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
               <MetricLite label="Total Cases" value={formatNumber(user.totalCases)} />
               <MetricLite label="Completed" value={formatNumber(user.completedCases)} tone="text-emerald-700" />
               <MetricLite label="Pending" value={formatNumber(user.pendingCases)} tone="text-amber-700" />
               <MetricLite label="Rewards" value={formatNumber(user.totalRewards)} tone="text-amber-700" />
+              <MetricLite label="RM Points" value={isRelationshipManager(user) ? formatNumber(user.rmPoints) : '-'} tone="text-blue-700" />
             </div>
 
             <div>

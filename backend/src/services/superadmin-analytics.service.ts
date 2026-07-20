@@ -13,7 +13,53 @@ import { LoanAccount } from '../entities/LoanAccount';
 import { CaseWorkflow } from '../entities/CaseWorkflow';
 import { ObjectLiteral, Repository } from 'typeorm';
 import { taskTimeTrackingService } from './task-time-tracking.service';
-import { rewardService } from './reward.service';
+import { userPerformanceService } from './user-performance.service';
+import type { PerformanceFilters, UserPerformanceSummary } from './user-performance.service';
+
+type DashboardPeriod = number | 'all';
+
+const CREDIT_PERFORMER_ROLES = new Set([
+  'credit_team_l1',
+  'credit_team_l2',
+  'credit_head',
+]);
+
+const OPS_PERFORMER_ROLES = new Set([
+  'operations_team_l1',
+  'operations_team_l2',
+  'operations_head',
+]);
+
+const TOP_PERFORMER_ROLES = new Set([
+  ...CREDIT_PERFORMER_ROLES,
+  ...OPS_PERFORMER_ROLES,
+]);
+
+const TOP_PERFORMER_EXCLUDED_ROLES = new Set([
+  'relationship_manager',
+  'ceo',
+  'md',
+  'admin',
+  'superadmin',
+]);
+
+const isTopPerformerUser = (roles: string[]): boolean =>
+  roles.some(role => TOP_PERFORMER_ROLES.has(role)) &&
+  !roles.some(role => TOP_PERFORMER_EXCLUDED_ROLES.has(role));
+
+const hasAnyRole = (roles: string[], expectedRoles: ReadonlySet<string>): boolean =>
+  roles.some(role => expectedRoles.has(role));
+
+interface DashboardPerformer {
+  userId: number;
+  userName: string;
+  email: string;
+  totalPoints: number;
+  rmPoints: number;
+  tasksCompleted: number;
+  avgCompletionTime: number | null;
+  roles: string[];
+}
 
 const toNumber = (value: string | number | null | undefined): number => {
   const parsed = Number(value ?? 0);
@@ -72,6 +118,80 @@ export class SuperAdminAnalyticsService {
     this.caseWorkflowRepository = AppDataSource.getRepository(CaseWorkflow);
   }
 
+  private getPerformancePeriodFilters(period: DashboardPeriod): PerformanceFilters {
+    if (period === 'all') return {};
+
+    const normalizedDays = Math.max(1, Math.min(period, 365));
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - normalizedDays);
+    return { startDate };
+  }
+
+  private async getPerformanceRanking(period: DashboardPeriod): Promise<UserPerformanceSummary[]> {
+    const ranking = await userPerformanceService.getUserPerformanceList({
+      ...this.getPerformancePeriodFilters(period),
+      limit: 10000,
+      offset: 0,
+      sortBy: 'totalRewards',
+      sortOrder: 'DESC',
+    });
+
+    return ranking.data;
+  }
+
+  private hasPerformerActivity(user: UserPerformanceSummary): boolean {
+    return user.totalRewards > 0 || user.completedCases > 0 || user.rewardedTasks > 0;
+  }
+
+  private toDashboardPerformer(user: UserPerformanceSummary): DashboardPerformer {
+    return {
+      userId: user.userId,
+      userName: user.userName,
+      email: user.email,
+      totalPoints: user.totalRewards,
+      rmPoints: user.rmPoints,
+      tasksCompleted: Math.max(user.completedCases, user.rewardedTasks),
+      avgCompletionTime: user.avgCompletionTime,
+      roles: user.roles,
+    };
+  }
+
+  private buildTopPerformers(ranking: UserPerformanceSummary[], limit: number): DashboardPerformer[] {
+    const normalizedLimit = Math.max(1, Math.min(limit, 50));
+
+    return ranking
+      .filter(user => isTopPerformerUser(user.roles))
+      .filter(user => user.totalRewards > 0)
+      .slice(0, normalizedLimit)
+      .map(user => this.toDashboardPerformer(user));
+  }
+
+  private buildDepartmentPerformers(
+    ranking: UserPerformanceSummary[],
+    departmentRoles: ReadonlySet<string>,
+    limit: number
+  ): DashboardPerformer[] {
+    const normalizedLimit = Math.max(1, Math.min(limit, 50));
+
+    return ranking
+      .filter(user => isTopPerformerUser(user.roles))
+      .filter(user => hasAnyRole(user.roles, departmentRoles))
+      .filter(user => this.hasPerformerActivity(user))
+      .slice(0, normalizedLimit)
+      .map(user => this.toDashboardPerformer(user));
+  }
+
+  private buildRelationshipManagerPerformers(ranking: UserPerformanceSummary[], limit: number): DashboardPerformer[] {
+    const normalizedLimit = Math.max(1, Math.min(limit, 50));
+
+    return ranking
+      .filter(user => user.roles.includes('relationship_manager'))
+      .filter(user => user.rmPoints > 0)
+      .sort((a, b) => b.rmPoints - a.rmPoints || b.totalRewards - a.totalRewards || a.userName.localeCompare(b.userName))
+      .slice(0, normalizedLimit)
+      .map(user => this.toDashboardPerformer(user));
+  }
+
   /**
    * Get complete dashboard overview
    */
@@ -110,36 +230,29 @@ export class SuperAdminAnalyticsService {
   /**
    * Get top 10 performers
    */
-  async getTopPerformers(limit: number = 10): Promise<Array<{
-    userId: number;
-    userName: string;
-    email: string;
-    totalPoints: number;
-    tasksCompleted: number;
-    avgCompletionTime: number | null;
-  }>> {
-    const topUsers = await rewardService.getTopPerformers(limit);
+  async getTopPerformers(limit: number = 10, period: DashboardPeriod = 'all'): Promise<DashboardPerformer[]> {
+    const ranking = await this.getPerformanceRanking(period);
+    return this.buildTopPerformers(ranking, limit);
+  }
 
-    // Get additional info
-    const results = [];
-    for (const user of topUsers) {
-      const dbUser = await this.userRepository.findOne({
-        where: { id: user.userId },
-      });
+  /**
+   * Get department-specific performer ranking for the dashboard card.
+   */
+  async getDepartmentPerformers(
+    departmentRoles: ReadonlySet<string>,
+    limit: number = 5,
+    period: DashboardPeriod = 'all'
+  ): Promise<DashboardPerformer[]> {
+    const ranking = await this.getPerformanceRanking(period);
+    return this.buildDepartmentPerformers(ranking, departmentRoles, limit);
+  }
 
-      const stats = await taskTimeTrackingService.getUserTaskStats(user.userId);
-
-      results.push({
-        userId: user.userId,
-        userName: user.userName,
-        email: dbUser?.email || '',
-        totalPoints: user.totalPoints,
-        tasksCompleted: user.tasksCompleted,
-        avgCompletionTime: stats.avgCompletionTime,
-      });
-    }
-
-    return results;
+  /**
+   * Get relationship-manager-only points ranking.
+   */
+  async getRelationshipManagerPerformers(limit: number = 10, period: DashboardPeriod = 'all'): Promise<DashboardPerformer[]> {
+    const ranking = await this.getPerformanceRanking(period);
+    return this.buildRelationshipManagerPerformers(ranking, limit);
   }
 
   /**
@@ -366,26 +479,23 @@ export class SuperAdminAnalyticsService {
     userName: string;
     tasksCompleted: number;
     totalPoints: number;
+    rmPoints: number;
   }>> {
-    const results = await this.rewardPointRepository
-      .createQueryBuilder('reward')
-      .select('reward.userId', 'userId')
-      .addSelect('user.name', 'userName')
-      .addSelect('COUNT(*)', 'tasksCompleted')
-      .addSelect('SUM(reward.points)', 'totalPoints')
-      .leftJoin('reward.user', 'user')
-      .groupBy('reward.userId')
-      .addGroupBy('user.name')
-      .orderBy('tasksCompleted', 'DESC')
-      .limit(limit)
-      .getRawMany();
+    const normalizedLimit = Math.max(1, Math.min(limit, 50));
+    const ranking = await userPerformanceService.getUserPerformanceList({
+      limit: normalizedLimit,
+      offset: 0,
+      sortBy: 'totalRewards',
+      sortOrder: 'DESC',
+    });
 
-    return results.map((r, index) => ({
+    return ranking.data.map((user, index) => ({
       rank: index + 1,
-      userId: parseInt(r.userId),
-      userName: r.userName || 'Unknown',
-      tasksCompleted: parseInt(r.tasksCompleted) || 0,
-      totalPoints: parseInt(r.totalPoints) || 0,
+      userId: user.userId,
+      userName: user.userName || 'Unknown',
+      tasksCompleted: user.completedCases,
+      totalPoints: user.totalRewards,
+      rmPoints: user.rmPoints,
     }));
   }
 
@@ -866,8 +976,10 @@ export class SuperAdminAnalyticsService {
   /**
    * Get new activity for the selected analytics period.
    */
-  async getPeriodActivity(days: number = 30): Promise<{
-    days: number;
+  async getPeriodActivity(period: DashboardPeriod = 30): Promise<{
+    days: number | null;
+    period: 'all_time' | 'last_n_days';
+    label: string;
     newCustomers: number;
     newSuppliers: number;
     newInvoices: number;
@@ -876,9 +988,38 @@ export class SuperAdminAnalyticsService {
     completedWorkflows: number;
     rejectedWorkflows: number;
   }> {
-    const normalizedDays = Math.max(1, Math.min(days, 365));
-    const since = new Date();
-    since.setDate(since.getDate() - normalizedDays);
+    const isAllTime = period === 'all';
+    const normalizedDays = isAllTime ? null : Math.max(1, Math.min(period, 365));
+    const since = normalizedDays ? new Date() : null;
+    if (since && normalizedDays) {
+      since.setDate(since.getDate() - normalizedDays);
+    }
+
+    const customerQuery = this.customerRepository
+      .createQueryBuilder('customer')
+      .select('COUNT(*)', 'count');
+
+    const supplierQuery = this.supplierRepository
+      .createQueryBuilder('supplier')
+      .select('COUNT(*)', 'count');
+
+    const invoiceQuery = this.invoiceRepository
+      .createQueryBuilder('invoice')
+      .select('COUNT(*)', 'count')
+      .addSelect('SUM(COALESCE(invoice.invoiceAmount, 0))', 'invoiceAmount')
+      .addSelect('SUM(COALESCE(invoice.disbursedAmount, invoice.disbursementAmount, 0))', 'disbursedAmount');
+
+    const workflowQuery = this.caseWorkflowRepository
+      .createQueryBuilder('workflow')
+      .select('SUM(CASE WHEN workflow.isCompleted = true THEN 1 ELSE 0 END)', 'completed')
+      .addSelect('SUM(CASE WHEN workflow.isRejected = true THEN 1 ELSE 0 END)', 'rejected');
+
+    if (since) {
+      customerQuery.where('customer.createdAt >= :since', { since });
+      supplierQuery.where('supplier.createdAt >= :since', { since });
+      invoiceQuery.where('invoice.createdAt >= :since', { since });
+      workflowQuery.where('workflow.updatedAt >= :since', { since });
+    }
 
     const [
       newCustomersRaw,
@@ -886,33 +1027,16 @@ export class SuperAdminAnalyticsService {
       invoiceRaw,
       workflowRaw,
     ] = await Promise.all([
-      this.customerRepository
-        .createQueryBuilder('customer')
-        .select('COUNT(*)', 'count')
-        .where('customer.createdAt >= :since', { since })
-        .getRawOne(),
-      this.supplierRepository
-        .createQueryBuilder('supplier')
-        .select('COUNT(*)', 'count')
-        .where('supplier.createdAt >= :since', { since })
-        .getRawOne(),
-      this.invoiceRepository
-        .createQueryBuilder('invoice')
-        .select('COUNT(*)', 'count')
-        .addSelect('SUM(COALESCE(invoice.invoiceAmount, 0))', 'invoiceAmount')
-        .addSelect('SUM(COALESCE(invoice.disbursedAmount, invoice.disbursementAmount, 0))', 'disbursedAmount')
-        .where('invoice.createdAt >= :since', { since })
-        .getRawOne(),
-      this.caseWorkflowRepository
-        .createQueryBuilder('workflow')
-        .select('SUM(CASE WHEN workflow.isCompleted = true THEN 1 ELSE 0 END)', 'completed')
-        .addSelect('SUM(CASE WHEN workflow.isRejected = true THEN 1 ELSE 0 END)', 'rejected')
-        .where('workflow.updatedAt >= :since', { since })
-        .getRawOne(),
+      customerQuery.getRawOne(),
+      supplierQuery.getRawOne(),
+      invoiceQuery.getRawOne(),
+      workflowQuery.getRawOne(),
     ]);
 
     return {
       days: normalizedDays,
+      period: isAllTime ? 'all_time' : 'last_n_days',
+      label: isAllTime ? 'All time' : `Last ${normalizedDays} days`,
       newCustomers: toNumber(newCustomersRaw?.count),
       newSuppliers: toNumber(newSuppliersRaw?.count),
       newInvoices: toNumber(invoiceRaw?.count),
@@ -926,7 +1050,7 @@ export class SuperAdminAnalyticsService {
   /**
    * Get complete analytics for SUPERADMIN dashboard
    */
-  async getCompleteAnalytics(days: number = 30): Promise<{
+  async getCompleteAnalytics(period: DashboardPeriod = 30): Promise<{
     overview: {
       totalUsers: number;
       activeTasks: number;
@@ -939,7 +1063,33 @@ export class SuperAdminAnalyticsService {
       userId: number;
       userName: string;
       totalPoints: number;
+      rmPoints: number;
       tasksCompleted: number;
+      roles: string[];
+    }>;
+    creditPerformers: Array<{
+      userId: number;
+      userName: string;
+      totalPoints: number;
+      rmPoints: number;
+      tasksCompleted: number;
+      roles: string[];
+    }>;
+    opsPerformers: Array<{
+      userId: number;
+      userName: string;
+      totalPoints: number;
+      rmPoints: number;
+      tasksCompleted: number;
+      roles: string[];
+    }>;
+    rmPerformers: Array<{
+      userId: number;
+      userName: string;
+      totalPoints: number;
+      rmPoints: number;
+      tasksCompleted: number;
+      roles: string[];
     }>;
     lowestPerformers: Array<{
       userId: number;
@@ -975,6 +1125,8 @@ export class SuperAdminAnalyticsService {
       userId: number;
       userName: string;
       tasksCompleted: number;
+      totalPoints: number;
+      rmPoints: number;
     }>;
     businessOverview: Awaited<ReturnType<SuperAdminAnalyticsService['getBusinessOverview']>>;
     financialSnapshot: Awaited<ReturnType<SuperAdminAnalyticsService['getFinancialSnapshot']>>;
@@ -988,7 +1140,7 @@ export class SuperAdminAnalyticsService {
   }> {
     const [
       overview,
-      topPerformers,
+      performanceRanking,
       lowestPerformers,
       bucketStats,
       l1L2Comparison,
@@ -1006,7 +1158,7 @@ export class SuperAdminAnalyticsService {
       partnerSanctionStats,
     ] = await Promise.all([
       this.getDashboardOverview(),
-      this.getTopPerformers(10),
+      this.getPerformanceRanking(period),
       this.getLowestPerformers(10),
       this.getBucketPerformanceStats(),
       this.getL1L2ProcessingComparison(),
@@ -1019,14 +1171,22 @@ export class SuperAdminAnalyticsService {
       this.getStatusBreakdowns(),
       this.getRecentCases(8),
       this.getMonthlyTrend(6),
-      this.getPeriodActivity(days),
+      this.getPeriodActivity(period),
       this.getRoleDistribution(),
       this.getPartnerSanctionStats(8),
     ]);
 
+    const topPerformers = this.buildTopPerformers(performanceRanking, 10);
+    const creditPerformers = this.buildDepartmentPerformers(performanceRanking, CREDIT_PERFORMER_ROLES, 5);
+    const opsPerformers = this.buildDepartmentPerformers(performanceRanking, OPS_PERFORMER_ROLES, 5);
+    const rmPerformers = this.buildRelationshipManagerPerformers(performanceRanking, 10);
+
     return {
       overview,
       topPerformers,
+      creditPerformers,
+      opsPerformers,
+      rmPerformers,
       lowestPerformers,
       bucketStats,
       l1L2Comparison,

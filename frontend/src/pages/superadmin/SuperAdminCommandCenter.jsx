@@ -5,6 +5,7 @@ import {
   FiActivity,
   FiAlertCircle,
   FiArrowUpRight,
+  FiAward,
   FiBarChart2,
   FiBriefcase,
   FiDollarSign,
@@ -34,6 +35,7 @@ import LoadingSpinner from '../../components/LoadingSpinner'
 import StatusBadge from '../../components/StatusBadge'
 import api from '../../services/api'
 import { loanServicingService } from '../../services/loanServicingService'
+import { ROLE_LABELS } from '../../constants/roles'
 import { formatCurrency, formatDate } from '../../utils/format'
 
 const chartColors = ['#2563eb', '#059669', '#d97706', '#dc2626', '#7c3aed', '#0f766e']
@@ -60,6 +62,51 @@ const formatLabel = (value) =>
     .replace(/\b\w/g, (letter) => letter.toUpperCase())
 
 const getLan = (row) => row.lan || row.loanAccount?.lanId || row.loanAccount?.lan || '-'
+
+const getPeriodParams = (days) => (days === 'all' ? { period: 'all' } : { days })
+
+const CREDIT_PERFORMER_ROLES = new Set([
+  'credit_team_l1',
+  'credit_team_l2',
+  'credit_head',
+])
+
+const OPS_PERFORMER_ROLES = new Set([
+  'operations_team_l1',
+  'operations_team_l2',
+  'operations_head',
+])
+
+const TOP_PERFORMER_ROLES = new Set([
+  ...CREDIT_PERFORMER_ROLES,
+  ...OPS_PERFORMER_ROLES,
+])
+
+const TOP_PERFORMER_EXCLUDED_ROLES = new Set([
+  'relationship_manager',
+  'ceo',
+  'md',
+  'admin',
+  'superadmin',
+])
+
+const isRelationshipManager = (user) =>
+  (user?.roles || []).includes('relationship_manager')
+
+const hasPerformerRole = (user, roleSet = TOP_PERFORMER_ROLES) =>
+  (user?.roles || []).some((role) => roleSet.has(role))
+
+const isCreditOpsDepartmentUser = (user) => {
+  const roles = user?.roles || []
+  return roles.some((role) => TOP_PERFORMER_ROLES.has(role)) &&
+    !roles.some((role) => TOP_PERFORMER_EXCLUDED_ROLES.has(role))
+}
+
+const isCreditOpsPerformer = (user) =>
+  isCreditOpsDepartmentUser(user) && toNumber(user?.totalPoints) > 0
+
+const getCreditOpsRole = (user, roleSet = TOP_PERFORMER_ROLES) =>
+  (user?.roles || []).find((role) => roleSet.has(role))
 
 const groupCashflowByDate = (disbursements = [], collections = []) => {
   const map = new Map()
@@ -121,6 +168,97 @@ const EmptyChart = ({ label }) => (
   </div>
 )
 
+const PerformerRow = ({ user, index, showRmPoints = false, roleSet = TOP_PERFORMER_ROLES }) => (
+  <div className="flex items-center justify-between gap-3 border-b border-slate-100 pb-3 last:border-0 last:pb-0">
+    <div className="flex min-w-0 items-center gap-3">
+      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-50 text-sm font-bold text-blue-700">
+        {index + 1}
+      </span>
+      <div className="min-w-0">
+        <p className="truncate text-sm font-semibold text-slate-900">{user.userName}</p>
+        <p className="text-xs text-slate-500">
+          {formatNumber(user.tasksCompleted)} completed
+          {(() => {
+            const role = showRmPoints ? user.roles?.[0] : getCreditOpsRole(user, roleSet)
+            return role ? ` - ${ROLE_LABELS[role] || formatLabel(role)}` : ''
+          })()}
+        </p>
+      </div>
+    </div>
+    <div className="shrink-0 text-right">
+      <p className="text-sm font-bold text-slate-950">{formatNumber(user.totalPoints)} pts</p>
+      {showRmPoints && (
+        <p className="text-xs font-semibold text-amber-600">{formatNumber(user.rmPoints)} RM pts</p>
+      )}
+    </div>
+  </div>
+)
+
+const PerformerPanel = ({ title, subtitle, items = [], sections = null, icon: Icon, showRmPoints = false, emptyLabel }) => {
+  const hasSections = Array.isArray(sections) && sections.length > 0
+
+  return (
+    <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="mb-4 flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-bold text-slate-950">{title}</h2>
+          <p className="text-sm text-slate-500">{subtitle}</p>
+        </div>
+        <Icon className="h-5 w-5 text-amber-600" />
+      </div>
+
+      {hasSections ? (
+        <div className="space-y-5">
+          {sections.map((section) => {
+            const sectionItems = section.items || []
+
+            return (
+              <div key={section.title} className="border-t border-slate-100 pt-4 first:border-t-0 first:pt-0">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <h3 className="text-sm font-bold uppercase text-slate-600">{section.title}</h3>
+                  <span className="text-xs font-semibold text-slate-400">{formatNumber(sectionItems.length)} users</span>
+                </div>
+
+                {sectionItems.length > 0 ? (
+                  <div className="space-y-3">
+                    {sectionItems.slice(0, 5).map((user, index) => (
+                      <PerformerRow
+                        key={`${section.title}-${user.userId}-${index}`}
+                        user={user}
+                        index={index}
+                        roleSet={section.roleSet}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 p-4 text-center text-sm text-slate-500">
+                    {section.emptyLabel || emptyLabel}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      ) : items.length > 0 ? (
+        <div className="space-y-3">
+          {items.slice(0, 5).map((user, index) => (
+            <PerformerRow
+              key={`${user.userId}-${index}`}
+              user={user}
+              index={index}
+              showRmPoints={showRmPoints}
+            />
+          ))}
+        </div>
+      ) : (
+        <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">
+          {emptyLabel}
+        </div>
+      )}
+    </section>
+  )
+}
+
 const SuperAdminCommandCenter = () => {
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -142,7 +280,7 @@ const SuperAdminCommandCenter = () => {
       }
 
       const [analyticsRes, portfolioRes, disbursementRes, collectionRes] = await Promise.all([
-        api.get('/superadmin/dashboard', { params: { days: filters.days } }),
+        api.get('/superadmin/dashboard', { params: getPeriodParams(filters.days) }),
         loanServicingService.getPortfolioReport(),
         loanServicingService.getDisbursementReport(reportFilters),
         loanServicingService.getCollectionReport(reportFilters),
@@ -163,13 +301,35 @@ const SuperAdminCommandCenter = () => {
 
   useEffect(() => {
     loadDashboard()
-  }, [])
+  }, [filters.days, filters.startDate, filters.endDate])
 
   const financial = analytics?.financialSnapshot || {}
   const business = analytics?.businessOverview || {}
+  const period = analytics?.periodActivity || {}
   const monthlyTrend = analytics?.monthlyTrend || []
   const workflowPipeline = analytics?.workflowPipeline || []
   const recentCases = analytics?.recentCases || []
+  const topPerformers = (analytics?.topPerformers || []).filter(isCreditOpsPerformer)
+  const creditPerformers = (analytics?.creditPerformers || topPerformers.filter((user) => hasPerformerRole(user, CREDIT_PERFORMER_ROLES)))
+    .filter((user) => isCreditOpsDepartmentUser(user) && hasPerformerRole(user, CREDIT_PERFORMER_ROLES))
+  const opsPerformers = (analytics?.opsPerformers || topPerformers.filter((user) => hasPerformerRole(user, OPS_PERFORMER_ROLES)))
+    .filter((user) => isCreditOpsDepartmentUser(user) && hasPerformerRole(user, OPS_PERFORMER_ROLES))
+  const rmPerformers = (analytics?.rmPerformers || []).filter(isRelationshipManager)
+  const periodLabel = period.label || (filters.days === 'all' ? 'All time' : `Last ${filters.days} days`)
+  const performerSections = [
+    {
+      title: 'Credit Department',
+      items: creditPerformers,
+      roleSet: CREDIT_PERFORMER_ROLES,
+      emptyLabel: 'No credit performer data yet.',
+    },
+    {
+      title: 'Operations Department',
+      items: opsPerformers,
+      roleSet: OPS_PERFORMER_ROLES,
+      emptyLabel: 'No operations performer data yet.',
+    },
+  ]
 
   const cleanLan = filters.lan.trim().toLowerCase()
   const portfolioRows = useMemo(() => {
@@ -335,6 +495,7 @@ const SuperAdminCommandCenter = () => {
               <option value="30">Last 30 days</option>
               <option value="90">Last 90 days</option>
               <option value="180">Last 180 days</option>
+              <option value="all">All time</option>
             </select>
           </label>
           <label className="block">
@@ -377,6 +538,24 @@ const SuperAdminCommandCenter = () => {
         <MetricCard label="Disbursed" value={formatCompactCurrency(portfolio?.totalDisbursed)} helper={`${utilizationRate}% utilization`} icon={FiDollarSign} tone="emerald" />
         <MetricCard label="Collections" value={formatCompactCurrency(portfolio?.totalCollected)} helper={`${formatNumber(collections?.count)} receipts`} icon={FiActivity} tone="amber" />
         <MetricCard label="Workflow Queue" value={formatNumber(business.activeWorkflows)} helper={`${formatNumber(business.completedWorkflows)} completed`} icon={FiFileText} tone="slate" />
+      </section>
+
+      <section className="mb-6 grid grid-cols-1 gap-4 xl:grid-cols-2">
+        <PerformerPanel
+          title="Top Performers"
+          subtitle={`Credit and ops departments by points, ${periodLabel.toLowerCase()}.`}
+          sections={performerSections}
+          icon={FiAward}
+          emptyLabel="No performer points available yet."
+        />
+        <PerformerPanel
+          title="RM Points"
+          subtitle="Relationship manager contribution, including RM-originated workflow points."
+          items={rmPerformers}
+          icon={FiShield}
+          showRmPoints
+          emptyLabel="No RM points available yet."
+        />
       </section>
 
       <section className="mb-6 grid grid-cols-1 gap-4 xl:grid-cols-3">

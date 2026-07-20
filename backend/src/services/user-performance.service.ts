@@ -21,6 +21,19 @@ const STAGE_MAPPING: Record<string, string> = {
   'rm': 'rm',
 };
 
+const PERFORMANCE_STAGES = Object.keys(STAGE_MAPPING);
+
+const REPORT_REWARD_POINTS = {
+  FAST: 5,
+  MEDIUM: 3,
+  SLOW: 1,
+};
+
+const toNumber = (value: string | number | null | undefined): number => {
+  const parsed = Number(value ?? 0);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
 // Performance score calculation weights
 const SCORE_WEIGHTS = {
   COMPLETION_RATE: 40,    // Weight for completion rate
@@ -41,6 +54,23 @@ const VALID_ROLES = [
   'ceo',
   'md',
 ];
+
+const TOP_PERFORMER_ROLES = new Set([
+  'operations_team_l1',
+  'operations_team_l2',
+  'operations_head',
+  'credit_team_l1',
+  'credit_team_l2',
+  'credit_head',
+]);
+
+const TOP_PERFORMER_EXCLUDED_ROLES = new Set([
+  'relationship_manager',
+  'ceo',
+  'md',
+  'admin',
+  'superadmin',
+]);
 
 // Roles EXCLUDED from time tracking
 const EXCLUDED_ROLES = ['admin', 'superadmin'];
@@ -92,6 +122,8 @@ export interface UserPerformanceSummary {
   inProgressCases: number;
   rejectedCases: number;
   totalRewards: number;
+  rewardedTasks: number;
+  rmPoints: number;
   avgCompletionTime: number | null;
   totalCompletionTime: number | null;
   efficiencyScore: number;
@@ -107,8 +139,17 @@ export interface OverallPerformanceSummary {
     userId: number;
     userName: string;
     efficiencyScore: number;
+    totalRewards: number;
+    completedCases: number;
+    rewardedTasks: number;
+    rmPoints: number;
+    roles: string[];
   }>;
 }
+
+const hasTopPerformerRole = (roles: string[]): boolean =>
+  roles.some(role => TOP_PERFORMER_ROLES.has(role)) &&
+  !roles.some(role => TOP_PERFORMER_EXCLUDED_ROLES.has(role));
 
 /**
  * User Performance Service
@@ -164,17 +205,6 @@ export class UserPerformanceService {
       .andWhere('workflow.createdAt IS NOT NULL')
       .getRawOne();
 
-    // Get total rewards distributed
-    const rewardStats = await this.rewardPointRepository
-      .createQueryBuilder('reward')
-      .innerJoin('reward.user', 'user')
-      .innerJoin('user.userRoles', 'ur')
-      .innerJoin('ur.role', 'role')
-      .where('role.name IN (:...validRoles)', { validRoles: VALID_ROLES })
-      .andWhere('ur.isActive = :isActive', { isActive: true })
-      .select('SUM(reward.points)', 'totalPoints')
-      .getRawOne();
-
     // Keep timing rows as a fallback for older records without workflow completion dates.
     const trackingCompletionStats = await this.taskTimeTrackingRepository
       .createQueryBuilder('tracking')
@@ -189,8 +219,32 @@ export class UserPerformanceService {
       .addSelect('AVG(tracking.totalCompletionTimeMinutes)', 'avgTime')
       .getRawOne();
 
-    // Get top 5 performers
-    const topPerformers = await this.getTopPerformersInternal(5);
+    const performanceUsers = await this.getUserPerformanceList({
+      limit: 10000,
+      offset: 0,
+      sortBy: 'efficiencyScore',
+      sortOrder: 'DESC',
+    });
+
+    const totalRewardsDistributed = performanceUsers.data.reduce(
+      (sum, user) => sum + user.totalRewards,
+      0
+    );
+
+    const topPerformers = performanceUsers.data
+      .filter(user => hasTopPerformerRole(user.roles))
+      .filter(user => user.totalRewards > 0)
+      .slice(0, 5)
+      .map(user => ({
+        userId: user.userId,
+        userName: user.userName,
+        efficiencyScore: user.efficiencyScore,
+        totalRewards: user.totalRewards,
+        completedCases: Math.max(user.completedCases, user.rewardedTasks),
+        rewardedTasks: user.rewardedTasks,
+        rmPoints: 0,
+        roles: user.roles,
+      }));
 
     return {
       totalUsersTracked: parseInt(userStats?.totalUsers) || 0,
@@ -198,7 +252,7 @@ export class UserPerformanceService {
         parseInt(workflowCompletionStats?.totalCompleted) ||
         parseInt(trackingCompletionStats?.totalCompleted) ||
         0,
-      totalRewardsDistributed: parseInt(rewardStats?.totalPoints) || 0,
+      totalRewardsDistributed,
       avgCompletionTime:
         workflowCompletionStats?.avgTime
           ? parseFloat(workflowCompletionStats.avgTime)
@@ -251,6 +305,19 @@ export class UserPerformanceService {
       return { data: [], total: 0 };
     }
 
+    const relationshipManagerRows = await this.userRoleRepository
+      .createQueryBuilder('ur')
+      .select('ur.userId', 'userId')
+      .innerJoin('ur.role', 'role')
+      .where('ur.userId IN (:...userIds)', { userIds })
+      .andWhere('ur.isActive = :isActive', { isActive: true })
+      .andWhere('role.name = :roleName', { roleName: 'relationship_manager' })
+      .getRawMany();
+
+    const relationshipManagerUserIds = new Set(
+      relationshipManagerRows.map(row => parseInt(row.userId))
+    );
+
     const trackingStatsQuery = this.taskTimeTrackingRepository
       .createQueryBuilder('tracking')
       .select('tracking.userId', 'userId')
@@ -294,7 +361,16 @@ export class UserPerformanceService {
       .addSelect('workflow.createdAt', 'createdAt')
       .addSelect('workflow.updatedAt', 'updatedAt')
       .addSelect('workflow.completedDate', 'completedDate')
-      .where('workflow.assignedUserId IN (:...userIds)', { userIds })
+      .addSelect('customer.rmId', 'customerRmId')
+      .addSelect('supplier.createdByUserId', 'supplierCreatedByUserId')
+      .addSelect('invoice.createdByUserId', 'invoiceCreatedByUserId')
+      .leftJoin('workflow.customer', 'customer')
+      .leftJoin('workflow.supplier', 'supplier')
+      .leftJoin('workflow.invoice', 'invoice')
+      .where(
+        '(workflow.assignedUserId IN (:...userIds) OR customer.rmId IN (:...userIds) OR supplier.createdByUserId IN (:...userIds) OR invoice.createdByUserId IN (:...userIds))',
+        { userIds }
+      )
       .getRawMany();
 
     const workflowStatsMap: Record<number, {
@@ -305,15 +381,16 @@ export class UserPerformanceService {
       rejectedCases: number;
       totalCompletionTime: number;
       completedWithTime: number;
+      rmPoints: number;
     }> = {};
 
-    workflowRows.forEach(row => {
-      const currentUserId = parseInt(row.assignedUserId);
-      const workflowStage = this.getStageFromWorkflowStatus(row.currentStatus, row.currentApproverRoleName) || row.assignedStage || 'unknown';
+    const seenWorkflowCredits = new Set<string>();
+
+    const addWorkflowStats = (row: any, currentUserId: number, creditStage: string, isRmCredit = false) => {
       const createdAt = row.createdAt ? new Date(row.createdAt) : null;
 
       if (!currentUserId || !userIds.includes(currentUserId)) return;
-      if (stage && workflowStage !== stage) return;
+      if (stage && creditStage !== stage) return;
       if (startDate && createdAt && createdAt.getTime() < startDate.getTime()) return;
       if (endDate && createdAt && createdAt.getTime() > endDate.getTime()) return;
 
@@ -332,8 +409,18 @@ export class UserPerformanceService {
           rejectedCases: 0,
           totalCompletionTime: 0,
           completedWithTime: 0,
+          rmPoints: 0,
         };
       }
+
+      const dedupeKey = `${currentUserId}:${row.id}:${creditStage}`;
+      if (seenWorkflowCredits.has(dedupeKey)) {
+        if (isRmCredit && isCompleted) {
+          workflowStatsMap[currentUserId].rmPoints += this.getReportPointsForCompletionTime(duration);
+        }
+        return;
+      }
+      seenWorkflowCredits.add(dedupeKey);
 
       workflowStatsMap[currentUserId].totalCases += 1;
       if (isCompleted) workflowStatsMap[currentUserId].completedCases += 1;
@@ -349,31 +436,107 @@ export class UserPerformanceService {
         workflowStatsMap[currentUserId].completedWithTime += 1;
       }
 
+      if (isRmCredit && isCompleted) {
+        workflowStatsMap[currentUserId].rmPoints += this.getReportPointsForCompletionTime(duration);
+      }
+    };
+
+    workflowRows.forEach(row => {
+      const assignedUserId = parseInt(row.assignedUserId);
+      const workflowStage = this.getStageFromWorkflowStatus(row.currentStatus, row.currentApproverRoleName) || row.assignedStage || 'unknown';
+      const rmOwnerUserId =
+        toNumber(row.customerRmId) ||
+        toNumber(row.supplierCreatedByUserId) ||
+        toNumber(row.invoiceCreatedByUserId);
+
+      addWorkflowStats(row, assignedUserId, workflowStage);
+      if (relationshipManagerUserIds.has(rmOwnerUserId)) {
+        addWorkflowStats(row, rmOwnerUserId, 'rm', true);
+      }
     });
 
     let rewardMap: Record<number, number> = {};
+    let rmRewardMap: Record<number, number> = {};
+    let rewardTaskMap: Record<number, number> = {};
     const rewardQuery = this.rewardPointRepository
       .createQueryBuilder('reward')
       .select('reward.userId', 'userId')
       .addSelect('SUM(reward.points)', 'totalRewards')
+      .addSelect("SUM(CASE WHEN reward.bucket = 'rm' THEN reward.points ELSE 0 END)", 'rmRewards')
+      .addSelect('COUNT(*)', 'rewardedTasks')
       .where('reward.userId IN (:...userIds)', { userIds });
+
+    const rewardTaskQuery = this.rewardPointRepository
+      .createQueryBuilder('reward')
+      .select('reward.userId', 'userId')
+      .addSelect('reward.taskId', 'taskId')
+      .where('reward.userId IN (:...userIds)', { userIds });
+
+    const trackingRewardQuery = this.taskTimeTrackingRepository
+      .createQueryBuilder('tracking')
+      .select('tracking.userId', 'userId')
+      .addSelect('tracking.taskId', 'taskId')
+      .addSelect('tracking.bucket', 'bucket')
+      .addSelect('tracking.totalCompletionTimeMinutes', 'completionTimeMinutes')
+      .where('tracking.userId IN (:...userIds)', { userIds })
+      .andWhere('tracking.status = :completedStatus', { completedStatus: 'completed' });
 
     if (startDate) {
       rewardQuery.andWhere('reward.awardedAt >= :startDate', { startDate });
+      rewardTaskQuery.andWhere('reward.awardedAt >= :startDate', { startDate });
+      trackingRewardQuery.andWhere('tracking.assignedAt >= :startDate', { startDate });
     }
     if (endDate) {
       rewardQuery.andWhere('reward.awardedAt <= :endDate', { endDate });
+      rewardTaskQuery.andWhere('reward.awardedAt <= :endDate', { endDate });
+      trackingRewardQuery.andWhere('tracking.assignedAt <= :endDate', { endDate });
     }
     if (stage) {
       rewardQuery.andWhere('reward.bucket = :stage', { stage });
+      rewardTaskQuery.andWhere('reward.bucket = :stage', { stage });
+      trackingRewardQuery.andWhere('tracking.bucket = :stage', { stage });
     }
 
-    const rewards = await rewardQuery
-      .groupBy('reward.userId')
-      .getRawMany();
+    const [
+      rewards,
+      rewardTaskRows,
+      trackingRewardRows,
+    ] = await Promise.all([
+      rewardQuery
+        .groupBy('reward.userId')
+        .getRawMany(),
+      rewardTaskQuery.getRawMany(),
+      trackingRewardQuery.getRawMany(),
+    ]);
 
     rewards.forEach(r => {
       rewardMap[parseInt(r.userId)] = parseInt(r.totalRewards) || 0;
+      rmRewardMap[parseInt(r.userId)] = parseInt(r.rmRewards) || 0;
+      rewardTaskMap[parseInt(r.userId)] = parseInt(r.rewardedTasks) || 0;
+    });
+
+    const rewardedTaskKeys = new Set<string>();
+    rewardTaskRows.forEach(r => {
+      const currentUserId = parseInt(r.userId);
+      if (!currentUserId || !r.taskId) return;
+      rewardedTaskKeys.add(`${currentUserId}:${r.taskId}`);
+    });
+
+    const derivedTrackingRewardMap: Record<number, number> = {};
+    const derivedTrackingRewardTaskMap: Record<number, number> = {};
+    const seenTrackingRewardKeys = new Set<string>();
+
+    trackingRewardRows.forEach(r => {
+      const currentUserId = parseInt(r.userId);
+      if (!currentUserId || !r.taskId || relationshipManagerUserIds.has(currentUserId)) return;
+
+      const rewardKey = `${currentUserId}:${r.taskId}`;
+      if (rewardedTaskKeys.has(rewardKey) || seenTrackingRewardKeys.has(rewardKey)) return;
+      seenTrackingRewardKeys.add(rewardKey);
+
+      const points = this.getReportPointsForCompletionTime(toNumber(r.completionTimeMinutes) || null);
+      derivedTrackingRewardMap[currentUserId] = (derivedTrackingRewardMap[currentUserId] || 0) + points;
+      derivedTrackingRewardTaskMap[currentUserId] = (derivedTrackingRewardTaskMap[currentUserId] || 0) + 1;
     });
 
     // Get user roles
@@ -416,7 +579,15 @@ export class UserPerformanceService {
       const avgTime = workflowCompletedWithTime > 0
         ? workflowTotalCompletionTime / workflowCompletedWithTime
         : trackingAvgTime;
-      const rewards = rewardMap[currentUserId] || 0;
+      const derivedRmPoints = workflowStats?.rmPoints || 0;
+      const storedRewards = rewardMap[currentUserId] || 0;
+      const derivedTrackingRewards = derivedTrackingRewardMap[currentUserId] || 0;
+      const rewards = storedRewards + derivedTrackingRewards + derivedRmPoints;
+      const rewardedTasks = (rewardTaskMap[currentUserId] || 0) + (derivedTrackingRewardTaskMap[currentUserId] || 0);
+      const isRelationshipManager = relationshipManagerUserIds.has(currentUserId);
+      const rmPoints = isRelationshipManager
+        ? (rmRewardMap[currentUserId] || 0) + derivedRmPoints
+        : 0;
       
       return {
         userId: currentUserId,
@@ -430,6 +601,8 @@ export class UserPerformanceService {
         inProgressCases: workflowStats?.inProgressCases ?? trackingInProgressCases,
         rejectedCases: workflowStats?.rejectedCases ?? trackingRejectedCases,
         totalRewards: rewards,
+        rewardedTasks,
+        rmPoints,
         avgCompletionTime: avgTime,
         totalCompletionTime,
         efficiencyScore: this.calculatePerformanceScore(completedCases, totalCases, avgTime, rewards),
@@ -466,6 +639,16 @@ export class UserPerformanceService {
   async getUserPerformanceDetail(userId: number, filters?: PerformanceFilters): Promise<UserPerformanceSummary | null> {
     const user = await this.userRepository.findOne({ where: { id: userId } });
     if (!user) return null;
+
+    const aggregateResult = await this.getUserPerformanceList({
+      ...(filters || {}),
+      userId,
+      limit: 1,
+      offset: 0,
+      sortBy: 'efficiencyScore',
+      sortOrder: 'DESC',
+    });
+    const aggregateSummary = aggregateResult.data[0];
 
     // Get user roles
     const userRoles = await this.userRoleRepository
@@ -510,7 +693,7 @@ export class UserPerformanceService {
       .getRawOne();
 
     // Stage-wise performance
-    const stages = ['credit_l1', 'credit_l2', 'ps_l1', 'ps_l2', 'rm'];
+    const stages = filters?.stage ? [filters.stage] : PERFORMANCE_STAGES;
     const stagePerformance: StagePerformance[] = [];
 
     for (const stage of stages) {
@@ -546,10 +729,12 @@ export class UserPerformanceService {
       }
     }
 
-    const completedCases = parseInt(overallStats.completedCases) || 0;
-    const totalCases = parseInt(overallStats.totalCases) || 0;
-    const avgTime = overallStats.avgCompletionTime ? parseFloat(overallStats.avgCompletionTime) : null;
-    const rewards = parseInt(rewardStats.totalRewards) || 0;
+    const completedCases = aggregateSummary?.completedCases ?? (parseInt(overallStats.completedCases) || 0);
+    const totalCases = aggregateSummary?.totalCases ?? (parseInt(overallStats.totalCases) || 0);
+    const avgTime = aggregateSummary?.avgCompletionTime ?? (overallStats.avgCompletionTime ? parseFloat(overallStats.avgCompletionTime) : null);
+    const rewards = aggregateSummary?.totalRewards ?? (parseInt(rewardStats?.totalRewards) || 0);
+    const rewardedTasks = aggregateSummary?.rewardedTasks ?? 0;
+    const rmPoints = aggregateSummary?.rmPoints ?? 0;
 
     return {
       userId,
@@ -559,12 +744,14 @@ export class UserPerformanceService {
       primaryRole: roles[0] || 'unknown',
       totalCases,
       completedCases,
-      pendingCases: parseInt(overallStats.pendingCases) || 0,
-      inProgressCases: parseInt(overallStats.inProgressCases) || 0,
-      rejectedCases: parseInt(overallStats.rejectedCases) || 0,
+      pendingCases: aggregateSummary?.pendingCases ?? (parseInt(overallStats.pendingCases) || 0),
+      inProgressCases: aggregateSummary?.inProgressCases ?? (parseInt(overallStats.inProgressCases) || 0),
+      rejectedCases: aggregateSummary?.rejectedCases ?? (parseInt(overallStats.rejectedCases) || 0),
       totalRewards: rewards,
+      rewardedTasks,
+      rmPoints,
       avgCompletionTime: avgTime,
-      totalCompletionTime: overallStats.totalCompletionTime ? parseFloat(overallStats.totalCompletionTime) : null,
+      totalCompletionTime: aggregateSummary?.totalCompletionTime ?? (overallStats.totalCompletionTime ? parseFloat(overallStats.totalCompletionTime) : null),
       efficiencyScore: this.calculatePerformanceScore(completedCases, totalCases, avgTime, rewards),
       stagePerformance,
     };
@@ -1157,21 +1344,57 @@ let rewardMap: Record<string, number> = {};
     return Math.max(1, Math.round((end.getTime() - start.getTime()) / 60000));
   }
 
+  private getReportPointsForCompletionTime(durationMinutes: number | null): number {
+    if (!durationMinutes || durationMinutes <= 0) {
+      return REPORT_REWARD_POINTS.SLOW;
+    }
+
+    if (durationMinutes <= 30) {
+      return REPORT_REWARD_POINTS.FAST;
+    }
+
+    if (durationMinutes <= 120) {
+      return REPORT_REWARD_POINTS.MEDIUM;
+    }
+
+    return REPORT_REWARD_POINTS.SLOW;
+  }
+
   private getStageFromWorkflowStatus(status?: string | null, approverRole?: string | null): string | null {
     const normalizedStatus = (status || '').toLowerCase();
     const statusToStage: Record<string, string> = {
       draft: 'rm',
       returned_to_rm: 'rm',
       md_pending_terms: 'rm',
-      md_approved: 'ready_for_ops',
+      md_approved: 'ops_l1',
       submitted: 'credit_l1',
       credit_l1_approved: 'credit_l2',
-      credit_l2_approved: 'rm_final_terms',
-      ceo_approved: 'rm_final_terms',
+      credit_l2_approved: 'rm',
+      ceo_approved: 'rm',
       md_terms_submitted: 'ps_l2',
       ops_l1_review: 'ops_l1',
       ops_l1_approved: 'ops_head',
       ops_head_approved: 'ops_head',
+      pending_customer_approval: 'rm',
+      rejected_by_customer: 'rm',
+      pending_ops_l1_approval: 'ops_l1',
+      pending_ops_l2_approval: 'ops_l2',
+      pending_md_approval: 'ps_l2',
+      pending_ops_head_approval: 'ops_head',
+      disbursement_data_entry: 'ops_l1',
+      pending_final_ops_l2_approval: 'ops_l2',
+      active: 'completed',
+      ops_l1_verified: 'ops_l2',
+      ops_l2_verified: 'ops_head',
+      invoice_pending_customer_approval: 'rm',
+      invoice_rejected_by_customer: 'rm',
+      invoice_pending_ops_l1_approval: 'ops_l1',
+      invoice_pending_ops_l2_approval: 'ops_l2',
+      invoice_pending_md_approval: 'ps_l2',
+      invoice_pending_ops_head_approval: 'ops_head',
+      invoice_disbursement_data_entry: 'ops_l1',
+      invoice_pending_final_ops_l2_approval: 'ops_l2',
+      invoice_active: 'completed',
       completed: 'completed',
       disbursed: 'completed',
       rejected: 'rejected',
@@ -1184,9 +1407,13 @@ let rewardMap: Record<string, number> = {};
     const role = (approverRole || '').toLowerCase();
 
     if (role === 'rm' || role === 'relationship_manager') return 'rm';
+    if (role === 'customer') return 'rm';
     if (role === 'credit_team_l1') return 'credit_l1';
     if (role === 'credit_team_l2') return 'credit_l2';
     if (role === 'md') return 'ps_l2';
+    if (role === 'ops_l1') return 'ops_l1';
+    if (role === 'ops_l2') return 'ops_l2';
+    if (role === 'ops_head') return 'ops_head';
     if (role === 'operations_team_l1') return 'ops_l1';
     if (role === 'operations_team_l2') return 'ops_l2';
     if (role === 'operations_head') return 'ops_head';
@@ -1230,7 +1457,7 @@ let rewardMap: Record<string, number> = {};
     const completionScore = completionRate;
 
     // Time score (inverse - faster is better)
-    // Assuming基准 120 minutes as average, less = better
+    // Assume 120 minutes as average; less time is better.
     let timeScore = 50; // default medium
     if (avgTimeMinutes !== null && avgTimeMinutes > 0) {
       if (avgTimeMinutes <= 30) timeScore = 100;
@@ -1242,7 +1469,7 @@ let rewardMap: Record<string, number> = {};
     }
 
     // Reward score - Calculate expected points based on average time
-    // This aligns with the reward configuration: fast(≤30min)=5pts, medium(≤120min)=3pts, slow(>120min)=1pt
+    // This aligns with the reward configuration: fast <= 30m = 5pts, medium <= 120m = 3pts, slow > 120m = 1pt.
     let expectedPointsPerTask = 3; // default medium
     if (avgTimeMinutes !== null && avgTimeMinutes > 0) {
       if (avgTimeMinutes <= 30) expectedPointsPerTask = 5;      // fast

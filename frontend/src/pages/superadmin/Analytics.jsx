@@ -52,6 +52,8 @@ const formatLabel = (value) =>
 
 const clampPercent = (value) => Math.min(100, Math.max(0, Math.round(toNumber(value))))
 
+const getPeriodParams = (timeRange) => (timeRange === 'all' ? { period: 'all' } : { days: timeRange })
+
 const toneClasses = {
   blue: {
     icon: 'bg-blue-50 text-blue-700 ring-blue-100',
@@ -251,7 +253,7 @@ const Analytics = () => {
       if (silent) setRefreshing(true)
       else setLoading(true)
 
-      const response = await api.get(`/superadmin/dashboard?days=${timeRange}`)
+      const response = await api.get('/superadmin/dashboard', { params: getPeriodParams(timeRange) })
       if (response.data.success) {
         setAnalytics(response.data.data)
       }
@@ -303,6 +305,7 @@ const Analytics = () => {
     () => Math.max(...partnerSanctions.map((partner) => toNumber(partner.sanctionedAmount)), 1),
     [partnerSanctions]
   )
+  const periodLabel = period.label || (timeRange === 'all' ? 'All time' : `Last ${period.days || timeRange} days`)
 
   if (loading) {
     return (
@@ -335,6 +338,7 @@ const Analytics = () => {
               { value: '7', label: '7D' },
               { value: '30', label: '30D' },
               { value: '90', label: '90D' },
+              { value: 'all', label: 'All' },
             ].map((option) => (
               <button
                 key={option.value}
@@ -364,21 +368,21 @@ const Analytics = () => {
 
       <section className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
         <MetricCard
-          title={`New Customers (${period.days || timeRange}D)`}
+          title={`New Customers (${periodLabel})`}
           value={formatNumber(period.newCustomers)}
           caption={`${formatNumber(business.totalCustomers)} customers all time`}
           icon={FiUsers}
           tone="blue"
         />
         <MetricCard
-          title={`New Suppliers (${period.days || timeRange}D)`}
+          title={`New Suppliers (${periodLabel})`}
           value={formatNumber(period.newSuppliers)}
           caption={`${formatNumber(business.activeSuppliers)} active supplier cases`}
           icon={FiTruck}
           tone="emerald"
         />
         <MetricCard
-          title={`Invoice Value (${period.days || timeRange}D)`}
+          title={`Invoice Value (${periodLabel})`}
           value={formatCurrency(period.invoiceAmount)}
           caption={`${formatNumber(period.newInvoices)} new invoices`}
           icon={FiFileText}
@@ -657,7 +661,7 @@ const Analytics = () => {
           title="Productivity Ranking"
           icon={FiAward}
           items={analytics?.productivityRanking || []}
-          metric={(item) => `${formatNumber(item.totalPoints)} pts`}
+          metric={(item) => `${formatNumber(item.totalPoints)} pts${toNumber(item.rmPoints) ? `, ${formatNumber(item.rmPoints)} RM` : ''}`}
           tone="blue"
           emptyLabel="No productivity ranking available."
         />
