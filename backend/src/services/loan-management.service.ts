@@ -8,6 +8,7 @@ import {
   LoanDemand,
   LoanDisbursement,
   LoanLedgerEntry,
+  Partner,
   Repayment,
   RepaymentAllocation,
   REPAYMENT_STATUS,
@@ -163,6 +164,116 @@ export class LoanManagementService {
 
   private getAccrualRules(loanAccount: LoanAccount | null | undefined): AccrualRules {
     return this.isMuthootLoanAccount(loanAccount) ? MUTHOOT_ACCRUAL_RULES : DEFAULT_ACCRUAL_RULES;
+  }
+
+  private getLoanAccountPartnerCode(loanAccount: LoanAccount | null | undefined): string {
+    return String(loanAccount?.partner?.code || loanAccount?.lender || '')
+      .trim()
+      .toUpperCase();
+  }
+
+  private getLoanAccountPartnerLabel(loanAccount: LoanAccount): string {
+    return (
+      loanAccount.partner?.code ||
+      loanAccount.partner?.name ||
+      loanAccount.lender ||
+      (loanAccount.partnerId ? `ID ${loanAccount.partnerId}` : `LAN ${loanAccount.lanId}`)
+    );
+  }
+
+  private async resolveLoanAccountPartnerId(
+    manager: EntityManager,
+    loanAccount: LoanAccount,
+  ): Promise<number | null> {
+    if (loanAccount.partnerId) return loanAccount.partnerId;
+
+    const partnerCode = this.getLoanAccountPartnerCode(loanAccount);
+    if (!partnerCode) return null;
+
+    const partner = await manager.getRepository(Partner)
+      .createQueryBuilder('partner')
+      .where('UPPER(partner.code) = :partnerCode', { partnerCode })
+      .getOne();
+
+    return partner?.id ?? null;
+  }
+
+  async assertDisbursementUtrAvailableForPartner(params: {
+    loanAccountId: number;
+    disbursementUtr: string;
+    invoiceId?: number | null;
+    manager?: EntityManager;
+  }): Promise<void> {
+    const manager = params.manager || AppDataSource.manager;
+    const disbursementUtr = String(params.disbursementUtr || '').trim();
+    if (!disbursementUtr) throw new Error('Disbursement UTR is required');
+
+    const loanAccount = await manager.getRepository(LoanAccount).findOne({
+      where: { id: params.loanAccountId },
+      relations: ['partner'],
+    });
+    if (!loanAccount) throw new Error('Loan account not found for disbursement UTR validation');
+
+    const partnerId = await this.resolveLoanAccountPartnerId(manager, loanAccount);
+    const partnerCode = this.getLoanAccountPartnerCode(loanAccount);
+    const partnerLabel = this.getLoanAccountPartnerLabel(loanAccount);
+
+    const disbursementQuery = manager.getRepository(LoanDisbursement)
+      .createQueryBuilder('disbursement')
+      .leftJoin(LoanAccount, 'loanAccount', 'loanAccount.id = disbursement.loanAccountId')
+      .where('disbursement.disbursementUtr = :disbursementUtr', { disbursementUtr });
+
+    const invoiceQuery = manager.getRepository(Invoice)
+      .createQueryBuilder('invoice')
+      .leftJoin(LoanAccount, 'loanAccount', 'loanAccount.id = invoice.loanAccountId')
+      .where('invoice.disbursementUtr = :disbursementUtr', { disbursementUtr });
+
+    if (params.invoiceId) {
+      disbursementQuery.andWhere(
+        '(disbursement.invoiceId IS NULL OR disbursement.invoiceId <> :invoiceId)',
+        { invoiceId: params.invoiceId },
+      );
+      invoiceQuery.andWhere('invoice.id <> :invoiceId', { invoiceId: params.invoiceId });
+    }
+
+    if (partnerId) {
+      if (partnerCode) {
+        disbursementQuery.andWhere(
+          "(disbursement.partnerId = :partnerId OR loanAccount.partnerId = :partnerId OR UPPER(COALESCE(loanAccount.lender, '')) = :partnerCode)",
+          { partnerId, partnerCode },
+        );
+        invoiceQuery.andWhere(
+          "(loanAccount.partnerId = :partnerId OR UPPER(COALESCE(loanAccount.lender, '')) = :partnerCode)",
+          { partnerId, partnerCode },
+        );
+      } else {
+        disbursementQuery.andWhere(
+          '(disbursement.partnerId = :partnerId OR loanAccount.partnerId = :partnerId)',
+          { partnerId },
+        );
+        invoiceQuery.andWhere('loanAccount.partnerId = :partnerId', { partnerId });
+      }
+    } else if (partnerCode) {
+      disbursementQuery.andWhere("UPPER(COALESCE(loanAccount.lender, '')) = :partnerCode", { partnerCode });
+      invoiceQuery.andWhere("UPPER(COALESCE(loanAccount.lender, '')) = :partnerCode", { partnerCode });
+    } else {
+      disbursementQuery.andWhere('disbursement.loanAccountId = :loanAccountId', {
+        loanAccountId: loanAccount.id,
+      });
+      invoiceQuery.andWhere('invoice.loanAccountId = :loanAccountId', {
+        loanAccountId: loanAccount.id,
+      });
+    }
+
+    const existingDisbursement = await disbursementQuery.getOne();
+    if (existingDisbursement) {
+      throw new Error(`Disbursement UTR ${disbursementUtr} already exists for partner ${partnerLabel}`);
+    }
+
+    const existingInvoice = await invoiceQuery.getOne();
+    if (existingInvoice) {
+      throw new Error(`Disbursement UTR ${disbursementUtr} already exists for partner ${partnerLabel}`);
+    }
   }
 
   private calculateAccruedCharges(
@@ -358,7 +469,8 @@ export class LoanManagementService {
       if (!invoice) throw new Error('Invoice not found for loan management booking');
       if (!invoice.loanAccountId) throw new Error('Invoice is not linked to a LAN');
       if (!invoice.disbursementDate) throw new Error('Disbursement date is required before LMS booking');
-      if (!invoice.disbursementUtr) throw new Error('Disbursement UTR is required before LMS booking');
+      const disbursementUtr = String(invoice.disbursementUtr || '').trim();
+      if (!disbursementUtr) throw new Error('Disbursement UTR is required before LMS booking');
 
       const loanAccount = invoice.loanAccount || await manager.getRepository(LoanAccount).findOne({
         where: { id: invoice.loanAccountId },
@@ -368,9 +480,16 @@ export class LoanManagementService {
       if (String(loanAccount.status || '').toLowerCase() !== 'active') {
         throw new Error(`LAN ${loanAccount.lanId} is not active`);
       }
+      await this.assertDisbursementUtrAvailableForPartner({
+        manager,
+        loanAccountId: loanAccount.id,
+        disbursementUtr,
+        invoiceId: invoice.id,
+      });
 
       const disbursementAmount = this.roundMoney(this.toNumber(invoice.disbursementAmount));
       if (disbursementAmount <= 0) throw new Error('Disbursement amount must be greater than zero');
+      const partnerId = await this.resolveLoanAccountPartnerId(manager, loanAccount);
 
       const disbursementDate = this.toDateOnly(invoice.disbursementDate);
       const dueDate = invoice.invoiceDueDate
@@ -404,12 +523,13 @@ export class LoanManagementService {
       const disbursement = await manager.getRepository(LoanDisbursement).save(
         manager.getRepository(LoanDisbursement).create({
           loanAccountId: loanAccount.id,
+          partnerId,
           customerId: invoice.customerId,
           invoiceId: invoice.id,
           lan: loanAccount.lanId,
           disbursementAmount,
           disbursementDate,
-          disbursementUtr: invoice.disbursementUtr,
+          disbursementUtr,
           tenureDays,
           dueDate,
           interestRate,

@@ -1454,12 +1454,21 @@ if (existingInvoices.length > 0) {
   ) {
     const invoice = await this.invoiceRepository.findOne({
       where: { id: invoiceId },
-      relations: ["loanAccount"],
+      relations: ["loanAccount", "loanAccount.partner"],
     });
     if (!invoice) throw new Error("Invoice not found");
     if (invoice.status !== "DISBURSEMENT_DATA_ENTRY") {
       throw new Error("Invoice is not in disbursement data entry stage");
     }
+    if (!invoice.loanAccountId) {
+      throw new Error("Invoice is not linked to a Loan Account");
+    }
+    const disbursementUtr = String(data.disbursementUtr || "").trim();
+    await loanManagementService.assertDisbursementUtrAvailableForPartner({
+      loanAccountId: invoice.loanAccountId,
+      disbursementUtr,
+      invoiceId: invoice.id,
+    });
     //console.log(invoice.disbursementAmount, invoice.invoiceAmount);
     // Validate disbursement amount doesn't exceed invoice amount (compare as numbers)
     if (Number(invoice.disbursementAmount) > Number(invoice.invoiceAmount)) {
@@ -1478,7 +1487,7 @@ if (existingInvoices.length > 0) {
 
     const previousStatus = invoice.status;
 
-    invoice.disbursementUtr = data.disbursementUtr;
+    invoice.disbursementUtr = disbursementUtr;
     invoice.disbursementDate = disbursementDate;
     invoice.invoiceDueDate = invoiceDueDate;
     invoice.roiPercentage = roiPercentage;
@@ -1501,7 +1510,7 @@ if (existingInvoices.length > 0) {
       status: "PENDING_FINAL_OPS_L2_APPROVAL",
       previousStatus,
       changedBy: userId,
-      remarks: `Disbursement entry: UTR=${data.disbursementUtr}, ROI=${roiPercentage}%, Penal=${penalCharges}%, EMI=${emiAmount}`,
+      remarks: `Disbursement entry: UTR=${disbursementUtr}, ROI=${roiPercentage}%, Penal=${penalCharges}%, EMI=${emiAmount}`,
     });
 
     return { invoice, workflow };

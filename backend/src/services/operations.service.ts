@@ -19,7 +19,6 @@ import {
   LanSequence,
   PARTNER_STATUS,
   Invoice,
-  LoanDisbursement,
 } from '../entities';
 import { EntityManager, In, Repository } from 'typeorm';
 import { ApprovalService } from './approval.service';
@@ -1116,7 +1115,7 @@ export class OperationsService {
           ['invoice_date', 'yes', 'Use YYYY-MM-DD'],
           ['invoice_amount', 'yes', 'Original invoice value'],
           ['disbursement_amount', 'yes', 'Must be greater than zero and not above invoice_amount'],
-          ['disbursement_utr', 'yes', 'Must be unique in internal LMS disbursements'],
+          ['disbursement_utr', 'yes', 'Must be unique per partner required for invoice disbursement'],
           ['disbursement_date', 'yes', 'Use YYYY-MM-DD'],
           ['invoice_due_date', 'no', 'Defaults to disbursement_date + 90 days'],
           ['roi_percentage/penal_charges/service_fee', 'no', 'Defaults from approved customer partner sanction when blank'],
@@ -2098,12 +2097,11 @@ export class OperationsService {
       throw new Error(`Invoice number ${invoiceNumber} already exists`);
     }
 
-    const existingDisbursement = await manager.getRepository(LoanDisbursement).findOne({
-      where: { disbursementUtr },
+    await loanManagementService.assertDisbursementUtrAvailableForPartner({
+      manager,
+      loanAccountId: loanAccount.id,
+      disbursementUtr,
     });
-    if (existingDisbursement) {
-      throw new Error(`Disbursement UTR ${disbursementUtr} already exists in internal LMS`);
-    }
 
     const supplier = await this.resolveMigratedInvoiceSupplier(manager, row, customer.id);
     const sanction = await this.getApprovedSanctionForLoan(manager, customer.id, loanAccount);
