@@ -13,7 +13,6 @@ import {
 import { Customer } from './Customer';
 import { Invoice } from './Invoice';
 import { LoanAccount } from './LoanAccount';
-import { Partner } from './Partner';
 import { RepaymentUpload } from './RepaymentUpload';
 import { User } from './User';
 
@@ -100,20 +99,16 @@ export class LoanProduct {
 
 @Entity('loan_disbursements')
 @Index(['lan'])
-@Index(['partnerId'])
 @Index(['loanAccountId'])
 @Index(['invoiceId'], { unique: true })
 @Index(['disbursementUtr'])
-@Index(['partnerId', 'disbursementUtr'], { unique: true })
+@Index(['disbursementUtr', 'disbursementDate'])
 export class LoanDisbursement {
   @PrimaryGeneratedColumn('increment')
   id: number;
 
   @Column({ type: 'int' })
   loanAccountId: number;
-
-  @Column({ type: 'int', nullable: true })
-  partnerId: number | null;
 
   @Column({ type: 'int' })
   customerId: number;
@@ -170,10 +165,6 @@ export class LoanDisbursement {
   @ManyToOne(() => LoanAccount, { nullable: false })
   @JoinColumn({ name: 'loanAccountId' })
   loanAccount: LoanAccount;
-
-  @ManyToOne(() => Partner, { nullable: true })
-  @JoinColumn({ name: 'partnerId' })
-  partner: Partner | null;
 
   @ManyToOne(() => Customer, { nullable: false })
   @JoinColumn({ name: 'customerId' })

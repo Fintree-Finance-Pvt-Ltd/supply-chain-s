@@ -8,7 +8,6 @@ import {
   LoanDemand,
   LoanDisbursement,
   LoanLedgerEntry,
-  Partner,
   Repayment,
   RepaymentAllocation,
   REPAYMENT_STATUS,
@@ -166,113 +165,52 @@ export class LoanManagementService {
     return this.isMuthootLoanAccount(loanAccount) ? MUTHOOT_ACCRUAL_RULES : DEFAULT_ACCRUAL_RULES;
   }
 
-  private getLoanAccountPartnerCode(loanAccount: LoanAccount | null | undefined): string {
-    return String(loanAccount?.partner?.code || loanAccount?.lender || '')
-      .trim()
-      .toUpperCase();
-  }
-
-  private getLoanAccountPartnerLabel(loanAccount: LoanAccount): string {
-    return (
-      loanAccount.partner?.code ||
-      loanAccount.partner?.name ||
-      loanAccount.lender ||
-      (loanAccount.partnerId ? `ID ${loanAccount.partnerId}` : `LAN ${loanAccount.lanId}`)
-    );
-  }
-
-  private async resolveLoanAccountPartnerId(
-    manager: EntityManager,
-    loanAccount: LoanAccount,
-  ): Promise<number | null> {
-    if (loanAccount.partnerId) return loanAccount.partnerId;
-
-    const partnerCode = this.getLoanAccountPartnerCode(loanAccount);
-    if (!partnerCode) return null;
-
-    const partner = await manager.getRepository(Partner)
-      .createQueryBuilder('partner')
-      .where('UPPER(partner.code) = :partnerCode', { partnerCode })
-      .getOne();
-
-    return partner?.id ?? null;
-  }
-
-  async assertDisbursementUtrAvailableForPartner(params: {
-    loanAccountId: number;
+  async assertDisbursementUtrDateConsistent(params: {
     disbursementUtr: string;
+    disbursementDate: string | Date;
     invoiceId?: number | null;
     manager?: EntityManager;
   }): Promise<void> {
     const manager = params.manager || AppDataSource.manager;
     const disbursementUtr = String(params.disbursementUtr || '').trim();
     if (!disbursementUtr) throw new Error('Disbursement UTR is required');
+    const requestedDate = this.formatDateOnly(params.disbursementDate);
 
-    const loanAccount = await manager.getRepository(LoanAccount).findOne({
-      where: { id: params.loanAccountId },
-      relations: ['partner'],
-    });
-    if (!loanAccount) throw new Error('Loan account not found for disbursement UTR validation');
-
-    const partnerId = await this.resolveLoanAccountPartnerId(manager, loanAccount);
-    const partnerCode = this.getLoanAccountPartnerCode(loanAccount);
-    const partnerLabel = this.getLoanAccountPartnerLabel(loanAccount);
-
-    const disbursementQuery = manager.getRepository(LoanDisbursement)
+    const disbursementRows = await manager.getRepository(LoanDisbursement)
       .createQueryBuilder('disbursement')
-      .leftJoin(LoanAccount, 'loanAccount', 'loanAccount.id = disbursement.loanAccountId')
-      .where('disbursement.disbursementUtr = :disbursementUtr', { disbursementUtr });
-
-    const invoiceQuery = manager.getRepository(Invoice)
-      .createQueryBuilder('invoice')
-      .leftJoin(LoanAccount, 'loanAccount', 'loanAccount.id = invoice.loanAccountId')
-      .where('invoice.disbursementUtr = :disbursementUtr', { disbursementUtr });
-
-    if (params.invoiceId) {
-      disbursementQuery.andWhere(
-        '(disbursement.invoiceId IS NULL OR disbursement.invoiceId <> :invoiceId)',
+      .select('disbursement.id', 'id')
+      .addSelect('disbursement.invoiceId', 'invoiceId')
+      .addSelect('disbursement.disbursementDate', 'disbursementDate')
+      .where('disbursement.disbursementUtr = :disbursementUtr', { disbursementUtr })
+      .andWhere('disbursement.disbursementDate IS NOT NULL')
+      .andWhere(
+        params.invoiceId
+          ? '(disbursement.invoiceId IS NULL OR disbursement.invoiceId <> :invoiceId)'
+          : '1 = 1',
         { invoiceId: params.invoiceId },
+      )
+      .getRawMany();
+
+    const invoiceRows = await manager.getRepository(Invoice)
+      .createQueryBuilder('invoice')
+      .select('invoice.id', 'id')
+      .addSelect('invoice.invoiceNumber', 'invoiceNumber')
+      .addSelect('invoice.disbursementDate', 'disbursementDate')
+      .where('invoice.disbursementUtr = :disbursementUtr', { disbursementUtr })
+      .andWhere('invoice.disbursementDate IS NOT NULL')
+      .andWhere(params.invoiceId ? 'invoice.id <> :invoiceId' : '1 = 1', { invoiceId: params.invoiceId })
+      .getRawMany();
+
+    const conflictingRow = [...disbursementRows, ...invoiceRows].find((row: any) => {
+      const existingDate = row.disbursementDate ? this.formatDateOnly(row.disbursementDate) : null;
+      return existingDate !== null && existingDate !== requestedDate;
+    });
+
+    if (conflictingRow) {
+      const existingDate = this.formatDateOnly(conflictingRow.disbursementDate);
+      throw new Error(
+        `Disbursement UTR ${disbursementUtr} already exists with disbursement date ${existingDate}. Use the same date ${existingDate} for this UTR.`,
       );
-      invoiceQuery.andWhere('invoice.id <> :invoiceId', { invoiceId: params.invoiceId });
-    }
-
-    if (partnerId) {
-      if (partnerCode) {
-        disbursementQuery.andWhere(
-          "(disbursement.partnerId = :partnerId OR loanAccount.partnerId = :partnerId OR UPPER(COALESCE(loanAccount.lender, '')) = :partnerCode)",
-          { partnerId, partnerCode },
-        );
-        invoiceQuery.andWhere(
-          "(loanAccount.partnerId = :partnerId OR UPPER(COALESCE(loanAccount.lender, '')) = :partnerCode)",
-          { partnerId, partnerCode },
-        );
-      } else {
-        disbursementQuery.andWhere(
-          '(disbursement.partnerId = :partnerId OR loanAccount.partnerId = :partnerId)',
-          { partnerId },
-        );
-        invoiceQuery.andWhere('loanAccount.partnerId = :partnerId', { partnerId });
-      }
-    } else if (partnerCode) {
-      disbursementQuery.andWhere("UPPER(COALESCE(loanAccount.lender, '')) = :partnerCode", { partnerCode });
-      invoiceQuery.andWhere("UPPER(COALESCE(loanAccount.lender, '')) = :partnerCode", { partnerCode });
-    } else {
-      disbursementQuery.andWhere('disbursement.loanAccountId = :loanAccountId', {
-        loanAccountId: loanAccount.id,
-      });
-      invoiceQuery.andWhere('invoice.loanAccountId = :loanAccountId', {
-        loanAccountId: loanAccount.id,
-      });
-    }
-
-    const existingDisbursement = await disbursementQuery.getOne();
-    if (existingDisbursement) {
-      throw new Error(`Disbursement UTR ${disbursementUtr} already exists for partner ${partnerLabel}`);
-    }
-
-    const existingInvoice = await invoiceQuery.getOne();
-    if (existingInvoice) {
-      throw new Error(`Disbursement UTR ${disbursementUtr} already exists for partner ${partnerLabel}`);
     }
   }
 
@@ -480,16 +418,15 @@ export class LoanManagementService {
       if (String(loanAccount.status || '').toLowerCase() !== 'active') {
         throw new Error(`LAN ${loanAccount.lanId} is not active`);
       }
-      await this.assertDisbursementUtrAvailableForPartner({
+      await this.assertDisbursementUtrDateConsistent({
         manager,
-        loanAccountId: loanAccount.id,
         disbursementUtr,
+        disbursementDate: invoice.disbursementDate,
         invoiceId: invoice.id,
       });
 
       const disbursementAmount = this.roundMoney(this.toNumber(invoice.disbursementAmount));
       if (disbursementAmount <= 0) throw new Error('Disbursement amount must be greater than zero');
-      const partnerId = await this.resolveLoanAccountPartnerId(manager, loanAccount);
 
       const disbursementDate = this.toDateOnly(invoice.disbursementDate);
       const dueDate = invoice.invoiceDueDate
@@ -523,7 +460,6 @@ export class LoanManagementService {
       const disbursement = await manager.getRepository(LoanDisbursement).save(
         manager.getRepository(LoanDisbursement).create({
           loanAccountId: loanAccount.id,
-          partnerId,
           customerId: invoice.customerId,
           invoiceId: invoice.id,
           lan: loanAccount.lanId,
@@ -1879,6 +1815,10 @@ export class LoanManagementService {
 
   private formatDateOnly(value: string | Date): string {
     const date = this.toDateOnly(value);
+    if (isNaN(date.getTime())) {
+      throw new Error('Disbursement date must be a valid date');
+    }
+
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, '0');
     const day = String(date.getDate()).padStart(2, '0');

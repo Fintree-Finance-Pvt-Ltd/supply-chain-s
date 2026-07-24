@@ -1115,7 +1115,7 @@ export class OperationsService {
           ['invoice_date', 'yes', 'Use YYYY-MM-DD'],
           ['invoice_amount', 'yes', 'Original invoice value'],
           ['disbursement_amount', 'yes', 'Must be greater than zero and not above invoice_amount'],
-          ['disbursement_utr', 'yes', 'Must be unique per partner required for invoice disbursement'],
+          ['disbursement_utr', 'yes', 'Duplicates are allowed only when disbursement_date matches existing rows for the same UTR'],
           ['disbursement_date', 'yes', 'Use YYYY-MM-DD'],
           ['invoice_due_date', 'no', 'Defaults to disbursement_date + 90 days'],
           ['roi_percentage/penal_charges/service_fee', 'no', 'Defaults from approved customer partner sanction when blank'],
@@ -2097,10 +2097,10 @@ export class OperationsService {
       throw new Error(`Invoice number ${invoiceNumber} already exists`);
     }
 
-    await loanManagementService.assertDisbursementUtrAvailableForPartner({
+    await loanManagementService.assertDisbursementUtrDateConsistent({
       manager,
-      loanAccountId: loanAccount.id,
       disbursementUtr,
+      disbursementDate,
     });
 
     const supplier = await this.resolveMigratedInvoiceSupplier(manager, row, customer.id);

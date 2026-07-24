@@ -1464,11 +1464,6 @@ if (existingInvoices.length > 0) {
       throw new Error("Invoice is not linked to a Loan Account");
     }
     const disbursementUtr = String(data.disbursementUtr || "").trim();
-    await loanManagementService.assertDisbursementUtrAvailableForPartner({
-      loanAccountId: invoice.loanAccountId,
-      disbursementUtr,
-      invoiceId: invoice.id,
-    });
     //console.log(invoice.disbursementAmount, invoice.invoiceAmount);
     // Validate disbursement amount doesn't exceed invoice amount (compare as numbers)
     if (Number(invoice.disbursementAmount) > Number(invoice.invoiceAmount)) {
@@ -1476,6 +1471,11 @@ if (existingInvoices.length > 0) {
     }
 
     const disbursementDate = new Date(data.disbursementDate);
+    await loanManagementService.assertDisbursementUtrDateConsistent({
+      disbursementUtr,
+      disbursementDate,
+      invoiceId: invoice.id,
+    });
     const invoiceDueDate = new Date(disbursementDate);
     invoiceDueDate.setDate(invoiceDueDate.getDate() + 90);
 
