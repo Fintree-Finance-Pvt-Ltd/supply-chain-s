@@ -15,6 +15,7 @@ export default function InvoiceDiscountingOPS2() {
   const [showViewModal, setShowViewModal] = useState(false);
   const [remarks, setRemarks] = useState('');
   const [activeTab, setActiveTab] = useState('initial');
+  const [submitError, setSubmitError] = useState('');
 
   useEffect(() => {
     loadData();
@@ -46,6 +47,8 @@ export default function InvoiceDiscountingOPS2() {
   const submitVerification = async () => {
     try {
       setLoading(true);
+      setSubmitError('');
+
       if (actionType === 'approve') {
         if (activeTab === 'initial') {
           await workflowService.opsL2Approve(selectedInvoice.id, remarks);
@@ -57,12 +60,38 @@ export default function InvoiceDiscountingOPS2() {
         await workflowService.opsL2Reject(selectedInvoice.id, remarks);
         toast.success('Invoice rejected');
       }
+
       setShowModal(false);
       setRemarks('');
       loadData();
     } catch (error) {
       console.error('Error processing invoice:', error);
-      toast.error('Error processing invoice: ' + (error?.message || error?.response?.data?.message || 'Unknown error'));
+
+      // Direct inline error handling
+      let errorMessage = 'Error processing invoice';
+
+      const data = error?.response?.data;
+
+      if (typeof data?.message === 'string' && data.message.trim()) {
+        errorMessage = data.message;
+      } 
+      else if (Array.isArray(data?.errors)) {
+        const messages = data.errors
+          .map(item => typeof item === 'string' ? item : item?.message)
+          .filter(Boolean);
+        if (messages.length > 0) {
+          errorMessage = messages.join(', ');
+        }
+      } 
+      else if (typeof data === 'string' && data.trim()) {
+        errorMessage = data;
+      } 
+      else if (error?.message) {
+        errorMessage = error.message;
+      }
+
+      setSubmitError(errorMessage);
+      toast.error(errorMessage);
     } finally {
       setLoading(false);
     }
