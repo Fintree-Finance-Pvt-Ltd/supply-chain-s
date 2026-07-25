@@ -214,56 +214,133 @@ export class LoanManagementService {
     }
   }
 
+  // private calculateAccruedCharges(
+  //   demand: LoanDemand,
+  //   disbursement: LoanDisbursement | null | undefined,
+  //   invoice: Invoice | null | undefined,
+  //   asOfDate: string | Date = new Date(),
+  //   rules: AccrualRules = DEFAULT_ACCRUAL_RULES,
+  // ): AccruedDemandCharges {
+  //   const interestRate = this.toNumber(disbursement?.interestRate);
+  //   const serviceFeeRate = this.toNumber(invoice?.serviceFee);
+  //   const penalRate = this.toNumber(disbursement?.penalRate);
+  //   const disbursementDate = disbursement?.disbursementDate || demand.demandDate;
+  //   const dayCount = this.getInterestDayCount(disbursementDate, asOfDate, rules);
+  //   const allocations = [...(demand.allocations || [])]
+  //     .filter(allocation => allocation.repayment?.status !== REPAYMENT_STATUS.REVERSED)
+  //     .sort((a, b) => {
+  //       const dateDiff = this.toDateOnly(a.allocationDate).getTime() - this.toDateOnly(b.allocationDate).getTime();
+  //       return dateDiff || this.toNumber(a.id) - this.toNumber(b.id);
+  //     });
+
+  //   let principal = this.roundMoney(this.toNumber(demand.principalDue));
+  //   let accumulatedInterest = 0;
+  //   let accumulatedFee = 0;
+  //   let accumulatedPenal = 0;
+  //   let allocationIndex = 0;
+
+  //   for (let day = 1; day <= dayCount; day += 1) {
+  //     const accrualDate = this.getAccrualDate(disbursementDate, day, rules);
+  //     while (
+  //       allocationIndex < allocations.length &&
+  //       this.toDateOnly(allocations[allocationIndex].allocationDate).getTime() <= accrualDate.getTime()
+  //     ) {
+  //       principal = this.roundMoney(Math.max(principal - this.toNumber(allocations[allocationIndex].principalAmount), 0));
+  //       allocationIndex += 1;
+  //     }
+
+  //     accumulatedInterest += this.calculatePercentageAmountRaw(principal, interestRate, 1);
+  //     accumulatedFee += this.calculatePercentageAmountRaw(principal, serviceFeeRate, 1);
+  //     if (day >= rules.penalStartDay) {
+  //       accumulatedPenal += this.calculatePercentageAmountRaw(principal + accumulatedInterest, penalRate, 1);
+  //     }
+  //   }
+
+  //   return {
+  //     principal: this.roundMoney(principal),
+  //     interestDue: this.roundMoney(accumulatedInterest),
+  //     feeDue: this.roundMoney(accumulatedFee),
+  //     penalDue: this.roundMoney(accumulatedPenal),
+  //     dayCount,
+  //   };
+  // }
+
+  //new fixes for muthoot allocation
+
   private calculateAccruedCharges(
-    demand: LoanDemand,
-    disbursement: LoanDisbursement | null | undefined,
-    invoice: Invoice | null | undefined,
-    asOfDate: string | Date = new Date(),
-    rules: AccrualRules = DEFAULT_ACCRUAL_RULES,
-  ): AccruedDemandCharges {
-    const interestRate = this.toNumber(disbursement?.interestRate);
-    const serviceFeeRate = this.toNumber(invoice?.serviceFee);
-    const penalRate = this.toNumber(disbursement?.penalRate);
-    const disbursementDate = disbursement?.disbursementDate || demand.demandDate;
-    const dayCount = this.getInterestDayCount(disbursementDate, asOfDate, rules);
-    const allocations = [...(demand.allocations || [])]
-      .filter(allocation => allocation.repayment?.status !== REPAYMENT_STATUS.REVERSED)
-      .sort((a, b) => {
-        const dateDiff = this.toDateOnly(a.allocationDate).getTime() - this.toDateOnly(b.allocationDate).getTime();
-        return dateDiff || this.toNumber(a.id) - this.toNumber(b.id);
-      });
+  demand: LoanDemand,
+  disbursement: LoanDisbursement | null | undefined,
+  invoice: Invoice | null | undefined,
+  asOfDate: string | Date = new Date(),
+  rules: AccrualRules = DEFAULT_ACCRUAL_RULES,
+): AccruedDemandCharges {
+  const interestRate = this.toNumber(disbursement?.interestRate);
+  const serviceFeeRate = this.toNumber(invoice?.serviceFee);
+  const penalRate = this.toNumber(disbursement?.penalRate);
+  const disbursementDate = disbursement?.disbursementDate || demand.demandDate;
+  const dayCount = this.getInterestDayCount(disbursementDate, asOfDate, rules);
+  const allocations = [...(demand.allocations || [])]
+    .filter(allocation => allocation.repayment?.status !== REPAYMENT_STATUS.REVERSED)
+    .sort((a, b) => {
+      const dateDiff = this.toDateOnly(a.allocationDate).getTime() - this.toDateOnly(b.allocationDate).getTime();
+      return dateDiff || this.toNumber(a.id) - this.toNumber(b.id);
+    });
 
-    let principal = this.roundMoney(this.toNumber(demand.principalDue));
-    let accumulatedInterest = 0;
-    let accumulatedFee = 0;
-    let accumulatedPenal = 0;
-    let allocationIndex = 0;
+  let principal = this.roundMoney(this.toNumber(demand.principalDue));
+  let accumulatedInterest = 0;
+  let accumulatedFee = 0;
+  let accumulatedPenal = 0;
+  let allocationIndex = 0;
 
-    for (let day = 1; day <= dayCount; day += 1) {
-      const accrualDate = this.getAccrualDate(disbursementDate, day, rules);
+  for (let day = 1; day <= dayCount; day += 1) {
+    const accrualDate = this.getAccrualDate(disbursementDate, day, rules);
+
+    // 1. Apply allocations strictly BEFORE this day (all products)
+    while (
+      allocationIndex < allocations.length &&
+      this.toDateOnly(allocations[allocationIndex].allocationDate).getTime() < accrualDate.getTime()
+    ) {
+      principal = this.roundMoney(
+        Math.max(principal - this.toNumber(allocations[allocationIndex].principalAmount), 0),
+      );
+      allocationIndex += 1;
+    }
+
+    // 2. Accrue interest / fee / penal on the opening principal of the day
+    accumulatedInterest += this.calculatePercentageAmountRaw(principal, interestRate, 1);
+    accumulatedFee += this.calculatePercentageAmountRaw(principal, serviceFeeRate, 1);
+    if (day >= rules.penalStartDay) {
+      accumulatedPenal += this.calculatePercentageAmountRaw(
+        principal + accumulatedInterest,
+        penalRate,
+        1,
+      );
+    }
+
+    // 3. ONLY for MFL (includeDisbursementDate = true) –
+    //    apply allocations that fall ON this day AFTER accruing,
+    //    so collection-day charges are calculated on pre-payment principal
+    if (rules.includeDisbursementDate) {
       while (
         allocationIndex < allocations.length &&
         this.toDateOnly(allocations[allocationIndex].allocationDate).getTime() <= accrualDate.getTime()
       ) {
-        principal = this.roundMoney(Math.max(principal - this.toNumber(allocations[allocationIndex].principalAmount), 0));
+        principal = this.roundMoney(
+          Math.max(principal - this.toNumber(allocations[allocationIndex].principalAmount), 0),
+        );
         allocationIndex += 1;
       }
-
-      accumulatedInterest += this.calculatePercentageAmountRaw(principal, interestRate, 1);
-      accumulatedFee += this.calculatePercentageAmountRaw(principal, serviceFeeRate, 1);
-      if (day >= rules.penalStartDay) {
-        accumulatedPenal += this.calculatePercentageAmountRaw(principal + accumulatedInterest, penalRate, 1);
-      }
     }
-
-    return {
-      principal: this.roundMoney(principal),
-      interestDue: this.roundMoney(accumulatedInterest),
-      feeDue: this.roundMoney(accumulatedFee),
-      penalDue: this.roundMoney(accumulatedPenal),
-      dayCount,
-    };
   }
+
+  return {
+    principal: this.roundMoney(principal),
+    interestDue: this.roundMoney(accumulatedInterest),
+    feeDue: this.roundMoney(accumulatedFee),
+    penalDue: this.roundMoney(accumulatedPenal),
+    dayCount,
+  };
+}
 
   private async refreshAccruedInterestForOpenDemands(
     manager: EntityManager,
