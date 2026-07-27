@@ -1,10 +1,98 @@
-import { useState, useEffect } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import AsyncSelect from 'react-select/async'
+import Select from 'react-select'
 import { operationsService } from '../../services/operationsService'
 import DataTable from '../../components/DataTable'
 import StatusBadge from '../../components/StatusBadge'
 import LoadingSpinner from '../../components/LoadingSpinner'
 import { toast } from 'react-toastify'
 import { formatDate } from '../../utils/format'
+
+const getCustomerDisplayName = (customer) =>
+  customer?.companyName ||
+  customer?.customerName ||
+  customer?.customerCode ||
+  (customer?.customerId ? `Customer #${customer.customerId}` : 'Selected company')
+
+const getLoanAccounts = (customer) =>
+  Array.isArray(customer?.loanAccounts) ? customer.loanAccounts : []
+
+const buildCompanyOption = (customer) => ({
+  value: customer.customerId,
+  label: getCustomerDisplayName(customer),
+  customer
+})
+
+const buildLanOption = (loanAccount, customer) => ({
+  value: loanAccount.lanId,
+  label: loanAccount.lanId,
+  loanAccount,
+  customer
+})
+
+const formatAmount = (value) => {
+  const amount = Number(value)
+  if (!Number.isFinite(amount)) return 'N/A'
+
+  return new Intl.NumberFormat('en-IN', {
+    style: 'currency',
+    currency: 'INR',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  }).format(amount)
+}
+
+const selectStyles = {
+  control: (base, state) => ({
+    ...base,
+    minHeight: '42px',
+    borderColor: state.isFocused ? '#3b82f6' : '#d1d5db',
+    boxShadow: state.isFocused ? '0 0 0 2px rgba(59, 130, 246, 0.25)' : 'none',
+    '&:hover': {
+      borderColor: state.isFocused ? '#3b82f6' : '#9ca3af'
+    }
+  }),
+  valueContainer: (base) => ({
+    ...base,
+    padding: '2px 12px'
+  }),
+  input: (base) => ({
+    ...base,
+    margin: 0,
+    padding: 0
+  }),
+  placeholder: (base) => ({
+    ...base,
+    color: '#9ca3af'
+  })
+}
+
+const formatCompanyOptionLabel = ({ customer, label }, { context }) => {
+  if (context === 'value') return label
+
+  const loanCount = getLoanAccounts(customer).length
+  return (
+    <div>
+      <div className="font-medium text-gray-900">{label}</div>
+      <div className="text-xs text-gray-500">
+        {customer?.customerCode || `Customer #${customer?.customerId || '-'}`} - {loanCount} LAN{loanCount === 1 ? '' : 's'}
+      </div>
+    </div>
+  )
+}
+
+const formatLanOptionLabel = ({ loanAccount, customer, label }, { context }) => {
+  if (context === 'value') return label
+
+  return (
+    <div>
+      <div className="font-medium text-gray-900">{label}</div>
+      <div className="text-xs text-gray-500">
+        {[getCustomerDisplayName(customer), loanAccount?.status].filter(Boolean).join(' - ')}
+      </div>
+    </div>
+  )
+}
 
 const RepaymentUpload = () => {
   const [activeTab, setActiveTab] = useState('upload') // 'upload' or 'history'
@@ -13,27 +101,18 @@ const RepaymentUpload = () => {
   const [historyTotal, setHistoryTotal] = useState(0)
   const [filterStatus, setFilterStatus] = useState('')
   const [isUploading, setIsUploading] = useState(false)
-
-  // Dropdown data
-  const [partners, setPartners] = useState([])
-  const [lans, setLans] = useState([])
-  const [isLoadingPartners, setIsLoadingPartners] = useState(false)
-  const [isLoadingLans, setIsLoadingLans] = useState(false)
+  const [selectedCompany, setSelectedCompany] = useState(null)
+  const [selectedLan, setSelectedLan] = useState(null)
 
   // Form state
   const [formData, setFormData] = useState({
-    partnerId: '',
-    partnerName: '',
+    customerId: '',
+    companyName: '',
     lan: '',
     collectionDate: '',
     collectionUtr: '',
     collectionAmount: ''
   })
-
-  // Load partners on mount
-  useEffect(() => {
-    loadPartners()
-  }, [])
 
   useEffect(() => {
     if (activeTab === 'history') {
@@ -41,38 +120,26 @@ const RepaymentUpload = () => {
     }
   }, [activeTab, filterStatus])
 
-  // Load LANs when partner changes
-  useEffect(() => {
-    if (formData.partnerId) {
-      // Get LANs by partner ID
-      loadLans(parseInt(formData.partnerId))
-    } else {
-      setLans([])
-    }
-  }, [formData.partnerId])
+  const lanOptions = useMemo(() => {
+    return getLoanAccounts(selectedCompany?.customer).map((loanAccount) =>
+      buildLanOption(loanAccount, selectedCompany.customer)
+    )
+  }, [selectedCompany])
 
-  const loadPartners = async () => {
-    try {
-      setIsLoadingPartners(true)
-      const response = await operationsService.getLenders()
-      setPartners(response.data || [])
-    } catch (error) {
-      console.error('Error loading partners:', error)
-    } finally {
-      setIsLoadingPartners(false)
-    }
-  }
+  const loadCompanyOptions = async (inputValue) => {
+    const search = inputValue.trim()
+    if (search.length < 2) return []
 
-  const loadLans = async (partnerId) => {
     try {
-      setIsLoadingLans(true)
-      const response = await operationsService.getLansByLender(partnerId)
-      setLans(response.data || [])
+      const response = await operationsService.searchLoanCustomers({
+        companyName: search,
+        limit: 20
+      })
+      return (response.data || []).map(buildCompanyOption)
     } catch (error) {
-      console.error('Error loading LANs:', error)
-      toast.error('Failed to load LANs')
-    } finally {
-      setIsLoadingLans(false)
+      console.error('Error loading companies:', error)
+      toast.error('Failed to search companies')
+      return []
     }
   }
 
@@ -94,26 +161,40 @@ const RepaymentUpload = () => {
 
   const handleInputChange = (e) => {
     const { name, value } = e.target
-    
-    if (name === 'partnerId') {
-      const selectedPartner = partners.find(p => p.id === parseInt(value))
-      setFormData(prev => ({
-        ...prev,
-        partnerId: value,
-        partnerName: selectedPartner ? selectedPartner.name : '',
-        lan: '' // Reset LAN when partner changes
-      }))
-    } else {
-      setFormData(prev => ({
-        ...prev,
-        [name]: value
-      }))
-    }
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }))
+  }
+
+  const handleCompanyChange = (option) => {
+    const customer = option?.customer || null
+    const nextLoanAccounts = getLoanAccounts(customer)
+    const nextLan = nextLoanAccounts.length === 1
+      ? buildLanOption(nextLoanAccounts[0], customer)
+      : null
+
+    setSelectedCompany(option || null)
+    setSelectedLan(nextLan)
+    setFormData(prev => ({
+      ...prev,
+      customerId: customer?.customerId || '',
+      companyName: customer ? getCustomerDisplayName(customer) : '',
+      lan: nextLan?.value || ''
+    }))
+  }
+
+  const handleLanChange = (option) => {
+    setSelectedLan(option || null)
+    setFormData(prev => ({
+      ...prev,
+      lan: option?.value || ''
+    }))
   }
 
   const handleUpload = async () => {
     // Validate current form
-    if (!formData.partnerId || !formData.lan || !formData.collectionDate || !formData.collectionUtr || !formData.collectionAmount) {
+    if (!formData.companyName || !formData.lan || !formData.collectionDate || !formData.collectionUtr || !formData.collectionAmount) {
       toast.error('Please fill all fields')
       return
     }
@@ -138,14 +219,15 @@ const RepaymentUpload = () => {
       if (response.success) {
         toast.success('Repayment uploaded successfully')
         setFormData({
-          partnerId: '',
-          partnerName: '',
+          customerId: '',
+          companyName: '',
           lan: '',
           collectionDate: '',
           collectionUtr: '',
           collectionAmount: ''
         })
-        setLans([])
+        setSelectedCompany(null)
+        setSelectedLan(null)
         setActiveTab('history')
         loadHistory()
       } else {
@@ -200,7 +282,7 @@ const RepaymentUpload = () => {
     {
       key: 'collectionAmount',
       label: 'Amount',
-      render: (value) => value ? `₹${parseFloat(value).toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : 'N/A'
+      render: (value) => formatAmount(value)
     },
     {
       key: 'status',
@@ -266,39 +348,38 @@ const RepaymentUpload = () => {
         <div className="card space-y-6">
           <h2 className="text-xl font-bold text-gray-800">Add Repayment Details</h2>
           
-          {/* Step 1: Select Partner and LAN */}
+          {/* Step 1: Select Company and LAN */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Partner Name <span className="text-red-500">*</span></label>
-              <select
-                name="partnerId"
-                value={formData.partnerId}
-                onChange={handleInputChange}
-                disabled={isLoadingPartners}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
-              >
-                <option value="">Select Partner</option>
-                {partners.map(p => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-              </select>
-              {isLoadingPartners && <span className="text-xs text-gray-500">Loading...</span>}
+              <label className="block text-sm font-medium text-gray-700 mb-1">Company Name <span className="text-red-500">*</span></label>
+              <AsyncSelect
+                cacheOptions
+                isClearable
+                value={selectedCompany}
+                loadOptions={loadCompanyOptions}
+                onChange={handleCompanyChange}
+                formatOptionLabel={formatCompanyOptionLabel}
+                placeholder="Search company name"
+                noOptionsMessage={({ inputValue }) =>
+                  inputValue.trim().length < 2 ? 'Type at least 2 characters' : 'No companies found'
+                }
+                styles={selectStyles}
+              />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">LAN <span className="text-red-500">*</span></label>
-              <select
-                name="lan"
-                value={formData.lan}
-                onChange={handleInputChange}
-                disabled={!formData.partnerId || isLoadingLans}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
-              >
-                <option value="">Select LAN</option>
-                {lans.map(l => (
-                  <option key={l.lanId} value={l.lanId}>{l.lanId}</option>
-                ))}
-              </select>
-              {isLoadingLans && <span className="text-xs text-gray-500">Loading...</span>}
+              <Select
+                isClearable
+                isSearchable
+                value={selectedLan}
+                options={lanOptions}
+                onChange={handleLanChange}
+                formatOptionLabel={formatLanOptionLabel}
+                placeholder={selectedCompany ? 'Search or select LAN' : 'Select company first'}
+                noOptionsMessage={() => selectedCompany ? 'No LANs found' : 'Select company first'}
+                isDisabled={!selectedCompany}
+                styles={selectStyles}
+              />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Collection Date <span className="text-red-500">*</span></label>
