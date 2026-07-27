@@ -67,6 +67,7 @@ export const ROLE_MENU_CONFIG = {
     { path: '/superadmin', label: 'Super Dashboard', icon: 'FiHome' },
     { path: '/superadmin/analytics', label: 'Analytics', icon: 'FiFileText' },
     { path: '/superadmin/cases', label: 'All Cases', icon: 'FiFolder' },
+    { path: '/superadmin/loan-search', label: 'Loan Search', icon: 'FiSearch' },
     { path: '/superadmin/performance', label: 'User Performance', icon: 'FiBarChart' },
   ],
 }

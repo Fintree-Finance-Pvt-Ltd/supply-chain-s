@@ -137,6 +137,14 @@ function App() {
             }
           />
           <Route
+            path="superadmin/loan-search"
+            element={
+              <ProtectedRoute allowedRoles={[ROLES.SUPERADMIN]}>
+                <OpsLoanSearch />
+              </ProtectedRoute>
+            }
+          />
+          <Route
             path="admin/users"
             element={
               <ProtectedRoute allowedRoles={[ROLES.ADMIN]}>
@@ -331,6 +339,7 @@ function App() {
                   ROLES.OPERATIONS_TEAM_L1,
                   ROLES.OPERATIONS_TEAM_L2,
                   ROLES.OPERATIONS_HEAD,
+                  ROLES.SUPERADMIN,
                 ]}
               >
                 <OpsLoanSearch />
