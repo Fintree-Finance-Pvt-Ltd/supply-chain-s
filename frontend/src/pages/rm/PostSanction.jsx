@@ -5,10 +5,10 @@ import { toast } from 'react-toastify'
 import { fetchCaseById, updateCase } from '../../store/slices/caseSlice'
 import { documentService } from '../../services/documentService'
 import { operationsService } from '../../services/operationsService'
+import { caseManagementService } from '../../services/caseManagementService'
 import api from '../../services/api'
-import DocumentUploader from '../../components/DocumentUploader'
 import LoadingSpinner from '../../components/LoadingSpinner'
-import { FiFileText, FiCheck, FiSave, FiX } from 'react-icons/fi'
+import { FiFileText, FiCheck, FiSave, FiX, FiUpload, FiRefreshCw } from 'react-icons/fi'
 
 const POST_SANCTION_SECTIONS = ['kyc', 'sanctions']
 
@@ -32,6 +32,9 @@ const PostSanction = () => {
   const [isEditingSanction, setIsEditingSanction] = useState(false)
   const [editedSanction, setEditedSanction] = useState({})
   const [isLoadingSanctions, setIsLoadingSanctions] = useState(false)
+  const [postSanctionChecklists, setPostSanctionChecklists] = useState([])
+  const [renewalSummary, setRenewalSummary] = useState(null)
+  const [uploadingKey, setUploadingKey] = useState('')
 
   useEffect(() => {
     if (id) {
@@ -52,6 +55,24 @@ const PostSanction = () => {
     }
     loadDocuments()
   }, [currentCase])
+
+  useEffect(() => {
+    const loadLifecycleData = async () => {
+      if (!id) return
+      try {
+        const [checklists, renewal] = await Promise.all([
+          caseManagementService.getPostSanctionChecklists(),
+          caseManagementService.getRenewalSummary(id),
+        ])
+        setPostSanctionChecklists(checklists)
+        setRenewalSummary(renewal)
+      } catch (error) {
+        console.error('Error loading renewal/checklist data:', error)
+      }
+    }
+
+    loadLifecycleData()
+  }, [id])
 
   // Fetch sanctions data for RM post sanction review
   useEffect(() => {
@@ -77,14 +98,18 @@ const PostSanction = () => {
     fetchSanctions()
   }, [id, user])
 
-  const documentTypes = [
-    { value: 'sanction_letter', label: 'Sanction Letter' },
-    { value: 'esign_document', label: 'eSign Document' },
-    { value: 'enach_document', label: 'eNACH Document' },
-    { value: 'other', label: 'Other' },
-  ]
+  const refreshDocuments = async () => {
+    const customerId = currentCase?.id || id
+    if (!customerId) return
+    const response = await documentService.getDocumentsByCustomer(customerId)
+    setDocuments(response.data || [])
+    const renewal = await caseManagementService.getRenewalSummary(customerId)
+    setRenewalSummary(renewal)
+  }
 
-  const handleDocumentUpload = async (file, documentType) => {
+  const handleLenderDocumentUpload = async (file, lender, item) => {
+    const key = `${lender}-${item.key}`
+    setUploadingKey(key)
     try {
       const customerId = currentCase?.id || id
       if (!customerId) {
@@ -92,12 +117,17 @@ const PostSanction = () => {
         return
       }
 
-      const result = await documentService.uploadDocument(customerId, file, documentType)
-      if (result.data) {
-        setDocuments([...documents, result.data])
-      }
+      await documentService.uploadDocument(customerId, file, item.key, 'applicant', 0, null, {
+        lender,
+        renewalCycleId: renewalSummary?.activeCycle?.id,
+        documentLabel: item.label,
+      })
+      toast.success(`${item.label} uploaded`)
+      await refreshDocuments()
     } catch (error) {
       toast.error('Failed to upload document: ' + error.message)
+    } finally {
+      setUploadingKey('')
     }
   }
 
@@ -105,10 +135,20 @@ const PostSanction = () => {
     try {
       await documentService.deleteDocument(docId)
       setDocuments(documents.filter(doc => doc.id !== docId))
+      setRenewalSummary((prev) => prev
+        ? {
+            ...prev,
+            carriedForwardDocuments: (prev.carriedForwardDocuments || []).filter((doc) => doc.id !== docId),
+          }
+        : prev)
     } catch (error) {
       toast.error('Failed to delete document: ' + error.message)
     }
   }
+
+  const getDocsForChecklistItem = (lender, itemKey) => documents.filter((doc) =>
+    (doc.lender || '').toUpperCase() === lender && doc.documentType === itemKey
+  )
 
   const handleESign = () => {
     // Placeholder for eSign integration
@@ -307,14 +347,120 @@ const PostSanction = () => {
           )}
 
           <div className="card">
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">Document Upload</h2>
-            <DocumentUploader
-              documents={documents}
-              onUpload={handleDocumentUpload}
-              onRemove={handleDocumentRemove}
-              documentTypes={documentTypes}
-            />
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h2 className="text-xl font-semibold text-gray-900">Renewal Documents</h2>
+                <p className="text-sm text-gray-500">
+                  Carried-forward files are linked to the active renewal cycle.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={refreshDocuments}
+                className="btn-secondary inline-flex items-center gap-2"
+              >
+                <FiRefreshCw />
+                Refresh
+              </button>
+            </div>
+
+            {renewalSummary?.activeCycle ? (
+              <div className="mb-4 rounded-lg border border-blue-100 bg-blue-50 p-3 text-sm text-blue-800">
+                Active renewal cycle #{renewalSummary.activeCycle.cycleNumber}
+              </div>
+            ) : (
+              <div className="mb-4 rounded-lg border border-gray-100 bg-gray-50 p-3 text-sm text-gray-600">
+                No active renewal cycle.
+              </div>
+            )}
+
+            {(renewalSummary?.carriedForwardDocuments || []).length > 0 ? (
+              <div className="space-y-2">
+                {(renewalSummary?.carriedForwardDocuments || []).map((doc) => (
+                  <div key={doc.id} className="flex items-center justify-between rounded-lg border border-gray-200 bg-white p-3">
+                    <div>
+                      <p className="text-sm font-semibold text-gray-900">{doc.documentLabel || doc.documentType}</p>
+                      <p className="text-xs text-gray-500">{doc.fileName}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleDocumentRemove(doc.id)}
+                      className="text-xs font-semibold text-red-600 hover:text-red-700"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-gray-500">No documents have been carried forward yet.</p>
+            )}
           </div>
+
+          {postSanctionChecklists.map((checklist) => (
+            <div key={checklist.lender} className="card">
+              <div className="mb-4 flex items-center justify-between">
+                <div>
+                  <h2 className="text-xl font-semibold text-gray-900">{checklist.label} Documents</h2>
+                  <p className="text-sm text-gray-500">Uploads in this box are independent for {checklist.label}.</p>
+                </div>
+                <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-bold text-gray-700">
+                  {checklist.lender}
+                </span>
+              </div>
+
+              <div className="space-y-3">
+                {checklist.documents.map((item) => {
+                  const itemDocs = getDocsForChecklistItem(checklist.lender, item.key)
+                  const key = `${checklist.lender}-${item.key}`
+
+                  return (
+                    <div key={item.key} className="rounded-lg border border-gray-200 p-3">
+                      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <p className="text-sm font-semibold text-gray-900">{item.label}</p>
+                            <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                              item.mandatory ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600'
+                            }`}>
+                              {item.mandatory ? 'REQUIRED' : 'OPTIONAL'}
+                            </span>
+                          </div>
+                          {itemDocs.length > 0 ? (
+                            <div className="mt-2 space-y-1">
+                              {itemDocs.map((doc) => (
+                                <p key={doc.id} className="text-xs text-gray-500">
+                                  {doc.fileName}{doc.isCarriedForward ? ' - carried forward' : ''}
+                                </p>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="mt-1 text-xs text-gray-400">No file uploaded</p>
+                          )}
+                        </div>
+
+                        <label className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50">
+                          <FiUpload />
+                          {uploadingKey === key ? 'Uploading...' : 'Upload'}
+                          <input
+                            type="file"
+                            className="hidden"
+                            disabled={Boolean(uploadingKey)}
+                            accept=".pdf,.jpg,.jpeg,.png,.xls,.xlsx"
+                            onChange={(event) => {
+                              const file = event.target.files?.[0]
+                              if (file) handleLenderDocumentUpload(file, checklist.lender, item)
+                              event.target.value = ''
+                            }}
+                          />
+                        </label>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          ))}
         </div>
 
         <div className="space-y-6">

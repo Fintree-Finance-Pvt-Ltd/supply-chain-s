@@ -1331,6 +1331,75 @@ export class LoanManagementService {
     };
   }
 
+  private getSettledDemandAllocations(demand: LoanDemand): RepaymentAllocation[] {
+    return [...(demand.allocations || [])]
+      .filter(allocation => allocation.repayment?.status !== REPAYMENT_STATUS.REVERSED)
+      .sort((a, b) => {
+        const dateDiff = this.toDateOnly(a.allocationDate).getTime() - this.toDateOnly(b.allocationDate).getTime();
+        const repaymentDiff = this.toNumber(a.repaymentId) - this.toNumber(b.repaymentId);
+        return dateDiff || repaymentDiff || this.toNumber(a.id) - this.toNumber(b.id);
+      });
+  }
+
+  private getPreviousDemandAllocation(
+    demand: LoanDemand,
+    currentAllocation: RepaymentAllocation,
+  ): RepaymentAllocation | null {
+    const currentDateTime = this.toDateOnly(currentAllocation.allocationDate).getTime();
+    const currentRepaymentId = this.toNumber(currentAllocation.repaymentId);
+    const currentId = this.toNumber(currentAllocation.id);
+
+    const previousAllocations = this.getSettledDemandAllocations(demand).filter((allocation) => {
+      const allocationDateTime = this.toDateOnly(allocation.allocationDate).getTime();
+      if (allocationDateTime !== currentDateTime) return allocationDateTime < currentDateTime;
+
+      const repaymentId = this.toNumber(allocation.repaymentId);
+      if (repaymentId !== currentRepaymentId) return repaymentId < currentRepaymentId;
+
+      return this.toNumber(allocation.id) < currentId;
+    });
+
+    return previousAllocations[previousAllocations.length - 1] || null;
+  }
+
+  private getScfSoaChargeWindow(
+    demand: LoanDemand,
+    allocation: RepaymentAllocation,
+    collectionDate: Date,
+  ): { interestDays: number; interest: number; chargesDays: number; charges: number } {
+    const loanAccount = demand.loanAccount;
+    const disbursement = demand.disbursement || null;
+    const rules = this.getAccrualRules(loanAccount);
+    const currentCharges = this.calculateAccruedCharges(demand, disbursement, demand.invoice, collectionDate, rules);
+    const previousAllocation = this.getPreviousDemandAllocation(demand, allocation);
+
+    if (!previousAllocation) {
+      return {
+        interestDays: currentCharges.dayCount,
+        interest: this.roundMoney(currentCharges.interestDue),
+        chargesDays: Math.max(0, currentCharges.dayCount - rules.penalStartDay + 1),
+        charges: this.roundMoney(currentCharges.penalDue),
+      };
+    }
+
+    const previousCharges = this.calculateAccruedCharges(
+      demand,
+      disbursement,
+      demand.invoice,
+      this.toDateOnly(previousAllocation.allocationDate),
+      rules,
+    );
+    const currentChargesDays = Math.max(0, currentCharges.dayCount - rules.penalStartDay + 1);
+    const previousChargesDays = Math.max(0, previousCharges.dayCount - rules.penalStartDay + 1);
+
+    return {
+      interestDays: Math.max(0, currentCharges.dayCount - previousCharges.dayCount),
+      interest: this.roundMoney(Math.max(currentCharges.interestDue - previousCharges.interestDue, 0)),
+      chargesDays: Math.max(0, currentChargesDays - previousChargesDays),
+      charges: this.roundMoney(Math.max(currentCharges.penalDue - previousCharges.penalDue, 0)),
+    };
+  }
+
   private buildScfDemandState(demand: LoanDemand, asOfDate: Date): any {
     const loanAccount = demand.loanAccount;
     const disbursement = demand.disbursement || null;
@@ -1454,6 +1523,7 @@ export class LoanManagementService {
         const repayment = allocation.repayment;
         const collectionDate = repayment?.repaymentDate || allocation.allocationDate;
         const state = this.buildScfDemandState(demand, this.toDateOnly(collectionDate));
+        const soaChargeWindow = this.getScfSoaChargeWindow(demand, allocation, this.toDateOnly(collectionDate));
         return {
           customerCode: state.customerCode,
           lan: allocation.lan,
@@ -1468,6 +1538,13 @@ export class LoanManagementService {
           disbursementDate: state.disbursementDate,
           lastPaymentDate: state.lastPaymentDate || collectionDate,
           principal: this.toNumber(allocation.principalAmount),
+          soaPrincipal: state.disbursementAmount,
+          soaInterestDays: soaChargeWindow.interestDays,
+          soaInterest: soaChargeWindow.interest,
+          soaInterestSettled: soaChargeWindow.interest,
+          soaChargesDays: soaChargeWindow.chargesDays,
+          soaCharges: soaChargeWindow.charges,
+          soaChargesSettled: soaChargeWindow.charges,
           tenureUpdated: state.interestDays,
           interest: this.toNumber(allocation.interestAmount),
           previousInterestAccrued: state.previousInterest,
@@ -1710,14 +1787,14 @@ export class LoanManagementService {
           row.invoiceNumber,
           row.disbursementDate,
           row.lastPaymentDate,
-          row.principal,
+          row.soaPrincipal,
           row.principalSettled,
-          row.tenureUpdated,
-          row.interest,
-          row.interestSettled,
-          row.chargesDays,
-          row.charges,
-          row.chargesSettled,
+          row.soaInterestDays,
+          row.soaInterest,
+          row.soaInterestSettled,
+          row.soaChargesDays,
+          row.soaCharges,
+          row.soaChargesSettled,
         ]),
       ],
     }]);

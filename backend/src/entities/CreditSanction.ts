@@ -12,6 +12,7 @@ import {
 import { Customer } from "./Customer";
 import { User } from "./User";
 import { ApprovalInstance } from "./ApprovalInstance";
+import { CaseRenewalCycle } from "./CaseRenewalCycle";
 
 @Entity("credit_sanctions")
 @Unique(["customerId", "partner"]) // Each partner can have one sanction per customer
@@ -61,6 +62,15 @@ export class CreditSanction {
   @Column({ type: "varchar", length: 50, default: "pending" })
   status: string; // pending, approved, rejected
 
+  @Column({ type: "date", nullable: true })
+  sanctionDate: Date | null;
+
+  @Column({ type: "date", nullable: true })
+  sanctionExpiryDate: Date | null;
+
+  @Column({ type: "int", nullable: true })
+  renewalCycleId: number | null;
+
   @CreateDateColumn()
   createdAt: Date;
 
@@ -78,4 +88,8 @@ export class CreditSanction {
 
   @OneToMany(() => ApprovalInstance, (instance) => instance.creditSanction)
   approvalInstances: ApprovalInstance[];
+
+  @ManyToOne(() => CaseRenewalCycle, (cycle) => cycle.creditSanctions, { nullable: true })
+  @JoinColumn({ name: "renewalCycleId" })
+  renewalCycle: CaseRenewalCycle | null;
 }

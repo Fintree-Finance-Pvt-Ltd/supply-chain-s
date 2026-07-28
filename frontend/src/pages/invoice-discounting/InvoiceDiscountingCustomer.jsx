@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { toast } from 'react-toastify';
 import { workflowService } from '../../services/workflowService';
+import { invoiceApprovalBatchService } from '../../services/invoiceApprovalBatchService';
 import LoadingSpinner from '../../components/LoadingSpinner';
 import StatusBadge from '../../components/StatusBadge';
 import { FiCheck, FiX, FiFileText, FiUser, FiDollarSign, FiCalendar, FiAlertCircle } from 'react-icons/fi';
@@ -8,7 +9,9 @@ import { FiCheck, FiX, FiFileText, FiUser, FiDollarSign, FiCalendar, FiAlertCirc
 export default function InvoiceDiscountingCustomer() {
   const [loading, setLoading] = useState(false);
   const [pendingInvoices, setPendingInvoices] = useState([]);
+  const [pendingBatches, setPendingBatches] = useState([]);
   const [selectedInvoice, setSelectedInvoice] = useState(null);
+  const [selectedBatch, setSelectedBatch] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [actionType, setActionType] = useState('');
   const [remarks, setRemarks] = useState('');
@@ -20,9 +23,13 @@ export default function InvoiceDiscountingCustomer() {
   const loadData = async () => {
     try {
       setLoading(true);
-      const response = await workflowService.getCustomerPendingInvoices();
+      const [invoiceResponse, batchData] = await Promise.all([
+        workflowService.getCustomerPendingInvoices(),
+        invoiceApprovalBatchService.getPendingBatches(),
+      ]);
       // Backend returns { success: true, data: [...] }
-      setPendingInvoices(response?.data?.data || []);
+      setPendingInvoices(invoiceResponse?.data?.data || []);
+      setPendingBatches(batchData || []);
     } catch (error) {
       console.error('Error loading data:', error);
     } finally {
@@ -32,6 +39,14 @@ export default function InvoiceDiscountingCustomer() {
 
   const handleAction = (invoice, type) => {
     setSelectedInvoice(invoice);
+    setSelectedBatch(null);
+    setActionType(type);
+    setShowModal(true);
+  };
+
+  const handleBatchAction = (batch, type) => {
+    setSelectedBatch(batch);
+    setSelectedInvoice(null);
     setActionType(type);
     setShowModal(true);
   };
@@ -39,7 +54,10 @@ export default function InvoiceDiscountingCustomer() {
   const submitAction = async () => {
     try {
       setLoading(true);
-      if (actionType === 'approve') {
+      if (selectedBatch) {
+        await invoiceApprovalBatchService.customerApproveBatch(selectedBatch.id, actionType === 'approve', remarks);
+        toast.success(actionType === 'approve' ? 'Invoice batch approved successfully' : 'Invoice batch rejected');
+      } else if (actionType === 'approve') {
         await workflowService.customerApprove(selectedInvoice.id, remarks);
         toast.success('Invoice approved successfully');
       } else {
@@ -48,6 +66,8 @@ export default function InvoiceDiscountingCustomer() {
       }
       setShowModal(false);
       setRemarks('');
+      setSelectedBatch(null);
+      setSelectedInvoice(null);
       loadData();
     } catch (error) {
       console.error('Error processing invoice:', error);
@@ -82,6 +102,98 @@ export default function InvoiceDiscountingCustomer() {
       <div style={{ textAlign: 'center', marginBottom: '30px' }}>
         <h2 style={{ marginBottom: '10px' }}>Invoice Discounting - Customer Portal</h2>
         <p style={{ color: '#666' }}>Review and approve your invoice discounting requests</p>
+      </div>
+
+      {/* Same-day Batch Approval Section */}
+      <div style={{ background: '#fff', padding: '20px', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', marginBottom: '20px' }}>
+        <h3 style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <FiAlertCircle /> Same-Day Approval Requests ({pendingBatches.length})
+        </h3>
+
+        {pendingBatches.length === 0 ? (
+          <div style={{ padding: '24px', textAlign: 'center', color: '#999' }}>
+            No same-day approval requests pending
+          </div>
+        ) : (
+          pendingBatches.map(batch => {
+            const invoices = batch.invoices || [];
+            const totalDisbursement = invoices.reduce((sum, invoice) => sum + Number(invoice.disbursementAmount || 0), 0);
+
+            return (
+              <div key={batch.id} style={{ border: '1px solid #ddd', borderRadius: '8px', padding: '20px', marginBottom: '20px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+                  <div>
+                    <h4 style={{ margin: 0 }}>Batch #{batch.batchCode}</h4>
+                    <div style={{ fontSize: '12px', color: '#666', marginTop: '4px' }}>
+                      {invoices.length} invoices - Rs. {totalDisbursement.toLocaleString('en-IN')}
+                    </div>
+                  </div>
+                  {getStatusBadge(batch.status)}
+                </div>
+
+                <div style={{ background: '#f9f9f9', padding: '15px', borderRadius: '4px', marginBottom: '20px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', fontSize: '14px' }}>
+                    <div><strong>Customer:</strong> {batch.customer?.companyName || batch.customer?.name || 'N/A'}</div>
+                    <div><strong>Common UTR:</strong> {batch.expectedDisbursementUtr || 'To be updated at disbursement'}</div>
+                    <div><strong>Common Date:</strong> {batch.expectedDisbursementDate || 'To be updated at disbursement'}</div>
+                    <div><strong>Status:</strong> {batch.status}</div>
+                  </div>
+                </div>
+
+                <div style={{ marginBottom: '20px' }}>
+                  {invoices.map(invoice => (
+                    <div key={invoice.id} style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '10px', padding: '10px 0', borderBottom: '1px solid #eee' }}>
+                      <div>
+                        <strong>Invoice #{invoice.invoiceNumber}</strong>
+                        <div style={{ fontSize: '12px', color: '#666' }}>
+                          {invoice.supplier?.supplierName || invoice.supplierName || 'Supplier'} - {invoice.loanAccount?.lanId || invoice.lanNumber || 'LAN'}
+                        </div>
+                      </div>
+                      <strong>Rs. {Number(invoice.disbursementAmount || 0).toLocaleString('en-IN')}</strong>
+                    </div>
+                  ))}
+                </div>
+
+                <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+                  <button
+                    onClick={() => handleBatchAction(batch, 'reject')}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      padding: '12px 24px',
+                      background: '#dc3545',
+                      color: '#fff',
+                      border: 'none',
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                      fontSize: '16px',
+                    }}
+                  >
+                    <FiX /> Reject Batch
+                  </button>
+                  <button
+                    onClick={() => handleBatchAction(batch, 'approve')}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      padding: '12px 24px',
+                      background: '#28a745',
+                      color: '#fff',
+                      border: 'none',
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                      fontSize: '16px',
+                    }}
+                  >
+                    <FiCheck /> Approve Batch
+                  </button>
+                </div>
+              </div>
+            );
+          })
+        )}
       </div>
       
       {/* Pending Approval Section */}
@@ -226,14 +338,30 @@ export default function InvoiceDiscountingCustomer() {
         }}>
           <div style={{ background: '#fff', padding: '30px', borderRadius: '8px', width: '500px', maxHeight: '80vh', overflow: 'auto' }}>
             <h3 style={{ marginBottom: '20px' }}>
-              {actionType === 'approve' ? 'Approve Invoice' : 'Reject Invoice'}
+              {actionType === 'approve'
+                ? `Approve ${selectedBatch ? 'Invoice Batch' : 'Invoice'}`
+                : `Reject ${selectedBatch ? 'Invoice Batch' : 'Invoice'}`}
             </h3>
             
             <div style={{ marginBottom: '20px', background: '#f9f9f9', padding: '15px', borderRadius: '4px' }}>
+              {selectedBatch && (
+                <>
+                  <div style={{ marginBottom: '10px' }}><strong>Batch Code:</strong> {selectedBatch.batchCode}</div>
+                  <div style={{ marginBottom: '10px' }}><strong>Invoices:</strong> {(selectedBatch.invoices || []).length}</div>
+                  <div style={{ marginBottom: '10px' }}>
+                    <strong>Total Disbursement:</strong> Rs. {(selectedBatch.invoices || [])
+                      .reduce((sum, invoice) => sum + Number(invoice.disbursementAmount || 0), 0)
+                      .toLocaleString('en-IN')}
+                  </div>
+                </>
+              )}
+              {!selectedBatch && (
+                <>
               <div style={{ marginBottom: '10px' }}><strong>Invoice Number:</strong> {selectedInvoice?.invoiceNumber}</div>
               <div style={{ marginBottom: '10px' }}><strong>Disbursement Amount:</strong> ₹{selectedInvoice?.disbursementAmount?.toLocaleString()}</div>
+                </>
+              )}
             </div>
-
             <div style={{ marginBottom: '20px' }}>
               <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
                 {actionType === 'approve' ? 'Remarks (Optional)' : 'Reason for Rejection'}

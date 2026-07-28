@@ -13,6 +13,7 @@ export const ROLE_MENU_CONFIG = {
   [ROLES.RELATIONSHIP_MANAGER]: [
     { path: '/rm/dashboard', label: 'Dashboard', icon: 'FiHome' },
     { path: '/rm/customer/new', label: 'New Customer', icon: 'FiUserPlus' },
+    { path: '/calendar', label: 'Calendar', icon: 'FiCalendar' },
     { path: '/invoice-discounting/rm', label: 'Invoice Discounting', icon: 'FiFileText' },
   ],
    [ROLES.CREDIT_TEAM_L1]: [
@@ -34,6 +35,7 @@ export const ROLE_MENU_CONFIG = {
     { path: '/invoice-discounting/ops-l1', label: 'Invoice Discounting', icon: 'FiFileText' },
     { path: '/operations/loan-search', label: 'Loan Search', icon: 'FiSearch' },
     { path: '/operations/repayment-upload', label: 'UTR Upload', icon: 'FiDollarSign' },
+    { path: '/calendar', label: 'Calendar', icon: 'FiCalendar' },
   ],
   [ROLES.OPERATIONS_TEAM_L2]: [
     { path: '/operations/dashboard', label: 'Ops Dashboard', icon: 'FiHome' },
@@ -42,6 +44,7 @@ export const ROLE_MENU_CONFIG = {
     { path: '/invoice-discounting/ops-l2', label: 'Invoice Discounting', icon: 'FiFileText' },
     { path: '/operations/loan-search', label: 'Loan Search', icon: 'FiSearch' },
     { path: '/operations/repayment-upload', label: 'UTR Upload', icon: 'FiDollarSign' },
+    { path: '/calendar', label: 'Calendar', icon: 'FiCalendar' },
   ],
   [ROLES.OPERATIONS_HEAD]: [
     { path: '/operations/dashboard', label: 'Ops Dashboard', icon: 'FiHome' },
@@ -50,17 +53,21 @@ export const ROLE_MENU_CONFIG = {
     { path: '/invoice-discounting/ops-head', label: 'Invoice Discounting', icon: 'FiFileText' },
     { path: '/operations/loan-search', label: 'Loan Search', icon: 'FiSearch' },
     { path: '/operations/repayment-upload', label: 'UTR Upload', icon: 'FiDollarSign' },
+    { path: '/calendar', label: 'Calendar', icon: 'FiCalendar' },
   ],
   [ROLES.CEO]: [
     { path: '/management/dashboard', label: 'Management Dashboard', icon: 'FiHome' },
+    { path: '/calendar', label: 'Calendar', icon: 'FiCalendar' },
   ],
   [ROLES.CFO]: [
     { path: '/management/dashboard', label: 'Management Dashboard', icon: 'FiHome' },
+    { path: '/calendar', label: 'Calendar', icon: 'FiCalendar' },
     { path: '/invoice-discounting/md', label: 'Invoice Discounting', icon: 'FiFileText' },
   ],
   [ROLES.MD]: [
     { path: '/management/dashboard', label: 'Management Dashboard', icon: 'FiHome' },
     { path: '/management/ceo-approvals', label: 'Pending Approvals', icon: 'FiCheckCircle' },
+    { path: '/calendar', label: 'Calendar', icon: 'FiCalendar' },
     { path: '/invoice-discounting/md', label: 'Invoice Discounting', icon: 'FiFileText' },
   ],
   [ROLES.SUPERADMIN]: [
@@ -86,6 +93,7 @@ const getIconComponent = (iconName) => {
     FiSearch: () => import('react-icons/fi').then((mod) => mod.FiSearch),
     FiBarChart: () => import('react-icons/fi').then((mod) => mod.FiBarChart),
     FiFolder: () => import('react-icons/fi').then((mod) => mod.FiFolder),
+    FiCalendar: () => import('react-icons/fi').then((mod) => mod.FiCalendar),
     FiDollarSign: () => import('react-icons/fi').then((mod) => mod.FiDollarSign),
     FiBriefcase: () => import('react-icons/fi').then((mod) => mod.FiBriefcase),
   }

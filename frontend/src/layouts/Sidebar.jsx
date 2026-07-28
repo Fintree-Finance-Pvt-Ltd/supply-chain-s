@@ -20,6 +20,7 @@ import {
   FiChevronUp,
   FiLayers,
   FiDollarSign,
+  FiCalendar,
 } from 'react-icons/fi'
 
 // Icon mapping
@@ -38,6 +39,7 @@ const iconMap = {
   FiFolder,
   FiLayers,
   FiDollarSign,
+  FiCalendar,
 }
 
 const Sidebar = () => {

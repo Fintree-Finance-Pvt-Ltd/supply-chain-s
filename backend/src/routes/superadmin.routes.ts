@@ -728,17 +728,23 @@ router.get('/cases', roleMiddleware([ROLES.SUPERADMIN]), async (req: Request, re
     const { 
       stage, 
       status, 
+      caseType,
       companyName,
       userId, 
       startDate, 
       endDate,
+      rmId,
       limit, 
       page,
       offset,
-      includeSanctions
+      includeSanctions,
+      sortBy,
+      sortOrder,
+      viewAll
     } = req.query;
 
-    const limitNum = parsePositiveInt(limit, 50);
+    const isViewAll = viewAll === 'true' || viewAll === '1' || limit === 'all';
+    const limitNum = isViewAll ? 1 : parsePositiveInt(limit, 50);
     const offsetNum = offset !== undefined
       ? parseNonNegativeInt(offset, 0)
       : (parsePositiveInt(page, 1) - 1) * limitNum;
@@ -748,13 +754,18 @@ router.get('/cases', roleMiddleware([ROLES.SUPERADMIN]), async (req: Request, re
     const filters = {
       stage: stage as string || undefined,
       status: status as string || undefined,
+      caseType: caseType ? String(caseType).trim().toUpperCase() : undefined,
       companyName: companyName ? String(companyName).trim() : undefined,
       userId: userId ? parseInt(userId as string) : undefined,
+      rmId: rmId ? parseInt(rmId as string) : undefined,
       startDate: parseDateQuery(startDate),
       endDate: parseDateQuery(endDate, true),
       limit: limitNum,
       offset: offsetNum,
       includeSanctions: includeSanctions === 'true' || includeSanctions === '1',
+      sortBy: sortBy as string,
+      sortOrder: String(sortOrder || '').toUpperCase() === 'ASC' ? 'ASC' as const : 'DESC' as const,
+      viewAll: isViewAll,
     };
 
     const result = await userPerformanceService.getAllCasesByUsers(filters);
@@ -779,7 +790,7 @@ router.get('/cases', roleMiddleware([ROLES.SUPERADMIN]), async (req: Request, re
     }));
 
     // Calculate total pages
-    const totalPages = Math.ceil(result.total / limitNum);
+    const totalPages = isViewAll ? 1 : Math.ceil(result.total / limitNum);
 
     res.json({ 
       success: true, 
@@ -787,7 +798,8 @@ router.get('/cases', roleMiddleware([ROLES.SUPERADMIN]), async (req: Request, re
         cases: casesWithVisibility, 
         total: result.total, 
         page: pageNum, 
-        totalPages 
+        totalPages,
+        viewAll: isViewAll,
       } 
     });
   } catch (error: any) {

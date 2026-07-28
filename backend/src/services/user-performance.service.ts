@@ -876,14 +876,19 @@ let rewardMap: Record<string, number> = {};
    */
   async getAllCasesByUsers(filters?: {
     status?: string;
+    caseType?: string;
     stage?: string;
     companyName?: string;
     userId?: number;
+    rmId?: number;
     startDate?: Date;
     endDate?: Date;
     limit?: number;
     offset?: number;
     includeSanctions?: boolean;
+    sortBy?: string;
+    sortOrder?: 'ASC' | 'DESC';
+    viewAll?: boolean;
   }): Promise<{
     cases: Array<{
       id: number;
@@ -914,10 +919,31 @@ let rewardMap: Record<string, number> = {};
       utilizedLimit?: number;
       unutilizedLimit?: number;
       partnerNames?: string[];
+      caseType?: string | null;
+      lifecycleStatus?: string | null;
+      rmId?: number | null;
+      rmName?: string | null;
+      rmEmail?: string | null;
+      applicantAadhaar?: string | null;
     }>;
     total: number;
   }> {
-    const { status, stage, companyName, userId, startDate, endDate, limit = 50, offset = 0, includeSanctions = false } = filters || {};
+    const {
+      status,
+      caseType,
+      stage,
+      companyName,
+      userId,
+      rmId,
+      startDate,
+      endDate,
+      limit = 50,
+      offset = 0,
+      includeSanctions = false,
+      sortBy = 'newest',
+      sortOrder = 'DESC',
+      viewAll = false,
+    } = filters || {};
 
     const toNumber = (value: any): number | null => {
       if (value === null || value === undefined || value === '') return null;
@@ -948,6 +974,12 @@ let rewardMap: Record<string, number> = {};
     };
 
     const normalizeText = (value?: string | null): string => (value || '').toLowerCase();
+    const deriveCaseType = (caseType?: string | null, pushedTo?: string | null): string => {
+      const pushedToValue = normalizeText(pushedTo);
+      if (pushedToValue.includes('sterlion')) return 'STERLION';
+      if (pushedToValue.includes('fintree') || pushedToValue.includes('ffpl')) return 'FINTREE';
+      return (caseType || 'FINTREE').toUpperCase();
+    };
     type CustomerSanctionStats = {
       sanctionCount: number;
       sanctionedAmount: number;
@@ -984,13 +1016,22 @@ let rewardMap: Record<string, number> = {};
       .addSelect('customer.companyName', 'companyName')
       .addSelect('customer.customerName', 'customerName')
       .addSelect('customer.customerCode', 'customerCode')
+      .addSelect('customer.caseType', 'caseType')
+      .addSelect('customer.pushedTo', 'pushedTo')
+      .addSelect('customer.lifecycleStatus', 'lifecycleStatus')
+      .addSelect('customer.rmId', 'rmId')
       .addSelect('customer.assignedUserId', 'customerAssignedUserId')
       .addSelect('customer.assignedStage', 'customerAssignedStage')
+      .addSelect('rm.name', 'rmName')
+      .addSelect('rm.email', 'rmEmail')
+      .addSelect('applicant.aadhaarNumber', 'applicantAadhaar')
       .addSelect('assignedUser.name', 'workflowAssignedUserName')
       .addSelect('assignedUser.email', 'workflowAssignedUserEmail')
       .addSelect('customerAssignedUser.name', 'customerAssignedUserName')
       .addSelect('customerAssignedUser.email', 'customerAssignedUserEmail')
       .leftJoin('workflow.customer', 'customer')
+      .leftJoin('customer.rm', 'rm')
+      .leftJoin('customer.applicant', 'applicant')
       .leftJoin('workflow.assignedUser', 'assignedUser')
       .leftJoin('customer.assignedUser', 'customerAssignedUser')
       .where('workflow.workflowType = :type', { type: 'CUSTOMER_ONBOARDING' })
@@ -1002,14 +1043,23 @@ let rewardMap: Record<string, number> = {};
       .addSelect('customer.companyName', 'companyName')
       .addSelect('customer.customerName', 'customerName')
       .addSelect('customer.customerCode', 'customerCode')
+      .addSelect('customer.caseType', 'caseType')
+      .addSelect('customer.pushedTo', 'pushedTo')
+      .addSelect('customer.lifecycleStatus', 'lifecycleStatus')
+      .addSelect('customer.rmId', 'rmId')
       .addSelect('customer.status', 'status')
       .addSelect('customer.assignedUserId', 'assignedUserId')
       .addSelect('customer.assignedStage', 'assignedStage')
+      .addSelect('rm.name', 'rmName')
+      .addSelect('rm.email', 'rmEmail')
+      .addSelect('applicant.aadhaarNumber', 'applicantAadhaar')
       .addSelect('customer.createdAt', 'createdAt')
       .addSelect('customer.updatedAt', 'updatedAt')
       .addSelect('assignedUser.name', 'assignedUserName')
       .addSelect('assignedUser.email', 'assignedUserEmail')
       .leftJoin('customer.assignedUser', 'assignedUser')
+      .leftJoin('customer.rm', 'rm')
+      .leftJoin('customer.applicant', 'applicant')
       .getRawMany();
 
     // Also get task tracking rows so older tracked tasks without workflow rows are not lost.
@@ -1135,6 +1185,12 @@ let rewardMap: Record<string, number> = {};
         taskId: c.customerCode || (customerId ? `CUST${String(customerId).padStart(6, '0')}` : `WF${String(workflowId).padStart(6, '0')}`),
         taskType: 'CUSTOMER_ONBOARDING',
         companyName: c.companyName || c.customerName || tracking?.companyName || 'Unknown',
+        caseType: deriveCaseType(c.caseType, c.pushedTo),
+        lifecycleStatus: c.lifecycleStatus || 'active',
+        rmId: toNumber(c.rmId),
+        rmName: c.rmName || null,
+        rmEmail: c.rmEmail || null,
+        applicantAadhaar: c.applicantAadhaar || null,
         bucket: workflowStage,
         status: currentStatus,
         caseStatus: currentStatus,
@@ -1180,6 +1236,12 @@ let rewardMap: Record<string, number> = {};
           taskId: c.customerCode || `CUST${String(customerId).padStart(6, '0')}`,
           taskType: 'CUSTOMER_ONBOARDING',
           companyName: c.companyName || c.customerName || tracking?.companyName || 'Unknown',
+          caseType: deriveCaseType(c.caseType, c.pushedTo),
+          lifecycleStatus: c.lifecycleStatus || 'active',
+          rmId: toNumber(c.rmId),
+          rmName: c.rmName || null,
+          rmEmail: c.rmEmail || null,
+          applicantAadhaar: c.applicantAadhaar || null,
           bucket: workflowStage,
           status: currentStatus,
           caseStatus: currentStatus,
@@ -1212,8 +1274,10 @@ let rewardMap: Record<string, number> = {};
     allCases = [...allCases, ...orphanTrackingCases];
 
     const normalizedStatus = normalizeText(status);
+    const normalizedCaseType = normalizeText(caseType).trim();
     const normalizedCompanyName = normalizeText(companyName).trim();
     allCases = allCases.filter((c) => {
+      if (normalizedCaseType && normalizeText(c.caseType) !== normalizedCaseType) return false;
       if (normalizedCompanyName && !normalizeText(c.companyName).includes(normalizedCompanyName)) return false;
 
       if (stage && c.bucket !== stage) return false;
@@ -1230,6 +1294,7 @@ let rewardMap: Record<string, number> = {};
       }
 
       if (userId && c.userId !== userId && c.assignedTo !== userId) return false;
+      if (rmId && c.rmId !== rmId) return false;
 
       const createdAt = toDate(c.createdAt);
       if (startDate && createdAt && createdAt.getTime() < startDate.getTime()) return false;
@@ -1238,14 +1303,26 @@ let rewardMap: Record<string, number> = {};
       return true;
     });
 
-    // Sort by createdAt descending
-    allCases.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    const direction = sortOrder === 'ASC' ? 1 : -1;
+    allCases.sort((a, b) => {
+      const normalizedSort = String(sortBy || '').toLowerCase();
+      if (['company', 'companyname', 'alphabetical', 'name'].includes(normalizedSort)) {
+        return direction * String(a.companyName || '').localeCompare(String(b.companyName || ''));
+      }
+      if (['oldest', 'createdat_asc'].includes(normalizedSort)) {
+        return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+      }
+      if (['newest', 'createdat_desc', 'createdat'].includes(normalizedSort)) {
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      }
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
 
     // Get total count
     const total = allCases.length;
 
     // Apply pagination
-    const paginatedCases = allCases.slice(offset, offset + limit);
+    const paginatedCases = viewAll ? allCases : allCases.slice(offset, offset + limit);
 
     if (!includeSanctions) {
       return {

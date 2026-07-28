@@ -190,4 +190,21 @@ DASHBOARD_OPERATIONS_SUPPLIERS: '/workflows/suppliers/dashboard/operations',
   // Cases (SuperAdmin)
   SUPERADMIN_CASES: '/superadmin/cases',
   SUPERADMIN_CASE_COMPANY_SUGGESTIONS: '/superadmin/cases/company-suggestions',
+
+  // Case lifecycle / renewals
+  CASE_MANAGEMENT_CHECKLISTS: '/case-management/post-sanction-checklists',
+  CASE_MANAGEMENT_RENEWALS: (customerId) => `/case-management/customers/${customerId}/renewals`,
+  CASE_MANAGEMENT_START_RENEWAL: (customerId) => `/case-management/customers/${customerId}/renewals/start`,
+  CASE_MANAGEMENT_HOLD: (customerId) => `/case-management/customers/${customerId}/hold`,
+  CASE_MANAGEMENT_RESUME: (customerId) => `/case-management/customers/${customerId}/resume`,
+  CASE_MANAGEMENT_ARCHIVE: (customerId) => `/case-management/customers/${customerId}/archive`,
+  CASE_MANAGEMENT_REASSIGN_RM: (customerId) => `/case-management/customers/${customerId}/reassign-rm`,
+  CASE_MANAGEMENT_CALENDAR_RMS: '/case-management/calendar/rms',
+  CASE_MANAGEMENT_CALENDAR: '/case-management/calendar',
+  CASE_MANAGEMENT_RUN_REMINDERS: '/case-management/reminders/run',
+
+  // Invoice approval batches
+  WORKFLOW_INVOICE_APPROVAL_BATCH_CREATE: '/workflows/invoices/customer-approval-batches',
+  WORKFLOW_INVOICE_APPROVAL_BATCH_PENDING: '/workflows/invoices/pending/customer-batches',
+  WORKFLOW_INVOICE_APPROVAL_BATCH_CUSTOMER_APPROVE: (batchId) => `/workflows/invoices/customer-approval-batches/${batchId}/customer-approve`,
 }

@@ -53,6 +53,7 @@ import SupplierDetail from './pages/supplier/SupplierDetail'
 
 // Common
 import Unauthorized from './pages/common/Unauthorized'
+import CaseCalendar from './pages/common/CaseCalendar'
 
 // Invoice Discounting Pages
 import InvoiceDiscountingRM from './pages/invoice-discounting/InvoiceDiscountingRM'
@@ -141,6 +142,24 @@ function App() {
             element={
               <ProtectedRoute allowedRoles={[ROLES.SUPERADMIN]}>
                 <OpsLoanSearch />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="calendar"
+            element={
+              <ProtectedRoute
+                allowedRoles={[
+                  ROLES.RELATIONSHIP_MANAGER,
+                  ROLES.OPERATIONS_TEAM_L1,
+                  ROLES.OPERATIONS_TEAM_L2,
+                  ROLES.OPERATIONS_HEAD,
+                  ROLES.CEO,
+                  ROLES.CFO,
+                  ROLES.MD,
+                ]}
+              >
+                <CaseCalendar />
               </ProtectedRoute>
             }
           />

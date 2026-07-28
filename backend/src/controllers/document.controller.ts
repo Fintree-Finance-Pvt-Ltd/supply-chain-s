@@ -35,7 +35,20 @@ export class DocumentController {
       console.log('Raw Body:', req.body);
       console.log('File:', req.file ? req.file.originalname : 'None');
 
-      const { customerId, documentType, applicantType, applicantIndex, coApplicantId, issueDate, expiryDate, remarks, rmRemarks } = req.body;
+      const {
+        customerId,
+        documentType,
+        applicantType,
+        applicantIndex,
+        coApplicantId,
+        issueDate,
+        expiryDate,
+        remarks,
+        rmRemarks,
+        lender,
+        renewalCycleId,
+        documentLabel,
+      } = req.body;
 
       // Resolve applicantId when applicantType is 'applicant'
       let resolvedApplicantId: number | undefined = undefined;
@@ -96,6 +109,9 @@ export class DocumentController {
         expiryDate: parsedExpiryDate,
         remarks: parsedRemarks,
         rmRemarks: parsedRmRemarks,
+        lender: lender ? String(lender).trim().toUpperCase() : undefined,
+        renewalCycleId: renewalCycleId ? Number(renewalCycleId) : undefined,
+        documentLabel: documentLabel ? String(documentLabel) : undefined,
       });
 
       res.status(201).json({
@@ -114,7 +130,18 @@ export class DocumentController {
   updateMetadata = async (req: Request, res: Response): Promise<void> => {
     try {
       const { id } = req.params;
-      const { issueDate, expiryDate, remarks, rmRemarks, documentType } = req.body;
+      const {
+        issueDate,
+        expiryDate,
+        remarks,
+        rmRemarks,
+        documentType,
+        lender,
+        renewalCycleId,
+        isCarriedForward,
+        carriedForwardFromDocumentId,
+        documentLabel,
+      } = req.body;
 
       const parsedIssueDate = (issueDate && typeof issueDate === 'string' && issueDate.trim() !== '') ? new Date(issueDate) : undefined;
       const parsedExpiryDate = (expiryDate && typeof expiryDate === 'string' && expiryDate.trim() !== '') ? new Date(expiryDate) : undefined;
@@ -125,7 +152,12 @@ export class DocumentController {
         expiryDate: parsedExpiryDate,
         remarks: parsedRemarks,
         rmRemarks: rmRemarks,
-        documentType: documentType
+        documentType: documentType,
+        lender: lender === '' ? null : lender,
+        renewalCycleId: renewalCycleId === '' || renewalCycleId === undefined ? undefined : Number(renewalCycleId),
+        isCarriedForward: isCarriedForward === undefined ? undefined : Boolean(isCarriedForward),
+        carriedForwardFromDocumentId: carriedForwardFromDocumentId === '' || carriedForwardFromDocumentId === undefined ? undefined : Number(carriedForwardFromDocumentId),
+        documentLabel: documentLabel === '' ? null : documentLabel,
       });
 
       res.json({

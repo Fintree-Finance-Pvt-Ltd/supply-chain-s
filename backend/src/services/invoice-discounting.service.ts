@@ -9,8 +9,13 @@ import { LoanAccount } from "../entities/LoanAccount";
 import { DEMAND_STATUS, LoanDemand } from "../entities/LoanManagement";
 import { CreditSanction } from "../entities/CreditSanction";
 import { Notification } from "../entities/Notification";
+import {
+  INVOICE_APPROVAL_BATCH_STATUS,
+  InvoiceApprovalBatch,
+} from "../entities/InvoiceApprovalBatch";
 import { NodemailerProvider } from "../integrations/notifications/email/nodemailer.provider";
 import { loanManagementService } from "./loan-management.service";
+import { In, IsNull } from "typeorm";
 import crypto from "crypto";
 
 /**
@@ -74,6 +79,8 @@ export class InvoiceDiscountingService {
   private creditSanctionRepository =
     AppDataSource.getRepository(CreditSanction);
   private notificationRepository = AppDataSource.getRepository(Notification);
+  private approvalBatchRepository =
+    AppDataSource.getRepository(InvoiceApprovalBatch);
   private emailProvider = new NodemailerProvider({
     host: process.env.SMTP_HOST!,
     port: Number(process.env.SMTP_PORT),
@@ -86,6 +93,10 @@ export class InvoiceDiscountingService {
   // Generate a secure random token
   private generateApprovalToken(): string {
     return crypto.randomBytes(32).toString('hex');
+  }
+
+  private generateBatchCode(): string {
+    return `IAB-${Date.now()}-${crypto.randomBytes(4).toString("hex").toUpperCase()}`;
   }
 
   // Send approval email to customer
@@ -1037,9 +1048,189 @@ if (existingInvoices.length > 0) {
     return { invoice, workflow };
   }
 
+  async createCustomerApprovalBatch(
+    invoiceIds: number[],
+    userId: number,
+    options?: {
+      expectedDisbursementUtr?: string;
+      expectedDisbursementDate?: string;
+    },
+  ) {
+    const uniqueInvoiceIds = Array.from(new Set(invoiceIds.map(Number))).filter((id) =>
+      Number.isInteger(id) && id > 0,
+    );
+
+    if (uniqueInvoiceIds.length < 2) {
+      throw new Error("Select at least two invoices for batch approval");
+    }
+
+    const invoices = await this.invoiceRepository.find({
+      where: { id: In(uniqueInvoiceIds) },
+      relations: ["customer", "supplier", "loanAccount"],
+    });
+
+    if (invoices.length !== uniqueInvoiceIds.length) {
+      throw new Error("One or more invoices were not found");
+    }
+
+    const customerIds = new Set(invoices.map((invoice) => invoice.customerId));
+    if (customerIds.size !== 1) {
+      throw new Error("All invoices in a batch must belong to the same customer");
+    }
+
+    const loanAccountIds = new Set(invoices.map((invoice) => invoice.loanAccountId || 0));
+    if (loanAccountIds.size !== 1) {
+      throw new Error("All invoices in a batch must belong to the same LAN");
+    }
+
+    for (const invoice of invoices) {
+      if (invoice.status !== "PENDING_CUSTOMER_APPROVAL") {
+        throw new Error(`Invoice ${invoice.invoiceNumber} is not pending customer approval`);
+      }
+      if (invoice.invoiceApprovalBatchId) {
+        throw new Error(`Invoice ${invoice.invoiceNumber} already belongs to an approval batch`);
+      }
+    }
+
+    const approvalToken = this.generateApprovalToken();
+    const tokenExpiry = new Date();
+    tokenExpiry.setHours(tokenExpiry.getHours() + 48);
+
+    const batch = await this.approvalBatchRepository.save(
+      this.approvalBatchRepository.create({
+        batchCode: this.generateBatchCode(),
+        customerId: invoices[0].customerId,
+        status: INVOICE_APPROVAL_BATCH_STATUS.PENDING_CUSTOMER_APPROVAL,
+        expectedDisbursementUtr: options?.expectedDisbursementUtr?.trim() || null,
+        expectedDisbursementDate: options?.expectedDisbursementDate
+          ? new Date(options.expectedDisbursementDate)
+          : null,
+        approvalToken,
+        approvalTokenExpiry: tokenExpiry,
+        createdByUserId: userId,
+      }),
+    );
+
+    for (const invoice of invoices) {
+      invoice.invoiceApprovalBatchId = batch.id;
+      await this.invoiceRepository.save(invoice);
+    }
+
+    return await this.approvalBatchRepository.findOne({
+      where: { id: batch.id },
+      relations: ["invoices", "invoices.supplier", "invoices.loanAccount"],
+    });
+  }
+
+  async getCustomerPendingApprovalBatches(customerId?: number) {
+    const where: any = {
+      status: INVOICE_APPROVAL_BATCH_STATUS.PENDING_CUSTOMER_APPROVAL,
+    };
+    if (customerId) where.customerId = customerId;
+
+    return await this.approvalBatchRepository.find({
+      where,
+      relations: ["invoices", "invoices.supplier", "invoices.loanAccount", "customer"],
+      order: { createdAt: "DESC" },
+    });
+  }
+
+  async customerApprovalBatch(
+    batchId: number,
+    customerId: number | null,
+    action: "approve" | "reject",
+    remarks?: string,
+  ) {
+    const batch = await this.approvalBatchRepository.findOne({
+      where: { id: batchId },
+      relations: ["invoices", "customer"],
+    });
+
+    if (!batch) throw new Error("Approval batch not found");
+    if (customerId && batch.customerId !== customerId) {
+      throw new Error("Approval batch does not belong to this customer");
+    }
+    if (batch.status !== INVOICE_APPROVAL_BATCH_STATUS.PENDING_CUSTOMER_APPROVAL) {
+      throw new Error("Approval batch has already been processed");
+    }
+
+    const customer = await this.customerRepository.findOne({
+      where: { id: batch.customerId },
+    });
+    if (!customer) throw new Error(`Customer not found for ID ${batch.customerId}`);
+
+    const invoices = batch.invoices || [];
+    if (invoices.length < 2) {
+      throw new Error("Approval batch must contain at least two invoices");
+    }
+
+    const newStatus = action === "approve"
+      ? "PENDING_OPS_L1_APPROVAL"
+      : "REJECTED_BY_CUSTOMER";
+
+    for (const invoice of invoices) {
+      const freshInvoice = await this.invoiceRepository.findOne({
+        where: { id: invoice.id },
+      });
+      if (!freshInvoice) continue;
+      if (freshInvoice.status !== "PENDING_CUSTOMER_APPROVAL") {
+        throw new Error(`Invoice ${freshInvoice.invoiceNumber} is not pending customer approval`);
+      }
+
+      const previousStatus = freshInvoice.status;
+      freshInvoice.status = newStatus;
+      freshInvoice.customerApprovalStatus = action === "approve" ? "approved" : "rejected";
+      freshInvoice.customerApprovedAt = action === "approve" ? new Date() : freshInvoice.customerApprovedAt;
+      freshInvoice.approvedVia = "mobile";
+      freshInvoice.customerRemarks = remarks || "";
+      freshInvoice.approvedByCustomerId = freshInvoice.customerId;
+
+      if (action === "reject") {
+        await this.releaseInvoiceLimit(freshInvoice);
+      }
+
+      await this.invoiceRepository.save(freshInvoice);
+
+      const workflow = await this.createOrGetWorkflow(freshInvoice.id);
+      workflow.currentStatus = freshInvoice.status;
+      workflow.currentApproverRoleName = this.getApproverForStatus(freshInvoice.status);
+      if (action === "reject") workflow.isRejected = true;
+      workflow.remarks = remarks || `Invoice ${action}d in approval batch ${batch.batchCode}`;
+      await this.workflowRepository.save(workflow);
+
+      await this.logHistory({
+        customerId: freshInvoice.customerId,
+        supplierId: freshInvoice.supplierId,
+        invoiceId: freshInvoice.id,
+        caseWorkflowId: workflow.id,
+        status: freshInvoice.status,
+        previousStatus,
+        changedBy: customer.rmId,
+        remarks: remarks || `Invoice ${action}d by customer in approval batch ${batch.batchCode}`,
+      });
+    }
+
+    batch.status = action === "approve"
+      ? INVOICE_APPROVAL_BATCH_STATUS.APPROVED
+      : INVOICE_APPROVAL_BATCH_STATUS.REJECTED;
+    batch.customerApprovedAt = new Date();
+    batch.approvedVia = "mobile";
+    batch.customerRemarks = remarks || "";
+    await this.approvalBatchRepository.save(batch);
+
+    return await this.approvalBatchRepository.findOne({
+      where: { id: batch.id },
+      relations: ["invoices", "invoices.supplier", "invoices.loanAccount", "customer"],
+    });
+  }
+
   async getCustomerPendingInvoices(customerId?: number) {
     return this.invoiceRepository.find({
-      where: { customerId, status: "PENDING_CUSTOMER_APPROVAL" as any },
+      where: {
+        ...(customerId ? { customerId } : {}),
+        status: "PENDING_CUSTOMER_APPROVAL" as any,
+        invoiceApprovalBatchId: IsNull(),
+      },
       relations: ["supplier", "loanAccount"],
     });
   }
@@ -1454,7 +1645,7 @@ if (existingInvoices.length > 0) {
   ) {
     const invoice = await this.invoiceRepository.findOne({
       where: { id: invoiceId },
-      relations: ["loanAccount", "loanAccount.partner"],
+      relations: ["loanAccount", "loanAccount.partner", "approvalBatch"],
     });
     if (!invoice) throw new Error("Invoice not found");
     if (invoice.status !== "DISBURSEMENT_DATA_ENTRY") {
@@ -1471,6 +1662,39 @@ if (existingInvoices.length > 0) {
     }
 
     const disbursementDate = new Date(data.disbursementDate);
+    if (invoice.approvalBatch) {
+      const batchInvoices = await this.invoiceRepository.find({
+        where: { invoiceApprovalBatchId: invoice.approvalBatch.id },
+      });
+      const referenceInvoice = batchInvoices.find((item) =>
+        item.id !== invoice.id && Boolean(item.disbursementUtr) && Boolean(item.disbursementDate)
+      );
+
+      const expectedUtr =
+        invoice.approvalBatch.expectedDisbursementUtr?.trim() ||
+        referenceInvoice?.disbursementUtr?.trim() ||
+        '';
+      if (expectedUtr && disbursementUtr !== expectedUtr) {
+        throw new Error(`Disbursement UTR must match approval batch UTR ${expectedUtr}`);
+      }
+
+      const expectedDateSource = invoice.approvalBatch.expectedDisbursementDate || referenceInvoice?.disbursementDate;
+      if (expectedDateSource) {
+        const expectedDate = this.formatDate(new Date(expectedDateSource));
+        const requestedDate = this.formatDate(disbursementDate);
+        if (expectedDate !== requestedDate) {
+          throw new Error(`Disbursement date must match approval batch date ${expectedDate}`);
+        }
+      }
+
+      if (!invoice.approvalBatch.expectedDisbursementUtr) {
+        invoice.approvalBatch.expectedDisbursementUtr = disbursementUtr;
+      }
+      if (!invoice.approvalBatch.expectedDisbursementDate) {
+        invoice.approvalBatch.expectedDisbursementDate = disbursementDate;
+      }
+      await this.approvalBatchRepository.save(invoice.approvalBatch);
+    }
     await loanManagementService.assertDisbursementUtrDateConsistent({
       disbursementUtr,
       disbursementDate,

@@ -13,6 +13,7 @@ import { Supplier } from './Supplier';
 import { User } from './User';
 import { CaseStatusHistory } from './CaseStatusHistory';
 import { LoanAccount } from './LoanAccount';
+import { InvoiceApprovalBatch } from './InvoiceApprovalBatch';
 
 @Entity('invoices')
 export class Invoice {
@@ -154,6 +155,9 @@ sanctionAmount: number;
   @Column({ type: 'boolean', default: true })
   isActive: boolean;
 
+  @Column({ type: 'int', nullable: true })
+  invoiceApprovalBatchId: number | null;
+
   @CreateDateColumn()
   createdAt: Date;
 
@@ -179,5 +183,9 @@ sanctionAmount: number;
 
   @OneToMany(() => CaseStatusHistory, history => history.invoice)
   statusHistory: CaseStatusHistory[];
+
+  @ManyToOne(() => InvoiceApprovalBatch, batch => batch.invoices, { nullable: true })
+  @JoinColumn({ name: 'invoiceApprovalBatchId' })
+  approvalBatch: InvoiceApprovalBatch | null;
 
 }

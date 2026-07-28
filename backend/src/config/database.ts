@@ -26,7 +26,10 @@ import { ApprovalInstance } from '../entities/ApprovalInstance';
 import { ApprovalAction } from '../entities/ApprovalAction';
 import { Supplier } from '../entities/Supplier';
 import { Invoice } from '../entities/Invoice';
+import { InvoiceApprovalBatch } from '../entities/InvoiceApprovalBatch';
 import { CaseWorkflow } from '../entities/CaseWorkflow';
+import { CaseRenewalCycle } from '../entities/CaseRenewalCycle';
+import { CaseReminderLog } from '../entities/CaseReminderLog';
 import { SanctionLimitHistory } from '../entities/SanctionLimitHistory';
 import { LoanAccount } from '../entities/LoanAccount';
 import { ContactPerson } from '../entities/ContactPerson';
@@ -77,7 +80,10 @@ const entities = [
   ApprovalAction,
   Supplier,
   Invoice,
+  InvoiceApprovalBatch,
   CaseWorkflow,
+  CaseRenewalCycle,
+  CaseReminderLog,
   SanctionLimitHistory,
   LoanAccount,
   ContactPerson,

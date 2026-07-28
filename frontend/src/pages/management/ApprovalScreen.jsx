@@ -5,13 +5,14 @@ import { toast } from "react-toastify";
 import { workflowService } from "../../services/workflowService";
 import { customerService } from "../../services/customerService";
 import { partnerService } from "../../services/partnerService";
+import { caseManagementService } from "../../services/caseManagementService";
 import api from "../../services/api";
 import ApprovalTimeline from "../../components/ApprovalTimeline";
 import CreditNotepad from "../../components/CreditNotepad";
 import LoadingSpinner from "../../components/LoadingSpinner";
 import CustomerFullDetails from "../../components/CustomerFullDetails";
 import { formatDate } from "../../utils/format";
-import { FiCheck, FiX, FiEye, FiFileText, FiDownload } from "react-icons/fi";
+import { FiCheck, FiX, FiEye, FiFileText, FiDownload, FiArchive, FiPauseCircle, FiPlayCircle, FiUserCheck } from "react-icons/fi";
 
 const DETAIL_SECTIONS = [
   "documents",
@@ -370,6 +371,83 @@ const ApprovalScreen = () => {
     }
   };
 
+  const refreshCustomer = async () => {
+    const response = await customerService.getCustomerWithSections(
+      id,
+      DETAIL_SECTIONS,
+    );
+    setCustomer(response.data);
+  };
+
+  const handleHoldCase = async () => {
+    const reason = window.prompt("Reason for putting this case on hold?") || "";
+    if (!reason.trim()) return;
+
+    setIsSubmitting(true);
+    try {
+      await caseManagementService.holdCase(id, reason);
+      toast.success("Case placed on hold");
+      await refreshCustomer();
+    } catch (error) {
+      toast.error(error.response?.data?.message || error.message || "Failed to hold case");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleResumeCase = async () => {
+    const note = window.prompt("Resume remarks?") || "";
+
+    setIsSubmitting(true);
+    try {
+      await caseManagementService.resumeCase(id, note);
+      toast.success("Case resumed");
+      await refreshCustomer();
+    } catch (error) {
+      toast.error(error.response?.data?.message || error.message || "Failed to resume case");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleArchiveCase = async () => {
+    const reason = window.prompt("Reason for archiving this case?") || "";
+    if (!reason.trim()) return;
+
+    setIsSubmitting(true);
+    try {
+      await caseManagementService.archiveCase(id, reason);
+      toast.success("Case archived");
+      await refreshCustomer();
+    } catch (error) {
+      toast.error(error.response?.data?.message || error.message || "Failed to archive case");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleReassignRM = async () => {
+    const newRmId = window.prompt("Enter new RM user ID");
+    if (!newRmId) return;
+    const parsedRmId = Number(newRmId);
+    if (!Number.isInteger(parsedRmId) || parsedRmId <= 0) {
+      toast.error("Enter a valid RM user ID");
+      return;
+    }
+    const note = window.prompt("Reassignment remarks?") || "";
+
+    setIsSubmitting(true);
+    try {
+      await caseManagementService.reassignRM(id, parsedRmId, note);
+      toast.success("RM reassigned");
+      await refreshCustomer();
+    } catch (error) {
+      toast.error(error.response?.data?.message || error.message || "Failed to reassign RM");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   if (isLoading) {
     return <LoadingSpinner />;
   }
@@ -452,6 +530,8 @@ const ApprovalScreen = () => {
   const handleDownloadClick = (doc) => handlePreview(doc, "attachment");
 
   const role = approvalRole;
+  const canManageCaseAsMD = role === "md";
+  const isOnHold = customer.lifecycleStatus === "on_hold" || customer.status === "on_hold";
 
   // RM and MD can access sanction details
   const canAccessSanctionDetails = () => {
@@ -1048,6 +1128,55 @@ const ApprovalScreen = () => {
           <div className="card">
             <ApprovalTimeline approvals={formattedApprovals} />
           </div>
+
+          {canManageCaseAsMD && (
+            <div className="card">
+              <h2 className="text-xl font-semibold text-gray-900 mb-4">
+                Case Control
+              </h2>
+              <div className="space-y-3">
+                {isOnHold ? (
+                  <button
+                    type="button"
+                    onClick={handleResumeCase}
+                    disabled={isSubmitting}
+                    className="w-full btn-primary flex items-center justify-center space-x-2"
+                  >
+                    <FiPlayCircle className="h-5 w-5" />
+                    <span>Resume Case</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleHoldCase}
+                    disabled={isSubmitting}
+                    className="w-full btn-secondary flex items-center justify-center space-x-2"
+                  >
+                    <FiPauseCircle className="h-5 w-5" />
+                    <span>Put On Hold</span>
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={handleReassignRM}
+                  disabled={isSubmitting}
+                  className="w-full btn-secondary flex items-center justify-center space-x-2"
+                >
+                  <FiUserCheck className="h-5 w-5" />
+                  <span>Reassign RM</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleArchiveCase}
+                  disabled={isSubmitting || customer.lifecycleStatus === "archived"}
+                  className="w-full btn-danger flex items-center justify-center space-x-2"
+                >
+                  <FiArchive className="h-5 w-5" />
+                  <span>Archive Case</span>
+                </button>
+              </div>
+            </div>
+          )}
 
           <div className="card">
             {!isReadOnly ? (

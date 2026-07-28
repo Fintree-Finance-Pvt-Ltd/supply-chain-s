@@ -33,6 +33,7 @@ import { Notification } from './Notification';
 import { RefreshToken } from './RefreshToken';
 import { SanctionLimitHistory } from './SanctionLimitHistory';
 import { LoanAccount } from './LoanAccount';
+import { CaseRenewalCycle } from './CaseRenewalCycle';
 
 @Entity('customers')
 export class Customer {
@@ -117,6 +118,33 @@ export class Customer {
 
   @Column({ type: 'text', nullable: true })
   remarks: string;
+
+  @Column({ type: 'varchar', length: 30, default: 'FINTREE' })
+  caseType: string;
+
+  @Column({ type: 'varchar', length: 30, default: 'active' })
+  lifecycleStatus: string;
+
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  previousWorkflowStatus: string;
+
+  @Column({ type: 'text', nullable: true })
+  lifecycleReason: string;
+
+  @Column({ type: 'int', nullable: true })
+  currentRenewalCycleId: number | null;
+
+  @Column({ type: 'int', nullable: true })
+  heldByUserId: number | null;
+
+  @Column({ type: 'timestamp', nullable: true })
+  heldAt: Date | null;
+
+  @Column({ type: 'int', nullable: true })
+  archivedByUserId: number | null;
+
+  @Column({ type: 'timestamp', nullable: true })
+  archivedAt: Date | null;
 
   // =====================================================
   // 🔹 BANKING
@@ -203,6 +231,9 @@ export class Customer {
 
   @OneToMany(() => CaseWorkflow, (workflow) => workflow.customer)
   workflows: CaseWorkflow[];
+
+  @OneToMany(() => CaseRenewalCycle, (cycle) => cycle.customer)
+  renewalCycles: CaseRenewalCycle[];
 
   @OneToMany(() => ContactPerson, (contact) => contact.customer, { cascade: true })
   contactPersons: ContactPerson[];

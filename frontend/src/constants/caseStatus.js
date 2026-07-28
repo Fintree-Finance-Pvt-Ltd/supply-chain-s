@@ -15,6 +15,10 @@ export const CASE_STATUS = {
   DISBURSED: 'disbursed',
   REJECTED: 'rejected',
   RETURNED_TO_RM: 'returned_to_rm',
+  ON_HOLD: 'on_hold',
+  ARCHIVED: 'archived',
+  RENEWAL_INITIATED: 'renewal_initiated',
+  RM_REASSIGNED: 'rm_reassigned',
 }
 
 export const CASE_STATUS_LABELS = {
@@ -34,6 +38,10 @@ export const CASE_STATUS_LABELS = {
   [CASE_STATUS.DISBURSED]: 'Disbursed',
   [CASE_STATUS.REJECTED]: 'Rejected',
   [CASE_STATUS.RETURNED_TO_RM]: 'Returned to RM',
+  [CASE_STATUS.ON_HOLD]: 'On Hold',
+  [CASE_STATUS.ARCHIVED]: 'Archived',
+  [CASE_STATUS.RENEWAL_INITIATED]: 'Renewal Initiated',
+  [CASE_STATUS.RM_REASSIGNED]: 'RM Reassigned',
 }
 
 export const CASE_STATUS_COLORS = {
@@ -53,5 +61,9 @@ export const CASE_STATUS_COLORS = {
   [CASE_STATUS.DISBURSED]: 'purple',
   [CASE_STATUS.REJECTED]: 'red',
   [CASE_STATUS.RETURNED_TO_RM]: 'orange',
+  [CASE_STATUS.ON_HOLD]: 'yellow',
+  [CASE_STATUS.ARCHIVED]: 'gray',
+  [CASE_STATUS.RENEWAL_INITIATED]: 'blue',
+  [CASE_STATUS.RM_REASSIGNED]: 'blue',
 }
 

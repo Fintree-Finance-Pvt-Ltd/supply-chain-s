@@ -8,6 +8,7 @@ import routes from './routes';
 import aadhaarWebhookRoutes from './routes/aadhaarWebhook.routes';
 import { errorHandler, notFoundHandler } from './middlewares/error.middleware';
 import { startBureauPdfCron } from './cron/bureauPdf.cron';
+import { startCaseReminderCron } from './cron/caseReminder.cron';
 
 dotenv.config();
 
@@ -43,6 +44,7 @@ app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 startBureauPdfCron();
+startCaseReminderCron();
 
 // Aadhaar Webhook route (must be public, before auth)
 app.use('/api', aadhaarWebhookRoutes);

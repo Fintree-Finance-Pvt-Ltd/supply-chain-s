@@ -4,12 +4,13 @@ import { useSelector } from 'react-redux'
 import { toast } from 'react-toastify'
 import { workflowService } from '../../services/workflowService'
 import { customerService } from '../../services/customerService'
+import { caseManagementService } from '../../services/caseManagementService'
 import api from '../../services/api'
 import ApprovalTimeline from '../../components/ApprovalTimeline'
 import CustomerFullDetails from '../../components/CustomerFullDetails'
 import LoadingSpinner from '../../components/LoadingSpinner'
 import { formatDate } from '../../utils/format'
-import { FiCheck, FiX, FiFileText, FiDownload, FiLock, FiEye } from 'react-icons/fi'
+import { FiCheck, FiX, FiFileText, FiDownload, FiLock, FiEye, FiPauseCircle, FiPlayCircle } from 'react-icons/fi'
 import DocumentUploader from '../../components/DocumentUploader'
 import { documentService } from '../../services/documentService'
 
@@ -164,6 +165,42 @@ const OperationsCaseScreen = () => {
     }
   }
 
+  const refreshCustomer = async () => {
+    const response = await customerService.getCustomerWithSections(id, DETAIL_SECTIONS)
+    setCustomer(response.data)
+  }
+
+  const handleHoldCase = async () => {
+    const reason = window.prompt('Reason for putting this case on hold?') || ''
+    if (!reason.trim()) return
+
+    setIsSubmitting(true)
+    try {
+      await caseManagementService.holdCase(id, reason)
+      toast.success('Case placed on hold')
+      await refreshCustomer()
+    } catch (error) {
+      toast.error(error.response?.data?.message || error.message || 'Failed to hold case')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const handleResumeCase = async () => {
+    const note = window.prompt('Resume remarks?') || ''
+
+    setIsSubmitting(true)
+    try {
+      await caseManagementService.resumeCase(id, note)
+      toast.success('Case resumed')
+      await refreshCustomer()
+    } catch (error) {
+      toast.error(error.response?.data?.message || error.message || 'Failed to resume case')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
   if (isLoading) {
     return <LoadingSpinner />
   }
@@ -190,6 +227,8 @@ const OperationsCaseScreen = () => {
     (customer.status === 'rejected') ||
     (user?.role === 'operations_team_l1' && customer.status !== 'md_approved' && customer.status !== 'ops_l1_review') ||
     (user?.role === 'operations_head' && customer.status !== 'ops_l2_verified' && customer.status !== 'ops_l1_approved');
+  const canManageLifecycle = ['operations_team_l1', 'operations_team_l2', 'operations_head'].includes((user?.role || '').toLowerCase())
+  const isOnHold = customer.lifecycleStatus === 'on_hold' || customer.status === 'on_hold'
 
   return (
     <div className="space-y-6">
@@ -510,6 +549,35 @@ const OperationsCaseScreen = () => {
           {formattedApprovals.length > 0 && (
             <div className="card">
               <ApprovalTimeline approvals={formattedApprovals} />
+            </div>
+          )}
+
+          {canManageLifecycle && (
+            <div className="card">
+              <h2 className="text-xl font-semibold text-gray-900 mb-4">Case Control</h2>
+              <div className="space-y-3">
+                {isOnHold ? (
+                  <button
+                    type="button"
+                    onClick={handleResumeCase}
+                    disabled={isSubmitting}
+                    className="w-full btn-primary flex items-center justify-center space-x-2"
+                  >
+                    <FiPlayCircle className="h-5 w-5" />
+                    <span>Resume Case</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleHoldCase}
+                    disabled={isSubmitting}
+                    className="w-full btn-secondary flex items-center justify-center space-x-2"
+                  >
+                    <FiPauseCircle className="h-5 w-5" />
+                    <span>Put On Hold</span>
+                  </button>
+                )}
+              </div>
             </div>
           )}
 

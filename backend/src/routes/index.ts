@@ -19,6 +19,7 @@ import invoiceDisbursementRoutes from './invoice-disbursement.routes';
 import loanManagementRoutes from './loan-management.routes';
 import superAdminRoutes from './superadmin.routes';
 import taskDistributionRoutes from './task-distribution.routes';
+import caseManagementRoutes from './case-management.routes';
 import { authMiddleware } from '../middlewares/auth.middleware';
 
 const router = Router();
@@ -56,6 +57,7 @@ router.use('/partners', partnerRoutes);
 router.use('/v1/invoice-disbursement', invoiceDisbursementRoutes);
 router.use('/loan-servicing', loanManagementRoutes);
 router.use('/internal-lms', loanManagementRoutes); // Backward-compatible alias
+router.use('/case-management', authMiddleware, caseManagementRoutes);
 
 // SUPERADMIN Routes - Global Analytics, RBAC, Rewards, Task Tracking
 // Apply authMiddleware first to authenticate the user, then superAdminRoutes for authorization

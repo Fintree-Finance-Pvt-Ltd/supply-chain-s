@@ -2076,6 +2076,85 @@ router.post('/invoices/:invoiceId/send-customer-email', async (req, res) => {
 });
 
 /**
+ * POST /api/workflows/invoices/customer-approval-batches
+ * RM creates a single customer approval request for multiple invoices.
+ */
+router.post('/invoices/customer-approval-batches', checkRole(['relationship_manager']), async (req, res) => {
+  try {
+    const user = (req as any).user;
+    const { invoiceIds, expectedDisbursementUtr, expectedDisbursementDate } = req.body;
+
+    if (!Array.isArray(invoiceIds) || invoiceIds.length < 2) {
+      return res.status(400).json({
+        success: false,
+        message: 'invoiceIds must contain at least two invoices',
+      });
+    }
+
+    const batch = await invoiceDiscountingService.createCustomerApprovalBatch(
+      invoiceIds.map(Number),
+      user.id,
+      { expectedDisbursementUtr, expectedDisbursementDate },
+    );
+
+    res.json({
+      success: true,
+      message: 'Customer approval batch created',
+      data: batch,
+    });
+  } catch (error: any) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+});
+
+/**
+ * GET /api/workflows/invoices/pending/customer-batches
+ * Get customer approval batches pending customer action.
+ */
+router.get('/invoices/pending/customer-batches', async (req, res) => {
+  try {
+    const { customerId } = req.query;
+    const batches = await invoiceDiscountingService.getCustomerPendingApprovalBatches(
+      customerId ? parseInt(customerId as string) : undefined,
+    );
+    res.json({ success: true, data: batches });
+  } catch (error: any) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+});
+
+/**
+ * POST /api/workflows/invoices/customer-approval-batches/:batchId/customer-approve
+ * Customer approves or rejects a whole invoice batch.
+ */
+router.post('/invoices/customer-approval-batches/:batchId/customer-approve', async (req, res) => {
+  try {
+    const { batchId } = req.params;
+    const { approved, remarks, customerId } = req.body;
+
+    if (approved === undefined) {
+      return res.status(400).json({ success: false, message: 'approved field is required' });
+    }
+
+    const action = approved ? 'approve' : 'reject';
+    const batch = await invoiceDiscountingService.customerApprovalBatch(
+      parseInt(batchId),
+      customerId ? Number(customerId) : null,
+      action,
+      remarks || '',
+    );
+
+    res.json({
+      success: true,
+      message: approved ? 'Invoice batch approved by customer' : 'Invoice batch rejected by customer',
+      data: batch,
+    });
+  } catch (error: any) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+});
+
+/**
  * POST /api/workflows/invoices/:invoiceId/customer-approve
  * Customer approves or rejects invoice
  */

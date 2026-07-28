@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import { workflowService } from "../../services/workflowService";
+import { invoiceApprovalBatchService } from "../../services/invoiceApprovalBatchService";
 import LoadingSpinner from "../../components/LoadingSpinner";
 import StatusBadge from "../../components/StatusBadge";
 import { documentService } from "../../services/documentService";
@@ -70,6 +71,11 @@ export default function InvoiceDiscountingRM() {
   const [selectedCustomerDocs, setSelectedCustomerDocs] = useState([]);
   const [selectedCustomerName, setSelectedCustomerName] = useState("");
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
+  const [selectedBatchInvoiceIds, setSelectedBatchInvoiceIds] = useState([]);
+  const [batchForm, setBatchForm] = useState({
+    expectedDisbursementUtr: "",
+    expectedDisbursementDate: "",
+  });
 
   const loadCustomers = async () => {
     try {
@@ -719,6 +725,43 @@ if (invoiceFiles.length === 0) {
     } catch (error) {
       console.error("Error sending approval email:", error);
       toast.error("Error sending approval email");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const pendingBatchableInvoices = invoices.filter((invoice) =>
+    invoice.status === "PENDING_CUSTOMER_APPROVAL" && !invoice.invoiceApprovalBatchId
+  );
+
+  const toggleBatchInvoice = (invoiceId) => {
+    setSelectedBatchInvoiceIds((prev) =>
+      prev.includes(invoiceId)
+        ? prev.filter((id) => id !== invoiceId)
+        : [...prev, invoiceId],
+    );
+  };
+
+  const handleCreateApprovalBatch = async () => {
+    if (selectedBatchInvoiceIds.length < 2) {
+      toast.info("Select at least two invoices for one customer approval");
+      return;
+    }
+
+    try {
+      setLoading(true);
+      await invoiceApprovalBatchService.createBatch({
+        invoiceIds: selectedBatchInvoiceIds,
+        expectedDisbursementUtr: batchForm.expectedDisbursementUtr || undefined,
+        expectedDisbursementDate: batchForm.expectedDisbursementDate || undefined,
+      });
+      toast.success("Customer approval batch created");
+      setSelectedBatchInvoiceIds([]);
+      setBatchForm({ expectedDisbursementUtr: "", expectedDisbursementDate: "" });
+      loadInvoices();
+    } catch (error) {
+      console.error("Error creating approval batch:", error);
+      toast.error(error.response?.data?.message || error.message || "Failed to create approval batch");
     } finally {
       setLoading(false);
     }
@@ -2147,6 +2190,132 @@ Remaining Allowed: ₹${formatINR(
             <FiSend /> Submit for Approval
           </button>
         </div>
+      </div>
+
+      {/* Same-day customer approval batch */}
+      <div
+        style={{
+          background: "#fff",
+          padding: "24px",
+          borderRadius: "16px",
+          marginBottom: "32px",
+          boxShadow: "0 4px 20px -2px rgba(0, 0, 0, 0.05)",
+          border: "1px solid #e2e8f0",
+        }}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", gap: "16px", alignItems: "flex-start", marginBottom: "18px" }}>
+          <div>
+            <h3 style={{ margin: 0, fontSize: "18px", fontWeight: "700", color: "#334155" }}>
+              Same-Day Customer Approval
+            </h3>
+            <p style={{ margin: "6px 0 0", fontSize: "13px", color: "#64748b" }}>
+              Group multiple pending invoices into one customer approval when the UTR and disbursement date will be common.
+            </p>
+          </div>
+          <span style={{ fontSize: "12px", background: "#eef2ff", padding: "4px 12px", borderRadius: "20px", color: "#4f46e5", fontWeight: "700" }}>
+            Selected: {selectedBatchInvoiceIds.length}
+          </span>
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: "12px", marginBottom: "16px", alignItems: "end" }}>
+          <div>
+            <label style={{ display: "block", marginBottom: "6px", fontSize: "12px", fontWeight: "700", color: "#475569" }}>
+              Common UTR
+            </label>
+            <input
+              type="text"
+              value={batchForm.expectedDisbursementUtr}
+              onChange={(e) => setBatchForm((prev) => ({ ...prev, expectedDisbursementUtr: e.target.value }))}
+              placeholder="Optional until disbursement"
+              style={{
+                width: "100%",
+                padding: "10px 12px",
+                border: "1px solid #e2e8f0",
+                borderRadius: "10px",
+                fontSize: "14px",
+              }}
+            />
+          </div>
+          <div>
+            <label style={{ display: "block", marginBottom: "6px", fontSize: "12px", fontWeight: "700", color: "#475569" }}>
+              Common Disbursement Date
+            </label>
+            <input
+              type="date"
+              value={batchForm.expectedDisbursementDate}
+              onChange={(e) => setBatchForm((prev) => ({ ...prev, expectedDisbursementDate: e.target.value }))}
+              style={{
+                width: "100%",
+                padding: "10px 12px",
+                border: "1px solid #e2e8f0",
+                borderRadius: "10px",
+                fontSize: "14px",
+              }}
+            />
+          </div>
+          <button
+            type="button"
+            onClick={handleCreateApprovalBatch}
+            disabled={selectedBatchInvoiceIds.length < 2 || loading}
+            style={{
+              padding: "11px 18px",
+              background: selectedBatchInvoiceIds.length < 2 ? "#cbd5e1" : "#4f46e5",
+              color: "#fff",
+              border: "none",
+              borderRadius: "10px",
+              cursor: selectedBatchInvoiceIds.length < 2 ? "not-allowed" : "pointer",
+              fontWeight: "700",
+              fontSize: "13px",
+              whiteSpace: "nowrap",
+            }}
+          >
+            Create Batch
+          </button>
+        </div>
+
+        {pendingBatchableInvoices.length === 0 ? (
+          <div style={{ padding: "20px", borderRadius: "12px", background: "#f8fafc", color: "#94a3b8", fontSize: "14px", textAlign: "center" }}>
+            No unbatched invoices are pending customer approval.
+          </div>
+        ) : (
+          <div style={{ display: "grid", gap: "10px" }}>
+            {pendingBatchableInvoices.map((invoice) => (
+              <label
+                key={invoice.id}
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "auto 1fr auto auto",
+                  gap: "12px",
+                  alignItems: "center",
+                  padding: "12px 14px",
+                  border: "1px solid #e2e8f0",
+                  borderRadius: "12px",
+                  cursor: "pointer",
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={selectedBatchInvoiceIds.includes(invoice.id)}
+                  onChange={() => toggleBatchInvoice(invoice.id)}
+                />
+                <div>
+                  <div style={{ fontSize: "14px", fontWeight: "700", color: "#0f172a" }}>
+                    #{invoice.invoiceNumber}
+                  </div>
+                  <div style={{ fontSize: "12px", color: "#64748b" }}>
+                    {invoice.customer?.companyName || invoice.customer?.name || invoice.customerName || "Customer"} · {invoice.supplier?.supplierName || invoice.supplierName || "Supplier"}
+                  </div>
+                </div>
+                <span style={{ fontSize: "13px", fontWeight: "700", color: "#0f172a" }}>
+                  Rs. {Number(invoice.disbursementAmount || 0).toLocaleString("en-IN")}
+                </span>
+                <span style={{ fontSize: "12px", color: "#64748b" }}>
+                  {invoice.loanAccount?.lanId || invoice.lanNumber || "LAN"}
+                </span>
+              </label>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Invoice List */}

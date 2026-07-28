@@ -29,6 +29,11 @@ export interface DocumentListItem {
   verifiedAt: Date | null;
   remarks: string | null;
   rmRemarks: string | null;
+  lender: string | null;
+  renewalCycleId: number | null;
+  isCarriedForward: boolean;
+  carriedForwardFromDocumentId: number | null;
+  documentLabel: string | null;
   issueDate: Date | null;
   expiryDate: Date | null;
   createdAt: Date;
@@ -67,6 +72,11 @@ export class DocumentService {
     expiryDate?: Date;
     remarks?: string;
     rmRemarks?: string;
+    lender?: string;
+    renewalCycleId?: number;
+    isCarriedForward?: boolean;
+    carriedForwardFromDocumentId?: number;
+    documentLabel?: string;
   }): Promise<Document> {
     // Verify customer exists
     const customer = await this.customerRepository.findOne({
@@ -112,6 +122,11 @@ export class DocumentService {
         'document.verifiedAt',
         'document.remarks',
         'document.rmRemarks',
+        'document.lender',
+        'document.renewalCycleId',
+        'document.isCarriedForward',
+        'document.carriedForwardFromDocumentId',
+        'document.documentLabel',
         'document.issueDate',
         'document.expiryDate',
         'document.createdAt',
@@ -158,6 +173,11 @@ export class DocumentService {
         verifiedAt: document.verifiedAt || null,
         remarks: document.remarks || null,
         rmRemarks: document.rmRemarks || null,
+        lender: document.lender || null,
+        renewalCycleId: document.renewalCycleId || null,
+        isCarriedForward: Boolean(document.isCarriedForward),
+        carriedForwardFromDocumentId: document.carriedForwardFromDocumentId || null,
+        documentLabel: document.documentLabel || null,
         issueDate: document.issueDate || null,
         expiryDate: document.expiryDate || null,
         createdAt: document.createdAt,
@@ -212,6 +232,11 @@ export class DocumentService {
       remarks?: string;
       rmRemarks?: string;
       documentType?: string;
+      lender?: string | null;
+      renewalCycleId?: number | null;
+      isCarriedForward?: boolean;
+      carriedForwardFromDocumentId?: number | null;
+      documentLabel?: string | null;
     }
   ): Promise<Document> {
     const document = await this.documentRepository.findOne({ where: { id } });
@@ -225,6 +250,11 @@ export class DocumentService {
     if (data.remarks !== undefined) document.remarks = data.remarks;
     if (data.rmRemarks !== undefined) document.rmRemarks = data.rmRemarks;
     if (data.documentType !== undefined) document.documentType = data.documentType;
+    if (data.lender !== undefined) document.lender = data.lender;
+    if (data.renewalCycleId !== undefined) document.renewalCycleId = data.renewalCycleId;
+    if (data.isCarriedForward !== undefined) document.isCarriedForward = data.isCarriedForward;
+    if (data.carriedForwardFromDocumentId !== undefined) document.carriedForwardFromDocumentId = data.carriedForwardFromDocumentId;
+    if (data.documentLabel !== undefined) document.documentLabel = data.documentLabel;
 
     return await this.documentRepository.save(document);
   }
@@ -239,6 +269,5 @@ export class DocumentService {
     await this.documentRepository.remove(document);
   }
 }
-
 
 

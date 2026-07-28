@@ -18,6 +18,15 @@ export const documentService = {
       if (meta.rmRemarks) {
         formData.append('rmRemarks', meta.rmRemarks)
       }
+      if (meta.lender) {
+        formData.append('lender', meta.lender)
+      }
+      if (meta.renewalCycleId) {
+        formData.append('renewalCycleId', meta.renewalCycleId)
+      }
+      if (meta.documentLabel) {
+        formData.append('documentLabel', meta.documentLabel)
+      }
 
       formData.append('file', file)
 

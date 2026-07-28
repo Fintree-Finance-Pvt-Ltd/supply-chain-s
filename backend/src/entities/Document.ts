@@ -11,6 +11,7 @@ import { Customer } from './Customer';
 import { User } from './User';
 import { CoApplicant } from './CoApplicant';
 import { Applicant } from './Applicant';
+import { CaseRenewalCycle } from './CaseRenewalCycle';
 
 @Entity('documents')
 export class Document {
@@ -64,6 +65,21 @@ export class Document {
   @Column({ type: 'text', nullable: true })
   rmRemarks: string;
 
+  @Column({ type: 'varchar', length: 20, nullable: true })
+  lender: string | null;
+
+  @Column({ type: 'int', nullable: true })
+  renewalCycleId: number | null;
+
+  @Column({ type: 'boolean', default: false })
+  isCarriedForward: boolean;
+
+  @Column({ type: 'int', nullable: true })
+  carriedForwardFromDocumentId: number | null;
+
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  documentLabel: string | null;
+
   @Column({ type: 'timestamp', nullable: true })
 issueDate: Date;
 
@@ -93,4 +109,12 @@ expiryDate: Date;
   @ManyToOne(() => User, (user) => user.uploadedDocuments)
   @JoinColumn({ name: 'uploadedBy' })
   uploadedByUser: User;
+
+  @ManyToOne(() => CaseRenewalCycle, (cycle) => cycle.documents, { nullable: true })
+  @JoinColumn({ name: 'renewalCycleId' })
+  renewalCycle: CaseRenewalCycle | null;
+
+  @ManyToOne(() => Document, { nullable: true })
+  @JoinColumn({ name: 'carriedForwardFromDocumentId' })
+  carriedForwardFromDocument: Document | null;
 }

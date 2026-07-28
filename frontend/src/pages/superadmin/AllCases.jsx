@@ -48,12 +48,17 @@ const STATUS_OPTIONS = [
 
 const DEFAULT_FILTERS = {
   companyName: '',
+  caseType: '',
   status: '',
   stage: '',
   userId: '',
+  rmId: '',
   startDate: '',
   endDate: '',
   showSanctions: false,
+  sortBy: 'newest',
+  sortOrder: 'DESC',
+  viewAll: false,
   limit: 10,
   page: 1,
 };
@@ -209,13 +214,18 @@ const AllCases = () => {
     try {
       const params = {
         companyName: filters.companyName?.trim() || undefined,
+        caseType: filters.caseType || undefined,
         status: filters.status || undefined,
         stage: filters.stage || undefined,
         userId: filters.userId ? parseInt(filters.userId) : undefined,
+        rmId: filters.rmId ? parseInt(filters.rmId) : undefined,
         startDate: filters.startDate || undefined,
         endDate: filters.endDate || undefined,
         includeSanctions: filters.showSanctions ? true : undefined,
-        limit: filters.limit,
+        sortBy: filters.sortBy,
+        sortOrder: filters.sortBy === 'alphabetical' || filters.sortBy === 'oldest' ? 'ASC' : filters.sortOrder,
+        viewAll: filters.viewAll || undefined,
+        limit: filters.viewAll ? 'all' : filters.limit,
         page: filters.page,
       };
       const data = await performanceService.getAllCases(params);
@@ -235,7 +245,13 @@ const AllCases = () => {
   };
 
   const handleDraftFilterChange = (key, value) => {
-    setDraftFilters(prev => ({ ...prev, [key]: value, page: 1 }));
+    setDraftFilters(prev => ({
+      ...prev,
+      [key]: value,
+      page: 1,
+      ...(key === 'viewAll' && value ? { limit: 'all' } : {}),
+      ...(key === 'viewAll' && !value ? { limit: 10 } : {}),
+    }));
   };
 
   const applyFilters = () => {
@@ -267,12 +283,16 @@ const AllCases = () => {
 
   const activeFilterCount = [
     filters.companyName,
+    filters.caseType,
     filters.status,
     filters.stage,
     filters.userId,
+    filters.rmId,
     filters.startDate,
     filters.endDate,
     filters.showSanctions ? 'showSanctions' : '',
+    filters.sortBy !== DEFAULT_FILTERS.sortBy ? filters.sortBy : '',
+    filters.viewAll ? 'viewAll' : '',
   ].filter(Boolean).length;
 
   return (
@@ -303,7 +323,9 @@ const AllCases = () => {
         <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
           <div>
             <h3 className="font-medium text-gray-900">All Cases</h3>
-            <p className="text-sm text-gray-500 mt-1">{total} cases found</p>
+            <p className="text-sm text-gray-500 mt-1">
+              {total} cases found{filters.viewAll ? ' - viewing all' : ''}
+            </p>
           </div>
           {/* Status Summary */}
           <div className="flex gap-3 text-sm">
@@ -338,11 +360,14 @@ const AllCases = () => {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className={`w-full ${filters.showSanctions ? 'min-w-[1120px]' : 'min-w-[900px]'}`}>
+            <table className={`w-full ${filters.showSanctions ? 'min-w-[1400px]' : 'min-w-[1180px]'}`}>
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Case ID</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Company Name</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Case Type</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">RM</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Aadhaar</th>
                   {filters.showSanctions && (
                     <>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sanctions</th>
@@ -351,6 +376,7 @@ const AllCases = () => {
                   )}
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Stage</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Lifecycle</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Assigned To</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Completed</th>
@@ -382,6 +408,24 @@ const AllCases = () => {
                     </td>
                     <td className="px-4 py-3">
                       <span className="text-gray-600">{c.companyName || 'N/A'}</span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                        String(c.caseType || '').toUpperCase() === 'STERLION'
+                          ? 'bg-violet-100 text-violet-800'
+                          : 'bg-emerald-100 text-emerald-800'
+                      }`}>
+                        {c.caseType || 'FINTREE'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div>
+                        <p className="font-medium text-gray-900">{c.rmName || 'N/A'}</p>
+                        <p className="text-xs text-gray-500">{c.rmId ? `RM ID: ${c.rmId}` : ''}</p>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-gray-600">
+                      {c.applicantAadhaar || 'N/A'}
                     </td>
                     {filters.showSanctions && (
                       <>
@@ -432,6 +476,17 @@ const AllCases = () => {
                       </span>
                     </td>
                     <td className="px-4 py-3">
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                        c.lifecycleStatus === 'archived'
+                          ? 'bg-gray-200 text-gray-800'
+                          : c.lifecycleStatus === 'on_hold'
+                            ? 'bg-yellow-100 text-yellow-800'
+                            : 'bg-green-100 text-green-800'
+                      }`}>
+                        {formatLabel(c.lifecycleStatus || 'active')}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
                       <div>
                         <p className="font-medium text-gray-900">{c.assignedToName || c.userName || 'Unassigned'}</p>
                         <p className="text-sm text-gray-500">{c.assignedToEmail || c.userEmail || ''}</p>
@@ -455,7 +510,7 @@ const AllCases = () => {
         )}
 
         {/* Pagination with React Icons */}
-        {totalPages > 1 && (
+        {!filters.viewAll && totalPages > 1 && (
           <div className="px-5 py-4 border-t border-gray-200 flex items-center justify-between">
             <p className="text-sm text-gray-600">
               Page {filters.page} of {totalPages} ({total} cases)
@@ -537,6 +592,19 @@ const AllCases = () => {
                 </div>
 
                 <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Case Type</label>
+                  <select
+                    value={draftFilters.caseType}
+                    onChange={(e) => handleDraftFilterChange('caseType', e.target.value)}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-primary-500 focus:ring-2 focus:ring-primary-500"
+                  >
+                    <option value="">All Case Types</option>
+                    <option value="FINTREE">Fintree</option>
+                    <option value="STERLION">Sterlion</option>
+                  </select>
+                </div>
+
+                <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
                   <select
                     value={draftFilters.status}
@@ -563,7 +631,7 @@ const AllCases = () => {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">User</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Assigned User</label>
                   <select
                     value={draftFilters.userId}
                     onChange={(e) => handleDraftFilterChange('userId', e.target.value)}
@@ -577,15 +645,54 @@ const AllCases = () => {
                 </div>
 
                 <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">RM ID</label>
+                  <select
+                    value={draftFilters.rmId}
+                    onChange={(e) => handleDraftFilterChange('rmId', e.target.value)}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-primary-500 focus:ring-2 focus:ring-primary-500"
+                  >
+                    <option value="">All RMs</option>
+                    {users.map(user => (
+                      <option key={user.id} value={user.id}>{user.name} ({user.id})</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Sort</label>
+                  <select
+                    value={draftFilters.sortBy}
+                    onChange={(e) => handleDraftFilterChange('sortBy', e.target.value)}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-primary-500 focus:ring-2 focus:ring-primary-500"
+                  >
+                    <option value="newest">Newest to Oldest</option>
+                    <option value="oldest">Oldest to Newest</option>
+                    <option value="alphabetical">Alphabetical</option>
+                  </select>
+                </div>
+
+                <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Rows Per Page</label>
                   <select
-                    value={draftFilters.limit}
-                    onChange={(e) => handleDraftFilterChange('limit', parseInt(e.target.value))}
+                    value={draftFilters.viewAll ? 'all' : draftFilters.limit}
+                    onChange={(e) => {
+                      if (e.target.value === 'all') {
+                        handleDraftFilterChange('viewAll', true)
+                      } else {
+                        setDraftFilters(prev => ({
+                          ...prev,
+                          viewAll: false,
+                          limit: parseInt(e.target.value),
+                          page: 1,
+                        }))
+                      }
+                    }}
                     className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-primary-500 focus:ring-2 focus:ring-primary-500"
                   >
                     {[10, 25, 50, 100].map((limit) => (
                       <option key={limit} value={limit}>{limit} rows</option>
                     ))}
+                    <option value="all">View all cases</option>
                   </select>
                 </div>
 

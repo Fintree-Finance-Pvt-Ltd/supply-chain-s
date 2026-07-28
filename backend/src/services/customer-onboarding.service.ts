@@ -17,6 +17,7 @@ import { DEFAULT_PARTNER_CODES, ROLES } from "../config/constants";
 import { WorkflowValidatorService } from "./workflow-validator.service";
 import { AuditService } from "./audit.service";
 import { RewardService } from "./reward.service";
+import { caseLifecycleService } from "./case-lifecycle.service";
 
 import { getRepository } from "typeorm";
 import { User } from "../entities/User";
@@ -1893,6 +1894,11 @@ Fintree Finance Pvt. Ltd.
   --------------------------------------- */
 
     if (approved && workflow.currentStatus === "md_approved") {
+      await caseLifecycleService.applySanctionDatesAfterMdApproval(
+        customerId,
+        new Date(),
+      );
+
       // // Step 1: Get RM id from customer table
       const customer = await this.customerRepository.findOne({
         where: { id: customerId },
