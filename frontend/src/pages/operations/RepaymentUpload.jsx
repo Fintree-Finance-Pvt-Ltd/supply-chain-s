@@ -42,6 +42,103 @@ const formatAmount = (value) => {
   }).format(amount)
 }
 
+const MONTH_NAMES = {
+  jan: 1,
+  january: 1,
+  feb: 2,
+  february: 2,
+  mar: 3,
+  march: 3,
+  apr: 4,
+  april: 4,
+  may: 5,
+  jun: 6,
+  june: 6,
+  jul: 7,
+  july: 7,
+  aug: 8,
+  august: 8,
+  sep: 9,
+  sept: 9,
+  september: 9,
+  oct: 10,
+  october: 10,
+  nov: 11,
+  november: 11,
+  dec: 12,
+  december: 12
+}
+
+const formatDateParts = (year, month, day) => {
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) return ''
+
+  const date = new Date(year, month - 1, day)
+  const isValidDate =
+    date.getFullYear() === year &&
+    date.getMonth() === month - 1 &&
+    date.getDate() === day
+
+  if (!isValidDate) return ''
+
+  return [
+    String(year).padStart(4, '0'),
+    String(month).padStart(2, '0'),
+    String(day).padStart(2, '0')
+  ].join('-')
+}
+
+const normalizeCollectionDate = (value) => {
+  const raw = String(value || '').trim()
+  if (!raw) return ''
+
+  const yearFirstMatch = raw.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/)
+  if (yearFirstMatch) {
+    return formatDateParts(
+      Number(yearFirstMatch[1]),
+      Number(yearFirstMatch[2]),
+      Number(yearFirstMatch[3])
+    )
+  }
+
+  const dayFirstMatch = raw.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/)
+  if (dayFirstMatch) {
+    return formatDateParts(
+      Number(dayFirstMatch[3]),
+      Number(dayFirstMatch[2]),
+      Number(dayFirstMatch[1])
+    )
+  }
+
+  const compactMatch = raw.match(/^(\d{8})$/)
+  if (compactMatch) {
+    const digits = compactMatch[1]
+    const startsWithYear = Number(digits.slice(0, 4)) >= 1900
+    return startsWithYear
+      ? formatDateParts(Number(digits.slice(0, 4)), Number(digits.slice(4, 6)), Number(digits.slice(6, 8)))
+      : formatDateParts(Number(digits.slice(4, 8)), Number(digits.slice(2, 4)), Number(digits.slice(0, 2)))
+  }
+
+  const dayMonthNameMatch = raw.match(/^(\d{1,2})[\s-]+([a-zA-Z]{3,9})[\s,-]+(\d{4})$/)
+  if (dayMonthNameMatch) {
+    return formatDateParts(
+      Number(dayMonthNameMatch[3]),
+      MONTH_NAMES[dayMonthNameMatch[2].toLowerCase()],
+      Number(dayMonthNameMatch[1])
+    )
+  }
+
+  const monthNameDayMatch = raw.match(/^([a-zA-Z]{3,9})[\s-]+(\d{1,2}),?[\s-]+(\d{4})$/)
+  if (monthNameDayMatch) {
+    return formatDateParts(
+      Number(monthNameDayMatch[3]),
+      MONTH_NAMES[monthNameDayMatch[1].toLowerCase()],
+      Number(monthNameDayMatch[2])
+    )
+  }
+
+  return ''
+}
+
 const selectStyles = {
   control: (base, state) => ({
     ...base,
@@ -167,6 +264,16 @@ const RepaymentUpload = () => {
     }))
   }
 
+  const handleCollectionDateBlur = () => {
+    const normalizedDate = normalizeCollectionDate(formData.collectionDate)
+    if (!normalizedDate) return
+
+    setFormData(prev => ({
+      ...prev,
+      collectionDate: normalizedDate
+    }))
+  }
+
   const handleCompanyChange = (option) => {
     const customer = option?.customer || null
     const nextLoanAccounts = getLoanAccounts(customer)
@@ -205,9 +312,15 @@ const RepaymentUpload = () => {
       return
     }
 
+    const normalizedCollectionDate = normalizeCollectionDate(formData.collectionDate)
+    if (!normalizedCollectionDate) {
+      toast.error('Collection Date must be a valid date in DD-MM-YYYY format')
+      return
+    }
+
     const repaymentData = [{
       lan: formData.lan,
-      collection_date: formData.collectionDate,
+      collection_date: normalizedCollectionDate,
       collection_utr: formData.collectionUtr,
       collection_amount: amount
     }]
@@ -382,12 +495,15 @@ const RepaymentUpload = () => {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Collection Date <span className="text-red-500">*</span></label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Collection Date (DD-MM-YYYY) <span className="text-red-500">*</span></label>
               <input
-                type="date"
+                type="text"
                 name="collectionDate"
                 value={formData.collectionDate}
                 onChange={handleInputChange}
+                onBlur={handleCollectionDateBlur}
+                placeholder="DD-MM-YYYY"
+                autoComplete="off"
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>

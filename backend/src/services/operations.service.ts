@@ -428,6 +428,18 @@ export class OperationsService {
     return next;
   }
 
+  private dateFromParts(year: number, month: number, day: number): Date | null {
+    if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) return null;
+
+    const date = new Date(year, month - 1, day);
+    const isValidDate =
+      date.getFullYear() === year &&
+      date.getMonth() === month - 1 &&
+      date.getDate() === day;
+
+    return isValidDate ? this.toDateOnly(date) : null;
+  }
+
   private formatDateOnly(value: string | Date): string {
     const date = this.toDateOnly(value);
     const year = date.getFullYear();
@@ -451,20 +463,32 @@ export class OperationsService {
 
     const isoMatch = raw.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/);
     if (isoMatch) {
-      const date = new Date(Number(isoMatch[1]), Number(isoMatch[2]) - 1, Number(isoMatch[3]));
-      if (!isNaN(date.getTime())) return this.toDateOnly(date);
+      const date = this.dateFromParts(Number(isoMatch[1]), Number(isoMatch[2]), Number(isoMatch[3]));
+      if (date) return date;
+      throw new Error(`${fieldName} must be a valid date`);
     }
 
     const dmyMatch = raw.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
     if (dmyMatch) {
-      const date = new Date(Number(dmyMatch[3]), Number(dmyMatch[2]) - 1, Number(dmyMatch[1]));
-      if (!isNaN(date.getTime())) return this.toDateOnly(date);
+      const date = this.dateFromParts(Number(dmyMatch[3]), Number(dmyMatch[2]), Number(dmyMatch[1]));
+      if (date) return date;
+      throw new Error(`${fieldName} must be a valid date`);
     }
 
     const parsed = new Date(raw);
     if (!isNaN(parsed.getTime())) return this.toDateOnly(parsed);
 
-    throw new Error(`${fieldName} must be a valid date in YYYY-MM-DD format`);
+    throw new Error(`${fieldName} must be a valid date in DD-MM-YYYY or YYYY-MM-DD format`);
+  }
+
+  private parseRepaymentCollectionDate(value: string): Date {
+    const date = this.parseDateValue(value, 'Collection date');
+    if (!date) throw new Error('Collection date is required');
+    return date;
+  }
+
+  private normalizeRepaymentCollectionDate(value: string): string {
+    return this.formatDateOnly(this.parseRepaymentCollectionDate(value));
   }
 
   private getDateCell(row: ExcelRow, aliases: string[], fieldName: string, required = true): Date | null {
@@ -2674,18 +2698,17 @@ export class OperationsService {
         errors.push({ field: `repayments[${index}].lan`, message: 'LAN must not be null or empty' });
       }
 
-      // Validate collection_date format (YYYY-MM-DD)
+      // Validate collection_date format. Operators often paste DD-MM-YYYY from Excel.
       if (!repayment.collection_date) {
         errors.push({ field: `repayments[${index}].collection_date`, message: 'Collection date is required' });
       } else {
-        const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
-        if (!dateRegex.test(repayment.collection_date)) {
-          errors.push({ field: `repayments[${index}].collection_date`, message: 'Collection date must be in YYYY-MM-DD format' });
-        } else {
-          const date = new Date(repayment.collection_date);
-          if (isNaN(date.getTime())) {
-            errors.push({ field: `repayments[${index}].collection_date`, message: 'Collection date must be a valid date' });
-          }
+        try {
+          this.normalizeRepaymentCollectionDate(repayment.collection_date);
+        } catch (error: any) {
+          errors.push({
+            field: `repayments[${index}].collection_date`,
+            message: error.message || 'Collection date must be a valid date',
+          });
         }
       }
 
@@ -2789,15 +2812,23 @@ export class OperationsService {
       };
     }
 
+    const normalizedRepayments = repayments.map((repayment) => ({
+      ...repayment,
+      lan: repayment.lan.trim(),
+      collection_date: this.normalizeRepaymentCollectionDate(repayment.collection_date),
+      collection_utr: repayment.collection_utr.trim(),
+      collection_amount: Number(repayment.collection_amount),
+    }));
+
     // Step 2: Check for duplicate UTRs in database
     const duplicateChecks = await Promise.all(
-      repayments.map(async (r) => {
+      normalizedRepayments.map(async (r) => {
         const isDuplicate = await this.checkDuplicateUtr(r.lan, r.collection_utr);
         return isDuplicate ? r : null;
       })
     );
 
-    const duplicates = duplicateChecks.filter(r => r !== null);
+    const duplicates = duplicateChecks.filter((r): r is RepaymentRecord => r !== null);
     if (duplicates.length > 0) {
       return {
         success: false,
@@ -2813,10 +2844,10 @@ export class OperationsService {
 
     // Step 3: Save records to database (pending status)
     const savedRecords: RepaymentUpload[] = [];
-    for (const repayment of repayments) {
+    for (const repayment of normalizedRepayments) {
       const record = this.repaymentUploadRepository.create({
         lan: repayment.lan,
-        collectionDate: new Date(repayment.collection_date),
+        collectionDate: this.parseRepaymentCollectionDate(repayment.collection_date),
         collectionUtr: repayment.collection_utr,
         collectionAmount: repayment.collection_amount,
         status: REPAYMENT_UPLOAD_STATUS.PENDING,
@@ -2830,7 +2861,7 @@ export class OperationsService {
     let lmsResponse: any;
     let lmsSuccess = false;
     try {
-      lmsResponse = await this.postRepaymentsToLoanManagement(repayments);
+      lmsResponse = await this.postRepaymentsToLoanManagement(normalizedRepayments);
       lmsSuccess = true;
     } catch (error: any) {
       console.error('[Repayment Upload] Loan management posting failed:', error.message);
