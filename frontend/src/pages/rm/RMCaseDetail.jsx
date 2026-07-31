@@ -1251,23 +1251,13 @@ const handleSaveBankDetails = async () => {
                 ) : (
                   <>
                     <button
-                      disabled={
-                        isSubmitting ||
-                        currentCase.eNachStatus !== "completed" ||
-                        currentCase.eSignStatus !== "completed"
-                      }
+                      disabled={isSubmitting}
                       onClick={handleSubmitToOps}
                       className="w-full btn-primary flex items-center justify-center space-x-2 py-3"
                     >
                       <FiSend />
                       <span>Final Submit to Ops</span>
                     </button>
-                    {(currentCase.eNachStatus !== "completed" ||
-                      currentCase.eSignStatus !== "completed") && (
-                      <p className="text-xs text-red-500 mt-2 text-center">
-                        Complete digital journey before submission
-                      </p>
-                    )}
                   </>
                 )}
               </>

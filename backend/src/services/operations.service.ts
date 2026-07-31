@@ -2055,9 +2055,8 @@ export class OperationsService {
     if (!supplier) {
       throw new Error(`Supplier code ${supplierCode} was not found`);
     }
-    if (supplier.customerId !== customerId) {
-      throw new Error(`Supplier code ${supplierCode} belongs to another customer`);
-    }
+    // Historical invoice imports may reference a valid supplier code from a different
+    // customer/LAN in the current system; allow that only inside invoice migration.
     if (supplier.status !== 'COMPLETED' || !supplier.isActive) {
       throw new Error(`Supplier code ${supplierCode} must be completed and active`);
     }
