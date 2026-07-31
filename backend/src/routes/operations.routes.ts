@@ -92,7 +92,7 @@ router.post(
 
 router.get(
   '/loan-search/customers',
-  roleMiddleware([ROLES.OPERATIONS_TEAM_L1, ROLES.OPERATIONS_TEAM_L2, ROLES.OPERATIONS_HEAD]),
+  roleMiddleware([ROLES.OPERATIONS_TEAM_L1, ROLES.OPERATIONS_TEAM_L2, ROLES.OPERATIONS_HEAD,ROLES.SUPERADMIN]),
   operationsController.searchLoanCustomers
 );
 
