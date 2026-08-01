@@ -797,7 +797,7 @@ const ApprovalScreen = () => {
                       <div className="grid grid-cols-3 gap-3 mt-3">
                         <div>
                           <label className="block text-xs text-gray-500 mb-1">
-                            Penal Charges (%) (yearly)
+                            Penal Charges (%) (monthly)
                           </label>
                           <input
                             type="number"

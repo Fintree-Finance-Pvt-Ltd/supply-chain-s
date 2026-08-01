@@ -14,6 +14,7 @@ import {
 } from '../entities';
 import { Invoice } from '../entities/Invoice';
 import { EntityManager, In, Not } from 'typeorm';
+import { calculateMonthlyPenalAmountRaw, normalizeMonthlyPenalRate } from '../utils/penalCharges';
 
 type MoneyBreakup = {
   principal: number;
@@ -276,7 +277,7 @@ export class LoanManagementService {
 ): AccruedDemandCharges {
   const interestRate = this.toNumber(disbursement?.interestRate);
   const serviceFeeRate = this.toNumber(invoice?.serviceFee);
-  const penalRate = this.toNumber(disbursement?.penalRate);
+  const penalMonthlyRate = normalizeMonthlyPenalRate(disbursement?.penalRate);
   const disbursementDate = disbursement?.disbursementDate || demand.demandDate;
   const dayCount = this.getInterestDayCount(disbursementDate, asOfDate, rules);
   const allocations = [...(demand.allocations || [])]
@@ -310,9 +311,9 @@ export class LoanManagementService {
     accumulatedInterest += this.calculatePercentageAmountRaw(principal, interestRate, 1);
     accumulatedFee += this.calculatePercentageAmountRaw(principal, serviceFeeRate, 1);
     if (day >= rules.penalStartDay) {
-      accumulatedPenal += this.calculatePercentageAmountRaw(
+      accumulatedPenal += calculateMonthlyPenalAmountRaw(
         principal + accumulatedInterest,
-        penalRate,
+        penalMonthlyRate,
         1,
       );
     }
@@ -511,7 +512,7 @@ export class LoanManagementService {
         : this.addDays(disbursementDate, DEFAULT_BILL_TENURE_DAYS);
       const tenureDays = Math.max(1, this.daysBetween(disbursementDate, dueDate));
       const interestRate = this.toNumber(invoice.roiPercentage);
-      const penalRate = this.toNumber(invoice.penalCharges);
+      const penalRate = normalizeMonthlyPenalRate(invoice.penalCharges);
       const accrualRules = this.getAccrualRules(loanAccount);
       const initialCharges = this.calculateAccruedCharges(
         {
@@ -1426,7 +1427,7 @@ export class LoanManagementService {
       disbursementAmount: disbursement ? this.toNumber(disbursement.disbursementAmount) : this.toNumber(demand.principalDue),
       principalOutstanding,
       roi: this.toNumber(disbursement?.interestRate ?? demand.invoice?.roiPercentage),
-      penalRate: this.toNumber(disbursement?.penalRate ?? demand.invoice?.penalCharges),
+      penalRate: normalizeMonthlyPenalRate(disbursement?.penalRate ?? demand.invoice?.penalCharges),
       lastPaymentDate: allocations.lastPaymentDate,
       calculationTill: asOfDate,
       interestDays: charges.dayCount,
@@ -1580,7 +1581,7 @@ export class LoanManagementService {
           'Disbursement Amount',
           'Outstanding Principle',
           'ROI',
-          'Overdue Charges (%)',
+          'Overdue Charges (% Monthly)',
           'Last Payment Date',
           'Calculation Till',
           'Interest Days',

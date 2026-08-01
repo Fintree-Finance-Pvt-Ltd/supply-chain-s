@@ -9,6 +9,7 @@ import { ApprovalService } from './approval.service';
 import { CustomerService } from './customer.service';
 import { CASE_STATUS, APPROVAL_FLOW_TYPES, ROLES } from '../config/constants';
 import { Repository } from 'typeorm';
+import { normalizeMonthlyPenalRate } from '../utils/penalCharges';
 
 const EDIT_ROLES_BY_NOTEPAD_SECTION: Record<CreditNotepadSection, string[]> = {
   [CREDIT_NOTEPAD_SECTIONS.CREDIT_MAKER]: [
@@ -124,7 +125,12 @@ export class CreditService {
       throw new Error('Credit sanction not found');
     }
 
-    Object.assign(sanction, data);
+    Object.assign(sanction, {
+      ...data,
+      ...(data.penalCharges !== undefined
+        ? { penalCharges: normalizeMonthlyPenalRate(data.penalCharges) }
+        : {}),
+    });
     return await this.creditSanctionRepository.save(sanction);
   }
 

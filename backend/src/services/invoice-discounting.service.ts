@@ -15,6 +15,7 @@ import {
 } from "../entities/InvoiceApprovalBatch";
 import { NodemailerProvider } from "../integrations/notifications/email/nodemailer.provider";
 import { loanManagementService } from "./loan-management.service";
+import { normalizeMonthlyPenalRate } from "../utils/penalCharges";
 import { In, IsNull } from "typeorm";
 import crypto from "crypto";
 
@@ -1603,7 +1604,7 @@ if (existingInvoices.length > 0) {
         console.log(
           `Penal charges ${latestInvoiceWithPenal.penalCharges}% found from invoice ${latestInvoiceWithPenal.id} for loan account ${loanAccountId}`,
         );
-        return Number(latestInvoiceWithPenal.penalCharges);
+        return normalizeMonthlyPenalRate(latestInvoiceWithPenal.penalCharges);
       }
 
       // Step 2: Fallback to credit sanction for this customer and partner
@@ -1623,7 +1624,7 @@ if (existingInvoices.length > 0) {
         console.log(
           `Penal charges ${creditSanction.penalCharges}% found from credit sanction for customer ${loanAccount.customerId} and partner ${partnerCode}`,
         );
-        return Number(creditSanction.penalCharges);
+        return normalizeMonthlyPenalRate(creditSanction.penalCharges);
       }
 
       throw new Error(
@@ -1704,7 +1705,9 @@ if (existingInvoices.length > 0) {
     invoiceDueDate.setDate(invoiceDueDate.getDate() + 90);
 
     const roiPercentage = invoice.roiPercentage ?? await this.getROIPercentage(invoice.loanAccountId!);
-    const penalCharges = invoice.penalCharges ?? await this.getPenalCharges(invoice.loanAccountId!);
+    const penalCharges = normalizeMonthlyPenalRate(
+      invoice.penalCharges ?? await this.getPenalCharges(invoice.loanAccountId!),
+    );
     const disbursementAmount = Number(invoice.disbursementAmount);
     const totalRoiAmount = this.calculateTotalRoiAmount(disbursementAmount, roiPercentage, 90);
     const emiAmount = this.calculateEmiAmount(disbursementAmount, totalRoiAmount);
@@ -2220,7 +2223,7 @@ if (existingInvoices.length > 0) {
     
     
     const roiPercentage = invoice.roiPercentage ?? 12.0;
-    const penalCharges = invoice.penalCharges ?? 0;
+    const penalCharges = normalizeMonthlyPenalRate(invoice.penalCharges ?? 0);
 
     if (errors.length > 0) {
       return { valid: false, errors };

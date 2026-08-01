@@ -18,6 +18,7 @@ import { WorkflowValidatorService } from "./workflow-validator.service";
 import { AuditService } from "./audit.service";
 import { RewardService } from "./reward.service";
 import { caseLifecycleService } from "./case-lifecycle.service";
+import { normalizeMonthlyPenalRate } from "../utils/penalCharges";
 
 import { getRepository } from "typeorm";
 import { User } from "../entities/User";
@@ -255,7 +256,7 @@ export class CustomerOnboardingService {
       interestRate: Number(
         partnerSanction.interestRate || partnerSanction.roi || 0,
       ),
-      penalCharges: Number(partnerSanction.penalCharges || 0),
+      penalCharges: normalizeMonthlyPenalRate(partnerSanction.penalCharges),
       processingFees: Number(partnerSanction.processingFees || 0),
       legalCharges: Number(partnerSanction.legalCharges || 0),
       serviceFee: Number(partnerSanction.serviceFee || 0),
@@ -920,6 +921,10 @@ Fintree Finance Pvt. Ltd.
       } else if (sanctionData.sanctionAmount) {
         // Legacy format: single sanction (backward compatibility)
         const lender = sanctionData.lender || "FFPL";
+        const normalizedSanction = this.normalizePartnerSanctionInput({
+          ...sanctionData,
+          partner: lender,
+        });
 
         // Save sanction to credit_sanctions table (loan accounts created after MD approval)
         let sanction = await this.sanctionRepository.findOne({
@@ -930,7 +935,7 @@ Fintree Finance Pvt. Ltd.
             customerId,
             partner: lender,
             creditOfficerId: userId,
-            ...sanctionData,
+            ...normalizedSanction,
             status: "pending", // Pending full approval
           });
           await this.sanctionRepository.save(newSanction);
@@ -949,7 +954,7 @@ Fintree Finance Pvt. Ltd.
         await this.insertSanctionHistoryIfChanged(
           customerId,
           oldSanction || {},
-          sanctionData,
+          normalizedSanction,
           userId,
           "CREDIT_L1",
           remarks,
@@ -1460,7 +1465,7 @@ Fintree Finance Pvt. Ltd.
             changedByUserId: rmId,
             changedByRole: "RM",
             remarks: remarks || "Final terms submitted by RM",
-            ...sanctionData,
+            ...normalizedSanction,
           }),
         );
       }
@@ -1788,6 +1793,10 @@ Fintree Finance Pvt. Ltd.
           sanctionData.partner || sanctionData.lender,
         );
         const sanctionStatus = "approved";
+        const normalizedSanction = this.normalizePartnerSanctionInput({
+          ...sanctionData,
+          partner: lender,
+        });
 
         let sanction = await this.sanctionRepository.findOne({
           where: { customerId, partner: lender },
@@ -1812,24 +1821,24 @@ Fintree Finance Pvt. Ltd.
             customerId,
             partner: lender,
             creditOfficerId: userId,
-            sanctionAmount: sanctionData.sanctionAmount,
-            tenure: sanctionData.tenure || 0,
-            interestRate: sanctionData.interestRate || 0,
-            penalCharges: sanctionData.penalCharges || 0,
-            processingFees: sanctionData.processingFees || 0,
-            conditions: sanctionData.conditions || "",
+            sanctionAmount: normalizedSanction.sanctionAmount,
+            tenure: normalizedSanction.tenure || 0,
+            interestRate: normalizedSanction.interestRate || 0,
+            penalCharges: normalizedSanction.penalCharges || 0,
+            processingFees: normalizedSanction.processingFees || 0,
+            conditions: normalizedSanction.conditions || "",
             status: sanctionStatus,
           });
 
           await this.sanctionRepository.save(newSanction);
         } else {
           await this.sanctionRepository.update(sanction.id, {
-            sanctionAmount: sanctionData.sanctionAmount,
-            tenure: sanctionData.tenure || 0,
-            interestRate: sanctionData.interestRate || 0,
-            penalCharges: sanctionData.penalCharges || 0,
-            processingFees: sanctionData.processingFees || 0,
-            conditions: sanctionData.conditions || "",
+            sanctionAmount: normalizedSanction.sanctionAmount,
+            tenure: normalizedSanction.tenure || 0,
+            interestRate: normalizedSanction.interestRate || 0,
+            penalCharges: normalizedSanction.penalCharges || 0,
+            processingFees: normalizedSanction.processingFees || 0,
+            conditions: normalizedSanction.conditions || "",
             status: sanctionStatus,
             creditOfficerId: userId,
           });
@@ -1842,7 +1851,7 @@ Fintree Finance Pvt. Ltd.
         await this.insertSanctionHistoryIfChanged(
           customerId,
           existingSanction || {},
-          sanctionData,
+          normalizedSanction,
           userId,
           "MD",
           remarks,

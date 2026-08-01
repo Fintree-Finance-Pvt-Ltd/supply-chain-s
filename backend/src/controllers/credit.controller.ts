@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { CreditService } from '../services/credit.service';
+import { normalizeMonthlyPenalRate } from '../utils/penalCharges';
 
 export class CreditController {
   private creditService: CreditService;
@@ -108,7 +109,7 @@ export class CreditController {
           roi: s.interestRate,
           tenor: s.tenure,
           conditions: s.conditions,
-          penalCharges: s.penalCharges,
+          penalCharges: normalizeMonthlyPenalRate(s.penalCharges),
           processingFees: s.processingFees,
           cashCollateral: s.cashCollateral,
           legalCharges: s.legalCharges,
@@ -143,7 +144,7 @@ export class CreditController {
         sanctionAmount: s.sanctionAmount,
         tenure: s.tenure,
         interestRate: s.interestRate,
-        penalCharges: s.penalCharges,
+        penalCharges: normalizeMonthlyPenalRate(s.penalCharges),
         processingFees: s.processingFees,
         legalCharges: s.legalCharges,
         serviceFee: s.serviceFee,

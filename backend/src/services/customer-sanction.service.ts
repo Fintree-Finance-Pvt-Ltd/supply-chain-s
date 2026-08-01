@@ -7,6 +7,7 @@ import {
   PostSanction,
   SanctionLimitHistory,
 } from '../entities';
+import { normalizeMonthlyPenalRate } from '../utils/penalCharges';
 
 export class CustomerSanctionService {
   private customerRepository: Repository<Customer>;
@@ -120,10 +121,16 @@ export class CustomerSanctionService {
 
     return {
       customerWorkflow,
-      creditSanctions,
+      creditSanctions: creditSanctions.map((sanction) => ({
+        ...sanction,
+        penalCharges: normalizeMonthlyPenalRate(sanction.penalCharges),
+      })),
       postSanctions,
       operationsChecks,
-      sanctionLimitHistory,
+      sanctionLimitHistory: sanctionLimitHistory.map((history) => ({
+        ...history,
+        penalCharges: normalizeMonthlyPenalRate(history.penalCharges),
+      })),
     };
   }
 }

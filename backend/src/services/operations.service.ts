@@ -27,6 +27,7 @@ import { loanManagementService } from './loan-management.service';
 import path from 'path';
 import * as yauzl from 'yauzl';
 import { XMLParser } from 'fast-xml-parser';
+import { normalizeMonthlyPenalRate } from '../utils/penalCharges';
 
 export interface RepaymentRecord {
   lan: string;
@@ -982,7 +983,7 @@ export class OperationsService {
       sanction_amount: 1000000,
       tenure_months: 12,
       interest_rate: 18,
-      penal_rate: 24,
+      penal_rate: 3,
       processing_fee: 2,
       service_fee: 0,
       bank_account_number: '123456789012',
@@ -1696,7 +1697,7 @@ export class OperationsService {
     const sanctionAmount = this.toNumber(this.getCell(row, ['sanction_amount', 'sanctioned_amount'])) || 0;
     const tenure = this.toNumber(this.getCell(row, ['tenure_months', 'tenure'])) || 0;
     const interestRate = this.toNumber(this.getCell(row, ['interest_rate', 'roi_percentage', 'roi'])) || 0;
-    const penalRate = this.toNumber(this.getCell(row, ['penal_rate', 'penal_charges'])) || 0;
+    const penalRate = normalizeMonthlyPenalRate(this.toNumber(this.getCell(row, ['penal_rate', 'penal_charges'])) || 0);
     const processingFeeInput = this.toNumber(this.getCell(row, ['processing_fee', 'processing_fees'])) || 0;
     const serviceFeeInput = this.toNumber(this.getCell(row, ['service_fee', 'processing_fee_amount'])) || 0;
     const processingFeeRate = processingFeeInput <= 999.99 ? processingFeeInput : 0;
@@ -2131,9 +2132,10 @@ export class OperationsService {
     const roiPercentage =
       this.toNumber(this.getCell(row, ['roi_percentage', 'roi'])) ??
       Number(sanction?.interestRate || 0);
-    const penalCharges =
+    const penalCharges = normalizeMonthlyPenalRate(
       this.toNumber(this.getCell(row, ['penal_charges', 'penal_rate'])) ??
-      Number(sanction?.penalCharges || 0);
+      Number(sanction?.penalCharges || 0),
+    );
     const serviceFee =
       this.toNumber(this.getCell(row, ['service_fee'])) ??
       Number(sanction?.serviceFee || 0);

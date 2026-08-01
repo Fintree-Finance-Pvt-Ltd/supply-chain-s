@@ -175,7 +175,7 @@ const RMCaseDetail = () => {
       sanctionAmount,
       tenure: Number(s.tenure) > 0 ? s.tenure : 12,
       interestRate: s.interestRate || s.roi || "",
-      penalCharges:Number(s.penalCharges) > 0? s.penalCharges: 36,
+      penalCharges:Number(s.penalCharges) > 0? s.penalCharges: 3,
       processingFees: s.processingFees || "",
       legalCharges:Number(s.legalCharges) > 0? s.legalCharges: sanctionAmount * 0.1,
       serviceFee: s.serviceFee || "",
@@ -727,7 +727,7 @@ const handleSaveBankDetails = async () => {
                     </div>
                     <div className="p-3 bg-indigo-50 rounded-lg">
                       <label className="block text-[10px] text-indigo-600 uppercase font-bold mb-1">
-                       Penal Charges (%) (Yearly)
+                       Penal Charges (%) (Monthly)
                       </label>
                       <input
                         type="number"

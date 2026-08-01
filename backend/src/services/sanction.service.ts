@@ -14,6 +14,7 @@ import { Invoice } from '../entities/Invoice';
 import { Partner, PARTNER_STATUS } from '../entities/Partner';
 import { DEFAULT_PARTNER_CODES } from '../config/constants';
 import { RewardService } from './reward.service';
+import { normalizeMonthlyPenalRate } from '../utils/penalCharges';
 
 
 export class SanctionService {
@@ -291,7 +292,7 @@ await this.upsertCreditSanction(
               sanctionAmount: ps.sanctionAmount,
               tenure: ps.tenure || 0,
               interestRate: ps.interestRate || 0,
-              penalCharges: ps.penalCharges || 0,
+              penalCharges: normalizeMonthlyPenalRate(ps.penalCharges),
               processingFees: ps.processingFees || 0,
               legalCharges: ps.legalCharges || 0, // ✅ ADD THIS
               serviceFee: ps.serviceFee || 0, // ✅ ADD THIS
@@ -368,7 +369,7 @@ await this.upsertCreditSanction(
             sanctionAmount: sanctionData.sanctionAmount,
             tenure: sanctionData.tenure || 0,
             interestRate: sanctionData.interestRate || 0,
-            penalCharges: sanctionData.penalCharges || 0,
+            penalCharges: normalizeMonthlyPenalRate(sanctionData.penalCharges),
             processingFees: sanctionData.processingFees || 0,
             legalCharges: sanctionData.legalCharges || 0,
             cashCollateral: sanctionData.cashCollateral || 0,
@@ -424,7 +425,7 @@ await this.upsertCreditSanction(
         sanctionAmount: sanctionData?.sanctionAmount,
         tenure: sanctionData?.tenure,
         interestRate: sanctionData?.interestRate,
-        penalCharges: sanctionData?.penalCharges,
+        penalCharges: normalizeMonthlyPenalRate(sanctionData?.penalCharges),
         processingFees: sanctionData?.processingFees,
         conditions: sanctionData?.conditions,
       }));
@@ -474,7 +475,7 @@ if (existing) {
   sanctionAmount: Number(sanctionAmount) || 0,
   tenure: Number(tenure) || 0,
   interestRate: Number(interestRate) || 0,
-  penalCharges: Number(penalCharges) || 0,
+  penalCharges: normalizeMonthlyPenalRate(penalCharges),
   processingFees: Number(processingFees) || 0,
   legalCharges: Number(legalCharges) || 0,   //  MUST ADD
   serviceFee: Number(serviceFee) || 0,   //  MUST ADD
@@ -491,7 +492,7 @@ if (existing) {
     sanctionAmount,
     tenure: tenure || 0,
     interestRate: interestRate || 0,
-    penalCharges: penalCharges || 0,
+    penalCharges: normalizeMonthlyPenalRate(penalCharges),
     processingFees: processingFees || 0,
     legalCharges: Number(legalCharges) || 0,
     cashCollateral: Number(cashCollateral) || 0,

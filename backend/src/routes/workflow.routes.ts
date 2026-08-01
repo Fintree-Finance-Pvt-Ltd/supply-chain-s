@@ -10,6 +10,7 @@ import multer from 'multer';
 import path from 'path';
 import { LoanAccount } from '../entities/LoanAccount';
 import { CLIENT_RENEG_LIMIT } from 'tls';
+import { normalizeMonthlyPenalRate } from '../utils/penalCharges';
 const router = Router();
 
 // Apply auth middleware to all workflow routes
@@ -825,7 +826,7 @@ const unutilizedLimit = Number(
       success: true,
       data: {
         roi: sanction?.interestRate || 0,
-        penalCharges: sanction?.penalCharges || 0,
+        penalCharges: normalizeMonthlyPenalRate(sanction?.penalCharges || 0),
         serviceFee: sanction?.serviceFee || 0,
         sanctionAmount: sanction?.sanctionAmount || 0,
         utilizedLimit,
