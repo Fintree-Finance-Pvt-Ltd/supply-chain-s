@@ -320,13 +320,17 @@ const ApprovalScreen = () => {
     try {
       if (approvalRole === "md") {
         // MD should approve/reject ONLY. Sanction terms must be pre-filled by RM.
-        const lockedPartnerSanctions = partnerSanctions.map((ps) => ({
-          ...ps,
-          status: "approved",
-        }));
+        // Only send editable partner rows. Previously approved partners are locked
+        // and must not be resent as modified sanctions.
+        const editablePartnerSanctions = partnerSanctions
+          .filter((ps) => !isPartnerLocked(ps))
+          .map((ps) => ({
+            ...ps,
+            status: "approved",
+          }));
 
         await workflowService.approveMD(id, true, comments, {
-          partnerSanctions: lockedPartnerSanctions,
+          partnerSanctions: editablePartnerSanctions,
         });
       } else {
         throw new Error("Unauthorized role for this action");
@@ -738,7 +742,7 @@ const ApprovalScreen = () => {
                               e.preventDefault();
                             }}
                             className="input-field text-sm"
-                            readOnly={false}
+                            readOnly={isPartnerLocked(ps)}
                           />
 
                           {ps.sanctionAmount && (
