@@ -68,11 +68,11 @@ const CLOSED_DEMAND_STATUSES = [DEMAND_STATUS.PAID, DEMAND_STATUS.REVERSED];
 const DEFAULT_BILL_TENURE_DAYS = 90;
 const DEFAULT_ACCRUAL_RULES: AccrualRules = {
   includeDisbursementDate: false,
-  penalStartDay: 92,
+  penalStartDay: 91,
 };
 const MUTHOOT_ACCRUAL_RULES: AccrualRules = {
   includeDisbursementDate: true,
-  penalStartDay: 90,
+  penalStartDay: 92,
 };
 
 type AccruedDemandCharges = {
@@ -268,7 +268,82 @@ export class LoanManagementService {
 
   //new fixes for muthoot allocation
 
-  private calculateAccruedCharges(
+// private calculateAccruedCharges(
+//   demand: LoanDemand,
+//   disbursement: LoanDisbursement | null | undefined,
+//   invoice: Invoice | null | undefined,
+//   asOfDate: string | Date = new Date(),
+//   rules: AccrualRules = DEFAULT_ACCRUAL_RULES,
+// ): AccruedDemandCharges {
+//   const interestRate = this.toNumber(disbursement?.interestRate);
+//   const serviceFeeRate = this.toNumber(invoice?.serviceFee);
+//   const penalMonthlyRate = normalizeMonthlyPenalRate(disbursement?.penalRate);
+//   const disbursementDate = disbursement?.disbursementDate || demand.demandDate;
+//   const dayCount = this.getInterestDayCount(disbursementDate, asOfDate, rules);
+//   const allocations = [...(demand.allocations || [])]
+//     .filter(allocation => allocation.repayment?.status !== REPAYMENT_STATUS.REVERSED)
+//     .sort((a, b) => {
+//       const dateDiff = this.toDateOnly(a.allocationDate).getTime() - this.toDateOnly(b.allocationDate).getTime();
+//       return dateDiff || this.toNumber(a.id) - this.toNumber(b.id);
+//     });
+
+//   let principal = this.roundMoney(this.toNumber(demand.principalDue));
+//   let accumulatedInterest = 0;
+//   let accumulatedFee = 0;
+//   let accumulatedPenal = 0;
+//   let allocationIndex = 0;
+
+//   for (let day = 1; day <= dayCount; day += 1) {
+//     const accrualDate = this.getAccrualDate(disbursementDate, day, rules);
+
+//     // 1. Apply allocations strictly BEFORE this day (all products)
+//     while (
+//       allocationIndex < allocations.length &&
+//       this.toDateOnly(allocations[allocationIndex].allocationDate).getTime() < accrualDate.getTime()
+//     ) {
+//       principal = this.roundMoney(
+//         Math.max(principal - this.toNumber(allocations[allocationIndex].principalAmount), 0),
+//       );
+//       allocationIndex += 1;
+//     }
+
+//     // 2. Accrue interest / fee / penal on the opening principal of the day
+//     accumulatedInterest += this.calculatePercentageAmountRaw(principal, interestRate, 1);
+//     accumulatedFee += this.calculatePercentageAmountRaw(principal, serviceFeeRate, 1);
+//     if (day >= rules.penalStartDay) {
+//       accumulatedPenal += calculateMonthlyPenalAmountRaw(
+//         principal + accumulatedInterest,
+//         penalMonthlyRate,
+//         1,
+//       );
+//     }
+
+//     // 3. ONLY for MFL (includeDisbursementDate = true) –
+//     //    apply allocations that fall ON this day AFTER accruing,
+//     //    so collection-day charges are calculated on pre-payment principal
+//     if (rules.includeDisbursementDate) {
+//       while (
+//         allocationIndex < allocations.length &&
+//         this.toDateOnly(allocations[allocationIndex].allocationDate).getTime() <= accrualDate.getTime()
+//       ) {
+//         principal = this.roundMoney(
+//           Math.max(principal - this.toNumber(allocations[allocationIndex].principalAmount), 0),
+//         );
+//         allocationIndex += 1;
+//       }
+//     }
+//   }
+
+//   return {
+//     principal: this.roundMoney(principal),
+//     interestDue: this.roundMoney(accumulatedInterest),
+//     feeDue: this.roundMoney(accumulatedFee),
+//     penalDue: this.roundMoney(accumulatedPenal),
+//     dayCount,
+//   };
+// }
+
+private calculateAccruedCharges(
   demand: LoanDemand,
   disbursement: LoanDisbursement | null | undefined,
   invoice: Invoice | null | undefined,
@@ -293,6 +368,9 @@ export class LoanManagementService {
   let accumulatedPenal = 0;
   let allocationIndex = 0;
 
+  // Frozen base used after penalStartDay (matches nitya block calculation)
+  let compoundBase: number | null = null;
+
   for (let day = 1; day <= dayCount; day += 1) {
     const accrualDate = this.getAccrualDate(disbursementDate, day, rules);
 
@@ -305,30 +383,45 @@ export class LoanManagementService {
         Math.max(principal - this.toNumber(allocations[allocationIndex].principalAmount), 0),
       );
       allocationIndex += 1;
+      // If principal reduced after compounding started, reduce the frozen base too
+      if (compoundBase !== null) {
+        compoundBase = this.roundMoney(Math.max(compoundBase - this.toNumber(allocations[allocationIndex - 1].principalAmount), 0));
+      }
     }
 
-    // 2. Accrue interest / fee / penal on the opening principal of the day
-    accumulatedInterest += this.calculatePercentageAmountRaw(principal, interestRate, 1);
-    accumulatedFee += this.calculatePercentageAmountRaw(principal, serviceFeeRate, 1);
+    // 2. Decide the base for interest
     if (day >= rules.penalStartDay) {
+      if (compoundBase === null) {
+        // First day of compounding – freeze (P + I so far)
+        compoundBase = this.roundMoney(principal + accumulatedInterest);
+      }
+    }
+
+    const interestBase = compoundBase !== null ? compoundBase : principal;
+
+    accumulatedInterest += this.calculatePercentageAmountRaw(interestBase, interestRate, 1);
+    accumulatedFee += this.calculatePercentageAmountRaw(principal, serviceFeeRate, 1);
+
+    if (day >= rules.penalStartDay && compoundBase !== null) {
+      // Penal also on the same frozen base (exact match to nitya)
       accumulatedPenal += calculateMonthlyPenalAmountRaw(
-        principal + accumulatedInterest,
+        compoundBase,
         penalMonthlyRate,
         1,
       );
     }
 
-    // 3. ONLY for MFL (includeDisbursementDate = true) –
-    //    apply allocations that fall ON this day AFTER accruing,
-    //    so collection-day charges are calculated on pre-payment principal
+    // 3. ONLY for MFL – apply same-day allocations AFTER accruing
     if (rules.includeDisbursementDate) {
       while (
         allocationIndex < allocations.length &&
         this.toDateOnly(allocations[allocationIndex].allocationDate).getTime() <= accrualDate.getTime()
       ) {
-        principal = this.roundMoney(
-          Math.max(principal - this.toNumber(allocations[allocationIndex].principalAmount), 0),
-        );
+        const paidPrincipal = this.toNumber(allocations[allocationIndex].principalAmount);
+        principal = this.roundMoney(Math.max(principal - paidPrincipal, 0));
+        if (compoundBase !== null) {
+          compoundBase = this.roundMoney(Math.max(compoundBase - paidPrincipal, 0));
+        }
         allocationIndex += 1;
       }
     }
