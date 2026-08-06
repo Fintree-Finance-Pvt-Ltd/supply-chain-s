@@ -727,7 +727,7 @@ const handleSaveBankDetails = async () => {
                     </div>
                     <div className="p-3 bg-indigo-50 rounded-lg">
                       <label className="block text-[10px] text-indigo-600 uppercase font-bold mb-1">
-                       Penal Charges (%) (Monthly)
+                       Penal Charges (%) (Yearly)
                       </label>
                       <input
                         type="number"
