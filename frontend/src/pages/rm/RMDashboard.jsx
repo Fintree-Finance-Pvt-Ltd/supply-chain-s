@@ -220,7 +220,7 @@ const RMDashboard = () => {
   ]
 
   const handleRowClick = (row) => {
-    if (row.status === CASE_STATUS.DRAFT) {
+    if ([CASE_STATUS.DRAFT, CASE_STATUS.RETURNED_TO_RM].includes(row.status)) {
       navigate(`/rm/customer/new?id=${row.id}`)
     } else {
       navigate(`/rm/customer/${row.id}`)
