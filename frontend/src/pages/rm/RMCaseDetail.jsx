@@ -105,6 +105,21 @@ const RMCaseDetail = () => {
     document.getElementById("fileInput").click();
   };
 
+  const validateBankDetails = () => {
+  if (
+    !bankDetails.bankAccountNo?.trim() ||
+    !bankDetails.bankIfscCode?.trim() ||
+    !bankDetails.bankName?.trim() ||
+    !bankDetails.bankBranch?.trim() ||
+    !bankDetails.bankType?.trim()
+  ) {
+    toast.error("Please fill all mandatory bank details");
+    return false;
+  }
+
+  return true;
+};
+
   const handleFileChange = async (e) => {
     const file = e.target.files[0];
 
@@ -209,6 +224,7 @@ const RMCaseDetail = () => {
   }, [currentCase]);
 
 const handleSaveBankDetails = async () => {
+  if (!validateBankDetails()) return;
     setIsUpdating(true);
     try {
       // Build partner sanctions array
@@ -319,6 +335,7 @@ const handleSaveBankDetails = async () => {
   };
 
   const handleSubmitToOps = async () => {
+    if (!validateBankDetails()) return;
     if (!remarks.trim()) {
       toast.error("Please add submission remarks");
       return;
@@ -976,7 +993,7 @@ const handleSaveBankDetails = async () => {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Account Number
+                    Account Number <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="text"
@@ -989,11 +1006,12 @@ const handleSaveBankDetails = async () => {
                     }
                     className="input-field"
                     readOnly={isReadOnly}
+                    
                   />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    IFSC Code
+                    IFSC Code <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="text"
@@ -1010,7 +1028,7 @@ const handleSaveBankDetails = async () => {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Bank Name
+                    Bank Name <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="text"
@@ -1027,7 +1045,7 @@ const handleSaveBankDetails = async () => {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Branch
+                    Branch <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="text"
@@ -1044,7 +1062,7 @@ const handleSaveBankDetails = async () => {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Account Type
+                    Account Type <span className="text-red-500">*</span>
                   </label>
                   <select
                     value={bankDetails.bankType}
