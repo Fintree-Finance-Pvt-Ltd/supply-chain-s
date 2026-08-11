@@ -181,53 +181,90 @@ const CaseCalendar = () => {
         ) : (
           <div className="overflow-x-auto">
             <table className="min-w-[980px] w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">Date</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">Type</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">Customer</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">RM</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">Lender</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">Reference</th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold uppercase text-gray-500">Days</th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold uppercase text-gray-500">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100 bg-white">
-                {events.map((event) => (
-                  <tr key={event.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 text-sm font-medium text-gray-900">{formatDate(event.date)}</td>
-                    <td className="px-4 py-3">
-                      <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${eventTone(event.type)}`}>
-                        {event.type === 'SANCTION_EXPIRY' ? 'Sanction Expiry' : 'Collection Due'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <p className="text-sm font-medium text-gray-900">{event.customerName || 'N/A'}</p>
-                      <p className="text-xs text-gray-500">Case #{event.customerId}</p>
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-700">{event.rmName || '-'}</td>
-                    <td className="px-4 py-3 text-sm text-gray-700">{event.lender || '-'}</td>
-                    <td className="px-4 py-3 text-sm text-gray-700">
-                      {event.invoiceNumber || `#${event.referenceId}`}
-                    </td>
-                    <td className="px-4 py-3 text-right text-sm font-semibold text-gray-900">{event.daysUntil}</td>
-                    <td className="px-4 py-3 text-right">
-                      {event.type === 'SANCTION_EXPIRY' && event.actionAvailable && canStartRenewal ? (
-                        <button
-                          type="button"
-                          onClick={() => handleStartRenewal(event)}
-                          className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700"
-                        >
-                          Send for Renewal
-                        </button>
-                      ) : (
-                        <span className="text-xs text-gray-400">-</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
+           <thead className="bg-gray-50">
+  <tr>
+    <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">Date</th>
+    <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">Type </th>
+    <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">Customer </th>
+    <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">RM </th>
+    <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">Lender</th>
+    <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">Reference</th>
+    <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">Expiry Date</th>
+    <th className="px-4 py-3 text-right text-xs font-semibold uppercase text-gray-500">Days </th>
+    <th className="px-4 py-3 text-right text-xs font-semibold uppercase text-gray-500">Remaining Days for Renewal </th>
+    <th className="px-4 py-3 text-right text-xs font-semibold uppercase text-gray-500">Action</th>
+  </tr>
+</thead>
+<tbody className="divide-y divide-gray-100 bg-white">
+  {events.map((event) => {
+    const daysUntil = Number(event.daysUntil)
+
+    const remainingDaysForRenewal =
+      event.type === 'SANCTION_EXPIRY'
+        ? Math.max(0, daysUntil - 15)
+        : null
+
+    const renewalAvailable =
+      event.type === 'SANCTION_EXPIRY' &&
+      daysUntil >= 0 &&
+      daysUntil <= 15
+
+    return (
+      <tr key={event.id} className="hover:bg-gray-50" >
+        <td className="px-4 py-3 text-sm font-medium text-gray-900">{formatDate(event.date)}</td>
+        <td className="px-4 py-3"><span
+            className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${eventTone(event.type)}`}>
+            {event.type === 'SANCTION_EXPIRY'
+              ? 'Sanction Expiry' : 'Collection Due'}
+          </span>
+        </td>
+        <td className="px-4 py-3">
+          <p className="text-sm font-medium text-gray-900">{event.customerName || 'N/A'}</p>
+          <p className="text-xs text-gray-500">Case #{event.customerId}</p>
+        </td>
+        <td className="px-4 py-3 text-sm text-gray-700">{event.rmName || '-'}</td>
+        <td className="px-4 py-3 text-sm text-gray-700">{event.lender || '-'} </td>
+        <td className="px-4 py-3 text-sm text-gray-700">
+          {event.invoiceNumber || `#${event.referenceId}`}
+        </td>
+
+              <td className="px-4 py-3 text-sm text-gray-700">
+  {event.type === 'SANCTION_EXPIRY'
+    ? formatDate(event.date)
+    : '-'}
+</td>
+
+        <td className="px-4 py-3 text-right text-sm font-semibold text-gray-900">
+          {daysUntil}
+        </td>
+
+        {/* Remaining Days for Renewal */}
+        <td className="px-4 py-3 text-right text-sm font-semibold text-gray-900">
+          {event.type === 'SANCTION_EXPIRY'
+            ? renewalAvailable
+              ? 'Renewal Available'
+              : `${remainingDaysForRenewal} days`
+            : '-'}
+        </td>
+
+        {/* Action */}
+       <td className="px-4 py-3 text-right">
+  {renewalAvailable && canStartRenewal ? (
+    <button
+      type="button"
+      onClick={() => handleStartRenewal(event)}
+      className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700"
+    >
+      Send for Renewal
+    </button>
+  ) : (
+    <span className="text-xs text-gray-400">-</span>
+  )}
+</td>
+      </tr>
+    )
+  })}
+</tbody>
             </table>
           </div>
         )}

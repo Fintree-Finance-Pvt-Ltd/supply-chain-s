@@ -15,7 +15,7 @@ import {
 import { Invoice } from '../entities/Invoice';
 import { EntityManager, In, Not } from 'typeorm';
 import { calculateMonthlyPenalAmountRaw, normalizeMonthlyPenalRate } from '../utils/penalCharges';
-
+import { Customer } from '../entities/Customer';
 type MoneyBreakup = {
   principal: number;
   interest: number;
@@ -42,6 +42,7 @@ type ScfReportFilters = {
   endDate?: string;
   asOfDate?: string;
   lan?: string;
+  allCases?: boolean;
 };
 
 type WorkbookCellValue = string | number | Date | null | undefined;
@@ -93,7 +94,7 @@ export class LoanManagementService {
   private ledgerRepository = AppDataSource.getRepository(LoanLedgerEntry);
   private snapshotRepository = AppDataSource.getRepository(LoanAccountSnapshot);
   private crc32Table: number[] | null = null;
-
+  private customerRepository = AppDataSource.getRepository(Customer);
   private toNumber(value: unknown): number {
     const parsed = Number(value || 0);
     return Number.isFinite(parsed) ? parsed : 0;
@@ -1358,6 +1359,60 @@ private calculateAccruedCharges(
     };
   }
 
+ private async resolveScfReportFilters(
+  filters?: ScfReportFilters,
+): Promise<ScfReportFilters> {
+
+  if (!filters?.allCases) {
+    return filters || {};
+  }
+
+  const earliestCase =
+    await this.customerRepository
+      .createQueryBuilder('customer')
+      .select(
+        'MIN(customer.createdAt)',
+        'startDate'
+      )
+      .getRawOne();
+
+  console.log(
+    'EARLIEST CASE:',
+    earliestCase
+  );
+
+  const today =
+    this.formatDateOnly(new Date());
+
+  let earliestDate:
+    | string
+    | undefined;
+
+  if (earliestCase?.startDate) {
+    const parsed =
+      new Date(earliestCase.startDate);
+
+    if (!Number.isNaN(parsed.getTime())) {
+      earliestDate =
+        this.formatDateOnly(parsed);
+    }
+  }
+
+  return {
+    ...filters,
+
+    startDate: earliestDate,
+
+    endDate: today,
+
+    asOfDate: today,
+
+    lan: undefined,
+
+    allCases: true,
+  };
+}
+
   private getScfReportAsOfDate(filters?: ScfReportFilters): Date {
     return filters?.asOfDate ? this.toDateOnly(filters.asOfDate) : this.toDateOnly(new Date());
   }
@@ -1542,15 +1597,19 @@ private calculateAccruedCharges(
   }
 
   private async getScfDemandStates(
-    filters?: ScfReportFilters,
-    options?: { dueWithinDays?: number; onlyOutstanding?: boolean },
-  ): Promise<any[]> {
-    const asOfDate = this.getScfReportAsOfDate(filters);
-    const cleanLan = this.getRequiredScfReportLan(filters);
-    const where: any = { status: Not(In([DEMAND_STATUS.REVERSED])) };
-    where.lan = cleanLan;
+  filters?: ScfReportFilters,
+  options?: { dueWithinDays?: number; onlyOutstanding?: boolean; },
+): Promise<any[]> {
+  const resolvedFilters = await this.resolveScfReportFilters(filters);
+  const asOfDate = this.getScfReportAsOfDate(resolvedFilters);
+  const where: any = { status: Not( In([DEMAND_STATUS.REVERSED])),};
 
-    const demands = await this.demandRepository.find({
+  if (!resolvedFilters.allCases) {
+    const cleanLan = this.getRequiredScfReportLan(resolvedFilters);
+    where.lan = cleanLan;
+  }
+
+  const demands = await this.demandRepository.find({
       where,
       relations: [
         'loanAccount',
@@ -1561,29 +1620,125 @@ private calculateAccruedCharges(
         'allocations',
         'allocations.repayment',
       ],
-      order: { dueDate: 'ASC', id: 'ASC' },
+      order: { dueDate: 'ASC', id: 'ASC',},
     });
 
-    let filteredDemands = this.filterByDateRange(demands, 'dueDate', filters);
-    if (options?.dueWithinDays && !filters?.startDate && !filters?.endDate) {
-      const asOfTime = asOfDate.getTime();
-      const dueWindowEnd = this.addDays(asOfDate, options.dueWithinDays).getTime();
-      filteredDemands = filteredDemands.filter((demand) => {
-        const dueTime = this.toDateOnly(demand.dueDate).getTime();
-        return dueTime >= asOfTime && dueTime <= dueWindowEnd;
-      });
-    }
+  let filteredDemands =
+    this.filterByDateRange(
+      demands,
+      'dueDate',
+      resolvedFilters
+    );
 
-    const rows = filteredDemands.map(demand => this.buildScfDemandState(demand, asOfDate));
-    if (options?.onlyOutstanding === false) return rows;
-    return rows.filter(row => this.toNumber(row.totalOutstanding) > 0);
+   if (options?.dueWithinDays) {
+  const asOfTime =
+    asOfDate.getTime();
+
+  const dueWindowEnd =
+    this.addDays(
+      asOfDate,
+      options.dueWithinDays
+    ).getTime();
+
+  filteredDemands =
+    demands.filter((demand) => {
+      if (!demand.dueDate) {
+        return false;
+      }
+
+      const dueTime =
+        this.toDateOnly(
+          demand.dueDate
+        ).getTime();
+
+      return (
+        dueTime >= asOfTime &&
+        dueTime <= dueWindowEnd
+      );
+    });
+}
+
+  const rows =
+    filteredDemands.map(
+      (demand) =>
+        this.buildScfDemandState(
+          demand,
+          asOfDate
+        )
+    );
+
+  if (
+    options?.onlyOutstanding === false
+  ) {
+    return rows;
   }
 
-  private async getScfCollectionRows(filters?: ScfReportFilters): Promise<any[]> {
-    const cleanLan = this.getRequiredScfReportLan(filters);
-    const where: any = { lan: cleanLan };
+  return rows.filter(
+    (row) =>
+      this.toNumber(
+        row.totalOutstanding
+      ) > 0
+  );
+}
+  
+  // private async getScfDemandStates(
+  //   filters?: ScfReportFilters,
+  //   options?: { dueWithinDays?: number; onlyOutstanding?: boolean },
+  // ): Promise<any[]> {
+  //   const asOfDate = this.getScfReportAsOfDate(filters);
+  //   const cleanLan = this.getRequiredScfReportLan(filters);
+  //   const where: any = { status: Not(In([DEMAND_STATUS.REVERSED])) };
+  //   where.lan = cleanLan;
 
-    const allocations = await this.allocationRepository.find({
+  //   const demands = await this.demandRepository.find({
+  //     where,
+  //     relations: [
+  //       'loanAccount',
+  //       'loanAccount.customer',
+  //       'loanAccount.partner',
+  //       'invoice',
+  //       'disbursement',
+  //       'allocations',
+  //       'allocations.repayment',
+  //     ],
+  //     order: { dueDate: 'ASC', id: 'ASC' },
+  //   });
+
+  //   let filteredDemands = this.filterByDateRange(demands, 'dueDate', filters);
+  //   if (options?.dueWithinDays && !filters?.startDate && !filters?.endDate) {
+  //     const asOfTime = asOfDate.getTime();
+  //     const dueWindowEnd = this.addDays(asOfDate, options.dueWithinDays).getTime();
+  //     filteredDemands = filteredDemands.filter((demand) => {
+  //       const dueTime = this.toDateOnly(demand.dueDate).getTime();
+  //       return dueTime >= asOfTime && dueTime <= dueWindowEnd;
+  //     });
+  //   }
+
+  //   const rows = filteredDemands.map(demand => this.buildScfDemandState(demand, asOfDate));
+  //   if (options?.onlyOutstanding === false) return rows;
+  //   return rows.filter(row => this.toNumber(row.totalOutstanding) > 0);
+  // }
+
+private async getScfCollectionRows(filters?: ScfReportFilters,): Promise<any[]> {
+
+  const resolvedFilters =
+    await this.resolveScfReportFilters(
+      filters
+    );
+
+  const where: any = {};
+
+  if (!resolvedFilters.allCases) {
+    const cleanLan =
+      this.getRequiredScfReportLan(
+        resolvedFilters
+      );
+
+    where.lan = cleanLan;
+  }
+
+  const allocations =
+    await this.allocationRepository.find({
       where,
       relations: [
         'repayment',
@@ -1597,64 +1752,243 @@ private calculateAccruedCharges(
         'demand.allocations.repayment',
         'invoice',
       ],
-      order: { allocationDate: 'ASC', repaymentId: 'ASC', id: 'ASC' },
+      order: { allocationDate: 'ASC', repaymentId: 'ASC', id: 'ASC', },
     });
 
-    const startTime = filters?.startDate ? this.toDateOnly(filters.startDate).getTime() : null;
-    const endTime = filters?.endDate ? this.toDateOnly(filters.endDate).getTime() : null;
+  const invalidAllocations =
+    allocations.filter(
+      allocation =>
+        !allocation.demand ||
+        !allocation.repayment
+    );
 
-    return allocations
-      .filter(allocation => allocation.repayment?.status !== REPAYMENT_STATUS.REVERSED)
-      .filter((allocation) => {
-        const collectionDate = allocation.repayment?.repaymentDate || allocation.allocationDate;
-        const time = this.toDateOnly(collectionDate).getTime();
-        if (startTime !== null && time < startTime) return false;
-        if (endTime !== null && time > endTime) return false;
-        return true;
-      })
-      .map((allocation) => {
-        const demand = allocation.demand;
-        const repayment = allocation.repayment;
-        const collectionDate = repayment?.repaymentDate || allocation.allocationDate;
-        const state = this.buildScfDemandState(demand, this.toDateOnly(collectionDate));
-        const soaChargeWindow = this.getScfSoaChargeWindow(demand, allocation, this.toDateOnly(collectionDate));
-        return {
-          customerCode: state.customerCode,
-          lan: allocation.lan,
-          transactionSerial: repayment?.id || allocation.repaymentId,
-          product: state.product,
-          collectionDate,
-          collectionSerial: repayment?.utr || null,
-          collectionAmount: this.toNumber(repayment?.amount),
-          amountRemaining: this.toNumber(repayment?.unappliedAmount),
-          amountUsed: this.toNumber(allocation.totalAmount),
-          invoiceNumber: allocation.invoice?.invoiceNumber || state.invoiceId,
-          disbursementDate: state.disbursementDate,
-          lastPaymentDate: state.lastPaymentDate || collectionDate,
-          principal: this.toNumber(allocation.principalAmount),
-          soaPrincipal: state.disbursementAmount,
-          soaInterestDays: soaChargeWindow.interestDays,
-          soaInterest: soaChargeWindow.interest,
-          soaInterestSettled: soaChargeWindow.interest,
-          soaChargesDays: soaChargeWindow.chargesDays,
-          soaCharges: soaChargeWindow.charges,
-          soaChargesSettled: soaChargeWindow.charges,
-          tenureUpdated: state.interestDays,
-          interest: this.toNumber(allocation.interestAmount),
-          previousInterestAccrued: state.previousInterest,
-          charges: this.toNumber(allocation.penalAmount),
-          principalSettled: this.toNumber(allocation.principalAmount),
-          interestSettled: this.toNumber(allocation.interestAmount),
-          chargesSettled: this.toNumber(allocation.penalAmount),
-          chargesDays: state.chargesDays,
-          interestDue: state.interestDue,
-          principalDue: state.principalDue,
-          previousChargesDue: state.previousCharges,
-          chargesDue: state.chargesDue,
-          amountBalance: this.toNumber(repayment?.unappliedAmount),
-        };
-      });
+  if (invalidAllocations.length) {
+    console.log(
+      '⚠️ INVALID SCF ALLOCATIONS:',
+      invalidAllocations.map(item => ({
+        id: item.id,
+        lan: item.lan,
+        demandId: item.demandId,
+        repaymentId: item.repaymentId,
+        hasDemand:
+          Boolean(item.demand),
+        hasRepayment:
+          Boolean(item.repayment),
+      }))
+    );
   }
+
+  const startTime =
+    resolvedFilters.startDate
+      ? this.toDateOnly(
+          resolvedFilters.startDate
+        ).getTime()
+      : null;
+
+  const endTime =
+    resolvedFilters.endDate
+      ? this.toDateOnly(
+          resolvedFilters.endDate
+        ).getTime()
+      : null;
+
+  return allocations
+
+    .filter(
+      allocation =>
+        Boolean(allocation.demand) &&
+        Boolean(allocation.repayment)
+    )
+
+    .filter(
+      allocation =>
+        allocation.repayment?.status !==
+        REPAYMENT_STATUS.REVERSED
+    )
+
+    .filter((allocation) => {
+      const collectionDate =
+        allocation.repayment
+          ?.repaymentDate ||
+        allocation.allocationDate;
+
+      const time =
+        this.toDateOnly(
+          collectionDate
+        ).getTime();
+
+      if (
+        startTime !== null &&
+        time < startTime
+      ) {
+        return false;
+      }
+
+      if (
+        endTime !== null &&
+        time > endTime
+      ) {
+        return false;
+      }
+
+      return true;
+    })
+
+    .map((allocation) => {
+      const demand =
+        allocation.demand;
+
+      const repayment =
+        allocation.repayment;
+
+      const collectionDate =
+        repayment?.repaymentDate ||
+        allocation.allocationDate;
+
+      const state =
+        this.buildScfDemandState(
+          demand,
+          this.toDateOnly(
+            collectionDate
+          )
+        );
+
+      const soaChargeWindow =
+        this.getScfSoaChargeWindow(
+          demand,
+          allocation,
+          this.toDateOnly(
+            collectionDate
+          )
+        );
+
+      // keep your existing return object here
+
+      return {
+        customerCode:
+          state.customerCode,
+
+        lan: allocation.lan,
+
+        transactionSerial:
+          repayment?.id ||
+          allocation.repaymentId,
+
+        product:
+          state.product,
+
+        collectionDate,
+
+        collectionSerial:
+          repayment?.utr || null,
+
+        collectionAmount:
+          this.toNumber(
+            repayment?.amount
+          ),
+
+        amountRemaining:
+          this.toNumber(
+            repayment?.unappliedAmount
+          ),
+
+        amountUsed:
+          this.toNumber(
+            allocation.totalAmount
+          ),
+
+        invoiceNumber:
+          allocation.invoice
+            ?.invoiceNumber ||
+          state.invoiceId,
+
+        disbursementDate:
+          state.disbursementDate,
+
+        lastPaymentDate:
+          state.lastPaymentDate ||
+          collectionDate,
+
+        principal:
+          this.toNumber(
+            allocation.principalAmount
+          ),
+
+        soaPrincipal:
+          state.disbursementAmount,
+
+        soaInterestDays:
+          soaChargeWindow.interestDays,
+
+        soaInterest:
+          soaChargeWindow.interest,
+
+        soaInterestSettled:
+          soaChargeWindow.interest,
+
+        soaChargesDays:
+          soaChargeWindow.chargesDays,
+
+        soaCharges:
+          soaChargeWindow.charges,
+
+        soaChargesSettled:
+          soaChargeWindow.charges,
+
+        tenureUpdated:
+          state.interestDays,
+
+        interest:
+          this.toNumber(
+            allocation.interestAmount
+          ),
+
+        previousInterestAccrued:
+          state.previousInterest,
+
+        charges:
+          this.toNumber(
+            allocation.penalAmount
+          ),
+
+        principalSettled:
+          this.toNumber(
+            allocation.principalAmount
+          ),
+
+        interestSettled:
+          this.toNumber(
+            allocation.interestAmount
+          ),
+
+        chargesSettled:
+          this.toNumber(
+            allocation.penalAmount
+          ),
+
+        chargesDays:
+          state.chargesDays,
+
+        interestDue:
+          state.interestDue,
+
+        principalDue:
+          state.principalDue,
+
+        previousChargesDue:
+          state.previousCharges,
+
+        chargesDue:
+          state.chargesDue,
+
+        amountBalance:
+          this.toNumber(
+            repayment?.unappliedAmount
+          ),
+      };
+    });
+}
+
 
   async generateScf15DReportWorkbook(filters?: ScfReportFilters): Promise<Buffer> {
     const rows = await this.getScfDemandStates(filters, { dueWithinDays: 15, onlyOutstanding: true });
@@ -1839,21 +2173,68 @@ private calculateAccruedCharges(
     }]);
   }
 
-  async generateScfSoaReportWorkbook(filters?: ScfReportFilters): Promise<Buffer> {
-    const loanAccount = await this.getRequiredScfLoanAccount(filters);
-    const rows = await this.getScfCollectionRows(filters);
-    const asOfDate = this.getScfReportAsOfDate(filters);
+ async generateScfSoaReportWorkbook(
+  filters?: ScfReportFilters
+): Promise<Buffer> {
 
-    return this.createXlsxWorkbook([{
-      name: 'transaction_ledger_report (88)',
+  const resolvedFilters =
+    await this.resolveScfReportFilters(
+      filters
+    );
+
+  const loanAccount =
+    resolvedFilters.allCases
+      ? null
+      : await this.getRequiredScfLoanAccount(
+          resolvedFilters
+        );
+
+  const rows =
+    await this.getScfCollectionRows(
+      resolvedFilters
+    );
+
+  const asOfDate =
+    this.getScfReportAsOfDate(
+      resolvedFilters
+    );
+
+  return this.createXlsxWorkbook([
+    {
+      name:
+        'transaction_ledger_report (88)',
+
       rows: [
         ['Transaction Ledger Report'],
-        [`Doc Name: ${loanAccount.lanId}`],
-        [`Customer: ${this.getCustomerName(loanAccount) || ''}`],
-        [`Date: ${this.formatDateDmy(asOfDate)}`],
+
+        [
+          `Doc Name: ${
+            resolvedFilters.allCases
+              ? 'ALL CASES'
+              : loanAccount?.lanId || ''
+          }`
+        ],
+
+        [
+          `Customer: ${
+            resolvedFilters.allCases
+              ? 'All Customers'
+              : this.getCustomerName(
+                  loanAccount
+                ) || ''
+          }`
+        ],
+
+        [
+          `Date: ${this.formatDateDmy(
+            asOfDate
+          )}`
+        ],
+
         [],
         [],
         [],
+
         [
           'Collection Serial',
           'Transaction Serial',
@@ -1872,6 +2253,7 @@ private calculateAccruedCharges(
           'Charges',
           'Charges Settled',
         ],
+
         ...rows.map(row => [
           row.collectionSerial,
           row.transactionSerial,
@@ -1891,8 +2273,9 @@ private calculateAccruedCharges(
           row.soaChargesSettled,
         ]),
       ],
-    }]);
-  }
+    },
+  ]);
+}
 
   async getPortfolioReport(): Promise<any> {
     const loanAccounts = await this.loanAccountRepository.find();
@@ -2180,5 +2563,6 @@ private calculateAccruedCharges(
       .replace(/'/g, '&apos;');
   }
 }
+
 
 export const loanManagementService = new LoanManagementService();

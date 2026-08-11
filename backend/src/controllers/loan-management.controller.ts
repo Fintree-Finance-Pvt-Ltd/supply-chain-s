@@ -6,19 +6,30 @@ const getReportFilters = (req: Request) => ({
   endDate: req.query.endDate as string | undefined,
   asOfDate: req.query.asOfDate as string | undefined,
   lan: req.query.lan ? String(req.query.lan).trim().toUpperCase() : undefined,
+  allCases:
+    String(req.query.allCases || '').toLowerCase() === 'true',
 });
 
 const getLoanSpecificReportFilters = (req: Request): {
   startDate?: string;
   endDate?: string;
   asOfDate?: string;
-  lan: string;
+  lan?: string;
+    allCases?: boolean;
+
 } => {
   const filters = getReportFilters(req);
-  if (!filters.lan) {
-    throw new Error('LAN is required for SCF report export');
+  // if (!filters.lan) {
+  //   throw new Error('LAN is required for SCF report export');
+  // }
+  // return { ...filters, lan: filters.lan };
+   if (!filters.lan && !filters.allCases) {
+    throw new Error(
+      'LAN is required for SCF report export'
+    );
   }
-  return { ...filters, lan: filters.lan };
+
+  return filters;
 };
 
 const getSafeFilePrefix = (value: string): string => String(value || 'loan').replace(/[^a-z0-9_-]/gi, '_');
@@ -138,43 +149,204 @@ export class LoanManagementController {
     }
   };
 
-  exportScf15DReport = async (req: Request, res: Response): Promise<void> => {
-    try {
-      const filters = getLoanSpecificReportFilters(req);
-      const workbook = await loanManagementService.generateScf15DReportWorkbook(filters);
-      sendWorkbook(res, workbook, `${getSafeFilePrefix(filters.lan)}_SCF_15D_Report.xlsx`);
-    } catch (error: any) {
-      sendReportError(res, error, 'Failed to generate SCF 15D report');
-    }
-  };
+  // exportScf15DReport = async (req: Request, res: Response): Promise<void> => {
+  //   try {
+  //     const filters = getLoanSpecificReportFilters(req);
+  //     const workbook = await loanManagementService.generateScf15DReportWorkbook(filters);
+  //     sendWorkbook(res, workbook, `${getSafeFilePrefix(filters.lan)}_SCF_15D_Report.xlsx`);
+  //   } catch (error: any) {
+  //     sendReportError(res, error, 'Failed to generate SCF 15D report');
+  //   }
+  // };
 
-  exportScfAsOfNowReport = async (req: Request, res: Response): Promise<void> => {
-    try {
-      const filters = getLoanSpecificReportFilters(req);
-      const workbook = await loanManagementService.generateScfAsOfNowReportWorkbook(filters);
-      sendWorkbook(res, workbook, `${getSafeFilePrefix(filters.lan)}_SCF_As_of_Now_Format.xlsx`);
-    } catch (error: any) {
-      sendReportError(res, error, 'Failed to generate SCF as-of-now report');
-    }
-  };
+exportScf15DReport = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const filters =
+      getLoanSpecificReportFilters(req);
 
-  exportScfCollectionsReport = async (req: Request, res: Response): Promise<void> => {
-    try {
-      const filters = getLoanSpecificReportFilters(req);
-      const workbook = await loanManagementService.generateScfCollectionReportWorkbook(filters);
-      sendWorkbook(res, workbook, `${getSafeFilePrefix(filters.lan)}_SCF_Collection_Format.xlsx`);
-    } catch (error: any) {
-      sendReportError(res, error, 'Failed to generate SCF collection report');
-    }
-  };
+    console.log(
+      'SCF 15D FILTERS:',
+      filters
+    );
 
-  exportScfSoaReport = async (req: Request, res: Response): Promise<void> => {
-    try {
-      const filters = getLoanSpecificReportFilters(req);
-      const workbook = await loanManagementService.generateScfSoaReportWorkbook(filters);
-      sendWorkbook(res, workbook, `${getSafeFilePrefix(filters.lan)}_SCF_SOA.xlsx`);
-    } catch (error: any) {
-      sendReportError(res, error, 'Failed to generate SCF SOA report');
-    }
-  };
+    const workbook =
+      await loanManagementService
+        .generateScf15DReportWorkbook(
+          filters
+        );
+
+    const prefix = filters.allCases
+      ? 'ALL_CASES'
+      : getSafeFilePrefix(
+          filters.lan || 'loan'
+        );
+
+    sendWorkbook(
+      res,
+      workbook,
+      `${prefix}_SCF_15D_Report.xlsx`
+    );
+  } catch (error: any) {
+
+    // ADD THIS
+    console.error(
+      '❌ SCF 15D REPORT ERROR:',
+      error
+    );
+
+    sendReportError(
+      res,
+      error,
+      'Failed to generate SCF 15D report'
+    );
+  }
+};
+
+  // exportScfAsOfNowReport = async (req: Request, res: Response): Promise<void> => {
+  //   try {
+  //     const filters = getLoanSpecificReportFilters(req);
+  //     const workbook = await loanManagementService.generateScfAsOfNowReportWorkbook(filters);
+  //     sendWorkbook(res, workbook, `${getSafeFilePrefix(filters.lan)}_SCF_As_of_Now_Format.xlsx`);
+  //   } catch (error: any) {
+  //     sendReportError(res, error, 'Failed to generate SCF as-of-now report');
+  //   }
+  // };
+
+  exportScfAsOfNowReport = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const filters =
+      getLoanSpecificReportFilters(req);
+
+    const workbook =
+      await loanManagementService
+        .generateScfAsOfNowReportWorkbook(
+          filters
+        );
+
+    const prefix = filters.allCases
+      ? 'ALL_CASES'
+      : getSafeFilePrefix(
+          filters.lan || 'loan'
+        );
+
+    sendWorkbook(
+      res,
+      workbook,
+      `${prefix}_SCF_As_of_Now_Format.xlsx`
+    );
+  } catch (error: any) {
+    sendReportError(
+      res,
+      error,
+      'Failed to generate SCF as-of-now report'
+    );
+  }
+};
+
+  // exportScfCollectionsReport = async (req: Request, res: Response): Promise<void> => {
+  //   try {
+  //     const filters = getLoanSpecificReportFilters(req);
+  //     const workbook = await loanManagementService.generateScfCollectionReportWorkbook(filters);
+  //     sendWorkbook(res, workbook, `${getSafeFilePrefix(filters.lan)}_SCF_Collection_Format.xlsx`);
+  //   } catch (error: any) {
+  //     sendReportError(res, error, 'Failed to generate SCF collection report');
+  //   }
+  // };
+
+exportScfCollectionsReport = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const filters =
+      getLoanSpecificReportFilters(req);
+
+    console.log(
+      'SCF COLLECTION REQUEST:',
+      filters
+    );
+
+    const workbook =
+      await loanManagementService
+        .generateScfCollectionReportWorkbook(
+          filters
+        );
+
+    const prefix =
+      filters.allCases
+        ? 'ALL_CASES'
+        : getSafeFilePrefix(
+            filters.lan || 'loan'
+          );
+
+    sendWorkbook(
+      res,
+      workbook,
+      `${prefix}_SCF_Collection_Format.xlsx`
+    );
+
+  } catch (error: any) {
+
+    console.error(
+      '❌ SCF COLLECTION REPORT ERROR:',
+      error
+    );
+
+    sendReportError(
+      res,
+      error,
+      'Failed to generate SCF collection report'
+    );
+  }
+};
+
+exportScfSoaReport = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const filters =
+      getLoanSpecificReportFilters(req);
+
+    const workbook =
+      await loanManagementService
+        .generateScfSoaReportWorkbook(
+          filters
+        );
+
+    const prefix = filters.allCases
+      ? 'ALL_CASES'
+      : getSafeFilePrefix(
+          filters.lan || 'loan'
+        );
+
+    sendWorkbook(
+      res,
+      workbook,
+      `${prefix}_SCF_SOA.xlsx`
+    );
+  } catch (error: any) {
+    sendReportError(
+      res,
+      error,
+      'Failed to generate SCF SOA report'
+    );
+  }
+};
+
+  // exportScfSoaReport = async (req: Request, res: Response): Promise<void> => {
+  //   try {
+  //     const filters = getLoanSpecificReportFilters(req);
+  //     const workbook = await loanManagementService.generateScfSoaReportWorkbook(filters);
+  //     sendWorkbook(res, workbook, `${getSafeFilePrefix(filters.lan)}_SCF_SOA.xlsx`);
+  //   } catch (error: any) {
+  //     sendReportError(res, error, 'Failed to generate SCF SOA report');
+  //   }
+  // };
 }

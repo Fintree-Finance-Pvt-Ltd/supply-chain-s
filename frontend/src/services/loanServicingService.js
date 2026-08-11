@@ -3,10 +3,15 @@ import { API_ENDPOINTS } from '../constants/api'
 
 const buildQuery = (filters = {}) => {
   const params = new URLSearchParams()
-  if (filters.startDate) params.append('startDate', filters.startDate)
-  if (filters.endDate) params.append('endDate', filters.endDate)
-  if (filters.asOfDate) params.append('asOfDate', filters.asOfDate)
-  if (filters.lan) params.append('lan', filters.lan)
+  if (filters.startDate) {params.append('startDate', filters.startDate)}
+
+  if (filters.endDate) {params.append('endDate', filters.endDate)}
+
+  if (filters.asOfDate) {params.append('asOfDate', filters.asOfDate) }
+
+  if (filters.lan) {params.append('lan', filters.lan)}
+
+  if (filters.allCases) {params.append('allCases', 'true')}
   const query = params.toString()
   return query ? `?${query}` : ''
 }
