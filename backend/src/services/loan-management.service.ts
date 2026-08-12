@@ -105,8 +105,26 @@ export class LoanManagementService {
   }
 
   private toDate(value: string | Date): Date {
-    if (value instanceof Date) return value;
-    return new Date(value);
+    if (value instanceof Date) return new Date(value.getTime());
+
+    const text = String(value || '').trim();
+    const dateOnlyMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text);
+    if (dateOnlyMatch) {
+      const year = Number(dateOnlyMatch[1]);
+      const monthIndex = Number(dateOnlyMatch[2]) - 1;
+      const day = Number(dateOnlyMatch[3]);
+      const date = new Date(year, monthIndex, day);
+      if (
+        date.getFullYear() !== year ||
+        date.getMonth() !== monthIndex ||
+        date.getDate() !== day
+      ) {
+        return new Date(Number.NaN);
+      }
+      return date;
+    }
+
+    return new Date(text);
   }
 
   private toDateOnly(value: string | Date): Date {
@@ -575,7 +593,6 @@ private calculateAccruedCharges(
         where: { id: invoiceId },
         relations: ['loanAccount', 'loanAccount.partner', 'supplier', 'customer'],
       });
-      console.log(invoice)
       if (!invoice) throw new Error('Invoice not found for loan management booking');
       if (!invoice.loanAccountId) throw new Error('Invoice is not linked to a LAN');
       if (!invoice.disbursementDate) throw new Error('Disbursement date is required before LMS booking');
@@ -1359,62 +1376,83 @@ private calculateAccruedCharges(
     };
   }
 
- private async resolveScfReportFilters(
-  filters?: ScfReportFilters,
-): Promise<ScfReportFilters> {
+  private getValidatedReportDate(value: string | undefined, label: string): string | undefined {
+    const raw = String(value || '').trim();
+    if (!raw) return undefined;
 
-  if (!filters?.allCases) {
-    return filters || {};
+    const date = this.toDateOnly(raw);
+    if (Number.isNaN(date.getTime())) {
+      throw new Error(`${label} must be a valid date`);
+    }
+
+    return this.formatDateOnly(date);
   }
 
-  const earliestCase =
-    await this.customerRepository
+  private normalizeScfReportFilters(filters?: ScfReportFilters): ScfReportFilters {
+    const startDate = this.getValidatedReportDate(filters?.startDate, 'From date');
+    const endDate = this.getValidatedReportDate(filters?.endDate, 'To date');
+    const asOfDate = this.getValidatedReportDate(filters?.asOfDate, 'As-of date');
+    const lan = this.getOptionalScfReportLan(filters) || undefined;
+
+    if (
+      startDate &&
+      endDate &&
+      this.toDateOnly(startDate).getTime() > this.toDateOnly(endDate).getTime()
+    ) {
+      throw new Error('From date cannot be after To date');
+    }
+
+    return {
+      ...filters,
+      startDate,
+      endDate,
+      asOfDate,
+      lan,
+      allCases: Boolean(filters?.allCases),
+    };
+  }
+
+  private async resolveScfReportFilters(
+    filters?: ScfReportFilters,
+  ): Promise<ScfReportFilters> {
+    const normalizedFilters = this.normalizeScfReportFilters(filters);
+
+    if (!normalizedFilters.allCases) {
+      return normalizedFilters;
+    }
+
+    const earliestCase = await this.customerRepository
       .createQueryBuilder('customer')
-      .select(
-        'MIN(customer.createdAt)',
-        'startDate'
-      )
+      .select('MIN(customer.createdAt)', 'startDate')
       .getRawOne();
 
-  console.log(
-    'EARLIEST CASE:',
-    earliestCase
-  );
+    const today = this.formatDateOnly(new Date());
+    let earliestDate: string | undefined;
 
-  const today =
-    this.formatDateOnly(new Date());
+    if (earliestCase?.startDate) {
+      const parsed = this.toDateOnly(earliestCase.startDate);
 
-  let earliestDate:
-    | string
-    | undefined;
-
-  if (earliestCase?.startDate) {
-    const parsed =
-      new Date(earliestCase.startDate);
-
-    if (!Number.isNaN(parsed.getTime())) {
-      earliestDate =
-        this.formatDateOnly(parsed);
+      if (!Number.isNaN(parsed.getTime())) {
+        earliestDate = this.formatDateOnly(parsed);
+      }
     }
+
+    return {
+      ...normalizedFilters,
+      startDate: normalizedFilters.startDate || earliestDate,
+      endDate: normalizedFilters.endDate || today,
+      asOfDate: normalizedFilters.asOfDate || today,
+      lan: undefined,
+      allCases: true,
+    };
   }
 
-  return {
-    ...filters,
-
-    startDate: earliestDate,
-
-    endDate: today,
-
-    asOfDate: today,
-
-    lan: undefined,
-
-    allCases: true,
-  };
-}
-
   private getScfReportAsOfDate(filters?: ScfReportFilters): Date {
-    return filters?.asOfDate ? this.toDateOnly(filters.asOfDate) : this.toDateOnly(new Date());
+    const asOfDate = filters?.asOfDate ? this.toDateOnly(filters.asOfDate) : this.toDateOnly(new Date());
+    if (Number.isNaN(asOfDate.getTime())) {
+      throw new Error('As-of date must be a valid date');
+    }
+    return asOfDate;
   }
 
   private getRequiredScfReportLan(filters?: ScfReportFilters): string {
@@ -1605,8 +1643,9 @@ private calculateAccruedCharges(
     filters?: ScfReportFilters,
     options?: { dueWithinDays?: number; onlyOutstanding?: boolean },
   ): Promise<any[]> {
-    const asOfDate = this.getScfReportAsOfDate(filters);
-    const cleanLan = this.getOptionalScfReportLan(filters);
+    const reportFilters = this.normalizeScfReportFilters(filters);
+    const asOfDate = this.getScfReportAsOfDate(reportFilters);
+    const cleanLan = this.getOptionalScfReportLan(reportFilters);
     const where: any = { status: Not(In([DEMAND_STATUS.REVERSED])) };
     if (cleanLan) {
       where.lan = cleanLan;
@@ -1626,7 +1665,7 @@ private calculateAccruedCharges(
       order: { dueDate: 'ASC', id: 'ASC',},
     });
 
-  let filteredDemands = this.filterByDateRange(demands, 'dueDate', filters);
+  let filteredDemands = this.filterByDateRange(demands, 'dueDate', reportFilters);
 
    if (options?.dueWithinDays) {
   const asOfTime =
@@ -1680,10 +1719,11 @@ private calculateAccruedCharges(
 }
   
 private async getScfCollectionRows(filters?: ScfReportFilters,): Promise<any[]> {
+  const reportFilters = this.normalizeScfReportFilters(filters);
 
   const where: any = {};
 
-  const cleanLan = this.getOptionalScfReportLan(filters);
+  const cleanLan = this.getOptionalScfReportLan(reportFilters);
   if (cleanLan) {
     where.lan = cleanLan;
   }
@@ -1706,42 +1746,21 @@ private async getScfCollectionRows(filters?: ScfReportFilters,): Promise<any[]> 
       order: { allocationDate: 'ASC', repaymentId: 'ASC', id: 'ASC', },
     });
 
-  const invalidAllocations =
-    allocations.filter(
-      allocation =>
-        !allocation.demand ||
-        !allocation.repayment
-    );
-
-  if (invalidAllocations.length) {
-    console.log(
-      '⚠️ INVALID SCF ALLOCATIONS:',
-      invalidAllocations.map(item => ({
-        id: item.id,
-        lan: item.lan,
-        demandId: item.demandId,
-        repaymentId: item.repaymentId,
-        hasDemand:
-          Boolean(item.demand),
-        hasRepayment:
-          Boolean(item.repayment),
-      }))
-    );
-  }
-
   const startTime =
-    filters?.startDate
+    reportFilters.startDate
       ? this.toDateOnly(
-          filters.startDate
+          reportFilters.startDate
         ).getTime()
       : null;
 
   const endTime =
-    filters?.endDate
+    reportFilters.endDate
       ? this.toDateOnly(
-          filters.endDate
+          reportFilters.endDate
         ).getTime()
       : null;
+
+  const remainingByRepayment = new Map<number, number>();
 
   return allocations
 
@@ -1792,6 +1811,44 @@ private async getScfCollectionRows(filters?: ScfReportFilters,): Promise<any[]> 
       const repayment =
         allocation.repayment;
 
+      const repaymentId =
+        this.toNumber(
+          repayment?.id ||
+          allocation.repaymentId
+        );
+
+      const collectionAmount =
+        this.roundMoney(
+          this.toNumber(
+            repayment?.amount
+          )
+        );
+
+      const amountUsed =
+        this.roundMoney(
+          this.toNumber(
+            allocation.totalAmount
+          )
+        );
+
+      const openingRemaining =
+        remainingByRepayment.has(repaymentId)
+          ? remainingByRepayment.get(repaymentId) || 0
+          : collectionAmount;
+
+      const amountRemaining =
+        this.roundMoney(
+          Math.max(
+            openingRemaining - amountUsed,
+            0
+          )
+        );
+
+      remainingByRepayment.set(
+        repaymentId,
+        amountRemaining
+      );
+
       const collectionDate =
         repayment?.repaymentDate ||
         allocation.allocationDate;
@@ -1834,19 +1891,13 @@ private async getScfCollectionRows(filters?: ScfReportFilters,): Promise<any[]> 
           repayment?.utr || null,
 
         collectionAmount:
-          this.toNumber(
-            repayment?.amount
-          ),
+          collectionAmount,
 
         amountRemaining:
-          this.toNumber(
-            repayment?.unappliedAmount
-          ),
+          amountRemaining,
 
         amountUsed:
-          this.toNumber(
-            allocation.totalAmount
-          ),
+          amountUsed,
 
         invoiceNumber:
           allocation.invoice
@@ -1933,9 +1984,7 @@ private async getScfCollectionRows(filters?: ScfReportFilters,): Promise<any[]> 
           state.chargesDue,
 
         amountBalance:
-          this.toNumber(
-            repayment?.unappliedAmount
-          ),
+          amountRemaining,
       };
     });
 }
@@ -1948,7 +1997,7 @@ private async getScfCollectionRows(filters?: ScfReportFilters,): Promise<any[]> 
       rows: [
         [
           'Customer',
-          'Customer Name11',
+          'Customer Name',
           'Product',
           'LAN',
           'Invoice ID',
@@ -1957,7 +2006,7 @@ private async getScfCollectionRows(filters?: ScfReportFilters,): Promise<any[]> 
           'DPD',
           'Disbursement Date',
           'Disbursement Amount',
-          'Outstanding Principle',
+          'Outstanding Principal',
           'ROI',
           'Overdue Charges (% Monthly)',
           'Last Payment Date',

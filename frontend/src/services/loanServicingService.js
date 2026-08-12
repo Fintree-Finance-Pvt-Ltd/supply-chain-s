@@ -9,11 +9,30 @@ const buildQuery = (filters = {}) => {
 
   if (filters.asOfDate) {params.append('asOfDate', filters.asOfDate) }
 
-  if (filters.lan) {params.append('lan', filters.lan)}
+  if (filters.lan) {params.append('lan', String(filters.lan).trim().toUpperCase())}
 
   if (filters.allCases) {params.append('allCases', 'true')}
   const query = params.toString()
   return query ? `?${query}` : ''
+}
+
+const getDownloadErrorMessage = async (error, fallbackMessage) => {
+  const data = error.response?.data
+  const isBlob = typeof Blob !== 'undefined' && data instanceof Blob
+
+  if (isBlob) {
+    const text = await data.text()
+    if (text) {
+      try {
+        const parsed = JSON.parse(text)
+        return parsed.message || fallbackMessage
+      } catch {
+        return text
+      }
+    }
+  }
+
+  return data?.message || error.message || fallbackMessage
 }
 
 const SCF_REPORT_ENDPOINTS = {
@@ -65,10 +84,15 @@ export const loanServicingService = {
       throw new Error('Unknown SCF report type')
     }
 
-    const response = await api.get(
-      `${endpoint}${buildQuery(filters)}`,
-      { responseType: 'blob' },
-    )
-    return response
+    try {
+      const response = await api.get(
+        `${endpoint}${buildQuery(filters)}`,
+        { responseType: 'blob' },
+      )
+      return response
+    } catch (error) {
+      const message = await getDownloadErrorMessage(error, 'Failed to generate SCF report')
+      throw new Error(message)
+    }
   },
 }

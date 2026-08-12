@@ -44,6 +44,27 @@ const getReportFileName = (headers, fallbackName) => {
   return fallbackName;
 };
 
+const getFiltersForReport = (reportId, filters) => {
+  if (reportId === "asOfNow") {
+    return {
+      ...(filters.asOfDate ? { asOfDate: filters.asOfDate } : {}),
+    };
+  }
+
+  if (reportId === "collections") {
+    return {
+      ...(filters.startDate ? { startDate: filters.startDate } : {}),
+      ...(filters.endDate ? { endDate: filters.endDate } : {}),
+    };
+  }
+
+  return {
+    ...(filters.asOfDate ? { asOfDate: filters.asOfDate } : {}),
+    ...(filters.startDate ? { startDate: filters.startDate } : {}),
+    ...(filters.endDate ? { endDate: filters.endDate } : {}),
+  };
+};
+
 const MisReports = () => {
   const [filters, setFilters] = useState({
     startDate: "",
@@ -61,7 +82,9 @@ const MisReports = () => {
   };
 
   const downloadMisReport = async (report) => {
+    const usesDateRange = report.id !== "asOfNow";
     if (
+      usesDateRange &&
       filters.startDate &&
       filters.endDate &&
       new Date(filters.startDate) > new Date(filters.endDate)
@@ -72,7 +95,10 @@ const MisReports = () => {
 
     try {
       setDownloadingReport(report.id);
-      const response = await loanServicingService.downloadScfReport(report.id, filters);
+      const response = await loanServicingService.downloadScfReport(
+        report.id,
+        getFiltersForReport(report.id, filters),
+      );
       const blob = new Blob([response.data], {
         type:
           response.headers?.["content-type"] ||
@@ -90,7 +116,7 @@ const MisReports = () => {
     } catch (error) {
       console.error("MIS report download failed:", error);
       toast.error(
-        error.response?.data?.message || "Failed to generate MIS report",
+        error.message || error.response?.data?.message || "Failed to generate MIS report",
       );
     } finally {
       setDownloadingReport(null);

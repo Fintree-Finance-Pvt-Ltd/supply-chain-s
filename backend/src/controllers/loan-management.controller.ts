@@ -6,25 +6,26 @@ type ReportFilters = {
   endDate?: string;
   asOfDate?: string;
   lan?: string;
+  allCases?: boolean;
 };
 
-type LoanSpecificReportFilters = ReportFilters & {
-  lan: string;
-};
+const isTruthyQueryValue = (value: unknown): boolean =>
+  value === true || ['true', '1', 'yes'].includes(String(value || '').trim().toLowerCase());
 
 const getReportFilters = (req: Request): ReportFilters => ({
   startDate: req.query.startDate as string | undefined,
   endDate: req.query.endDate as string | undefined,
   asOfDate: req.query.asOfDate as string | undefined,
   lan: req.query.lan ? String(req.query.lan).trim().toUpperCase() : undefined,
+  allCases: isTruthyQueryValue(req.query.allCases),
 });
 
-const getLoanSpecificReportFilters = (req: Request): LoanSpecificReportFilters => {
+const getLoanSpecificReportFilters = (req: Request): ReportFilters => {
   const filters = getReportFilters(req);
-  if (!filters.lan) {
+  if (!filters.lan && !filters.allCases) {
     throw new Error('LAN is required for SCF report export');
   }
-  return { ...filters, lan: filters.lan };
+  return filters;
 };
 
 const getSafeFilePrefix = (value: string): string => String(value || 'loan').replace(/[^a-z0-9_-]/gi, '_');
@@ -42,7 +43,13 @@ const sendWorkbook = (res: Response, workbook: Buffer, fileName: string): void =
 
 const sendReportError = (res: Response, error: any, fallbackMessage: string): void => {
   const message = error.message || fallbackMessage;
-  res.status(message.includes('LAN is required') ? 400 : 500).json({ success: false, message });
+  const lowerMessage = message.toLowerCase();
+  const isValidationError =
+    lowerMessage.includes('required') ||
+    lowerMessage.includes('valid date') ||
+    lowerMessage.includes('from date') ||
+    lowerMessage.includes('to date');
+  res.status(isValidationError ? 400 : 500).json({ success: false, message });
 };
 
 export class LoanManagementController {
@@ -183,7 +190,10 @@ export class LoanManagementController {
     try {
       const filters = getLoanSpecificReportFilters(req);
       const workbook = await loanManagementService.generateScfSoaReportWorkbook(filters);
-      sendWorkbook(res, workbook, `${getSafeFilePrefix(filters.lan)}_SCF_SOA.xlsx`);
+      const fileName = filters.allCases
+        ? 'ALL_CASES_SCF_SOA.xlsx'
+        : `${getSafeFilePrefix(filters.lan || '')}_SCF_SOA.xlsx`;
+      sendWorkbook(res, workbook, fileName);
     } catch (error: any) {
       sendReportError(res, error, 'Failed to generate SCF SOA report');
     }

@@ -261,11 +261,10 @@ const downloadScfReport = async (report) => {
           lan: cleanLan,
         }
       : {
+          ...filters,
           allCases: true,
-          endDate: today,
+          endDate: filters.endDate || today,
         };
-
-    console.log("SCF REPORT PARAMS:", params);
 
     const response =
       await loanServicingService.downloadScfReport(
@@ -302,52 +301,12 @@ const downloadScfReport = async (report) => {
       error
     );
     toast.error(
-      error.response?.data?.message || "Failed to generate SCF report"
+      error.message || error.response?.data?.message || "Failed to generate SCF report"
     );
   } finally {
     setDownloadingReport(null);
   }
 };
-  
-  // const downloadScfReport = async (report) => {
-  //   const cleanLan = lan.trim().toUpperCase();
-  //   if (!cleanLan) {
-  //     toast.info("Enter a LAN");
-  //     return;
-  //   }
-
-  //   try {
-  //     setDownloadingReport(report.id);
-  //     const response = await loanServicingService.downloadScfReport(report.id, {
-  //       ...filters,
-  //       lan: cleanLan,
-  //     });
-  //     const blob = new Blob([response.data], {
-  //       type:
-  //         response.headers?.["content-type"] ||
-  //         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  //     });
-  //     const url = window.URL.createObjectURL(blob);
-  //     const link = document.createElement("a");
-  //     link.href = url;
-  //     link.download = getReportFileName(
-  //       response.headers,
-  //       `${cleanLan}_${report.fileName}`,
-  //     );
-  //     document.body.appendChild(link);
-  //     link.click();
-  //     link.remove();
-  //     window.URL.revokeObjectURL(url);
-  //     toast.success(`${report.label} generated`);
-  //   } catch (error) {
-  //     console.error("SCF report download failed:", error);
-  //     toast.error(
-  //       error.response?.data?.message || "Failed to generate SCF report",
-  //     );
-  //   } finally {
-  //     setDownloadingReport(null);
-  //   }
-  // };
 
   const downloadMigrationTemplate = async (upload) => {
     try {
