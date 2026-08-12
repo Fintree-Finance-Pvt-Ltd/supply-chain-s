@@ -305,7 +305,6 @@ function App() {
             element={
               <ProtectedRoute
                 allowedRoles={[
-                  ROLES.OPERATIONS_TEAM,
                   ROLES.OPERATIONS_TEAM_L1,
                   ROLES.OPERATIONS_TEAM_L2,
                   ROLES.OPERATIONS_HEAD,
@@ -320,7 +319,6 @@ function App() {
             element={
               <ProtectedRoute
                 allowedRoles={[
-                  ROLES.OPERATIONS_TEAM,
                   ROLES.OPERATIONS_TEAM_L1,
                   ROLES.OPERATIONS_TEAM_L2,
                   ROLES.OPERATIONS_HEAD,
@@ -335,7 +333,6 @@ function App() {
             element={
               <ProtectedRoute
                 allowedRoles={[
-                  ROLES.OPERATIONS_TEAM,
                   ROLES.OPERATIONS_TEAM_L1,
                   ROLES.OPERATIONS_TEAM_L2,
                   ROLES.OPERATIONS_HEAD,
@@ -364,7 +361,6 @@ function App() {
             element={
               <ProtectedRoute
                 allowedRoles={[
-                  ROLES.OPERATIONS_TEAM,
                   ROLES.OPERATIONS_TEAM_L1,
                   ROLES.OPERATIONS_TEAM_L2,
                   ROLES.OPERATIONS_HEAD,
@@ -380,7 +376,6 @@ function App() {
             element={
               <ProtectedRoute
                 allowedRoles={[
-                  ROLES.OPERATIONS_TEAM,
                   ROLES.OPERATIONS_TEAM_L1,
                   ROLES.OPERATIONS_TEAM_L2,
                   ROLES.OPERATIONS_HEAD,

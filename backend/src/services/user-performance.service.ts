@@ -176,6 +176,1021 @@ export class UserPerformanceService {
     this.loanAccountRepository = AppDataSource.getRepository(LoanAccount);
   }
 
+
+  private async getUserRolesMap(
+  userIds: number[],
+): Promise<Record<number, string[]>> {
+  if (!userIds.length) {
+    return {};
+  }
+
+  const rows = await this.userRoleRepository
+    .createQueryBuilder('ur')
+    .innerJoin('ur.role', 'role')
+    .innerJoin('ur.user', 'user')
+    .select('ur.userId', 'userId')
+    .addSelect('role.id', 'roleId')
+    .addSelect('role.name', 'roleName')
+    .where('ur.userId IN (:...userIds)', {
+      userIds,
+    })
+    .andWhere('ur.isActive = :isActive', {
+      isActive: true,
+    })
+    .andWhere('user.isActive = :userActive', {
+      userActive: true,
+    })
+    .getRawMany();
+
+  const rolesMap: Record<number, string[]> = {};
+
+  for (const row of rows) {
+    const userId = Number(row.userId);
+
+    if (!rolesMap[userId]) {
+      rolesMap[userId] = [];
+    }
+
+    if (
+      row.roleName &&
+      !rolesMap[userId].includes(row.roleName)
+    ) {
+      rolesMap[userId].push(row.roleName);
+    }
+  }
+
+  return rolesMap;
+}
+
+
+private async getRmPerformanceMap(
+  rmUserIds: number[],
+  startDate?: Date,
+  endDate?: Date,
+): Promise<
+  Record<
+    number,
+    {
+      totalCases: number;
+      completedCases: number;
+      pendingCases: number;
+    }
+  >
+> {
+  const result: Record<
+    number,
+    {
+      totalCases: number;
+      completedCases: number;
+      pendingCases: number;
+    }
+  > = {};
+
+  if (!rmUserIds.length) {
+    return result;
+  }
+
+  /*
+   * =====================================================
+   * 1. TOTAL RM CASES
+   *
+   * Source:
+   * customers.rmId
+   *
+   * One customer = one case.
+   * =====================================================
+   */
+  const totalQuery = this.customerRepository
+    .createQueryBuilder('customer')
+    .select('customer.rmId', 'userId')
+    .addSelect(
+      'COUNT(DISTINCT customer.id)',
+      'totalCases',
+    )
+    .where(
+      'customer.rmId IN (:...rmUserIds)',
+      { rmUserIds },
+    );
+
+  if (startDate) {
+    totalQuery.andWhere(
+      'customer.createdAt >= :startDate',
+      { startDate },
+    );
+  }
+
+  if (endDate) {
+    totalQuery.andWhere(
+      'customer.createdAt <= :endDate',
+      { endDate },
+    );
+  }
+
+  const totalRows = await totalQuery
+    .groupBy('customer.rmId')
+    .getRawMany();
+
+  /*
+   * =====================================================
+   * 3. CURRENT RM PENDING QUEUE
+   * =====================================================
+   */
+  const pendingQuery =
+    this.customerRepository
+      .createQueryBuilder('customer')
+      .select('customer.rmId', 'userId')
+      .addSelect(
+        'COUNT(DISTINCT customer.id)',
+        'pendingCases',
+      )
+      .where(
+        'customer.rmId IN (:...rmUserIds)',
+        { rmUserIds },
+      )
+      .andWhere(`
+  LOWER(customer.status) IN (
+    'draft',
+    'rejected'
+  )
+`);
+
+  if (startDate) {
+    pendingQuery.andWhere(
+      'customer.createdAt >= :startDate',
+      { startDate },
+    );
+  }
+
+  if (endDate) {
+    pendingQuery.andWhere(
+      'customer.createdAt <= :endDate',
+      { endDate },
+    );
+  }
+
+  const pendingRows = await pendingQuery
+    .groupBy('customer.rmId')
+    .getRawMany();
+
+  /*
+   * Build maps
+   */
+  const totalMap: Record<number, number> = {};
+  const pendingMap: Record<number, number> = {};
+
+  for (const row of totalRows) {
+    totalMap[Number(row.userId)] =
+      Number(row.totalCases) || 0;
+  }
+
+
+
+  for (const row of pendingRows) {
+    pendingMap[Number(row.userId)] =
+      Number(row.pendingCases) || 0;
+  }
+for (const userId of rmUserIds) {
+const totalCases = totalMap[userId] || 0;
+const pendingCases = pendingMap[userId] || 0;
+
+result[userId] = {
+  totalCases,
+  pendingCases,
+  completedCases: Math.max(0, totalCases - pendingCases),
+};
+}
+
+  return result;
+}
+
+
+private getStageFromRoleName(
+  roleName?: string | null,
+): string | null {
+  const role = String(roleName || '')
+    .trim()
+    .toLowerCase();
+
+  if (!role) {
+    return null;
+  }
+
+  /*
+   * Relationship Manager
+   */
+  if (
+    role === 'relationship_manager' ||
+    role === 'rm'
+  ) {
+    return 'rm';
+  }
+
+  /*
+   * Credit roles:
+   *
+   * credit_team_l1 → credit_l1
+   * credit_team_l2 → credit_l2
+   */
+  const creditMatch = role.match(
+    /^credit(?:_team)?_(l\d+)$/,
+  );
+
+  if (creditMatch) {
+    return `credit_${creditMatch[1]}`;
+  }
+
+  /*
+   * Operations:
+   *
+   * operations_team_l1 → ops_l1
+   * operations_team_l2 → ops_l2
+   */
+  const opsMatch = role.match(
+    /^operations(?:_team)?_(l\d+)$/,
+  );
+
+  if (opsMatch) {
+    return `ops_${opsMatch[1]}`;
+  }
+
+  /*
+   * operations_head → ops_head
+   */
+  if (
+    role === 'operations_head' ||
+    role === 'ops_head'
+  ) {
+    return 'ops_head';
+  }
+
+  return null;
+}
+
+private getUserStagesFromRoles(
+  roles: string[],
+): string[] {
+  return Array.from(
+    new Set(
+      roles
+        .map((role) =>
+          this.getStageFromRoleName(role),
+        )
+        .filter(
+          (stage): stage is string =>
+            Boolean(stage),
+        ),
+    ),
+  );
+}
+
+private async getCorrectWorkloadMetrics(
+  userIds: number[],
+  rolesMap: Record<number, string[]>,
+  filters: PerformanceFilters
+): Promise<Record<number, {
+  totalCases: number;
+  completedCases: number;
+  pendingCases: number;
+  inProgressCases: number;
+  rejectedCases: number;
+}>> {
+  const { startDate, endDate, stage } = filters;
+
+  type CaseSets = {
+    total: Set<string>;
+    completed: Set<string>;
+    rejected: Set<string>;
+  };
+
+  const sets: Record<number, CaseSets> = {};
+
+  const getSets = (userId: number): CaseSets => {
+    if (!sets[userId]) {
+      sets[userId] = {
+        total: new Set(),
+        completed: new Set(),
+        rejected: new Set(),
+      };
+    }
+
+    return sets[userId];
+  };
+
+  userIds.forEach(getSets);
+
+  const isRm = (userId: number): boolean =>
+    (rolesMap[userId] || []).some((role) => {
+      const normalized = role.toLowerCase().trim();
+
+      return (
+        normalized === 'relationship_manager' ||
+        normalized === 'rm'
+      );
+    });
+
+const isCreditL1 = (
+  userId: number
+): boolean =>
+  (rolesMap[userId] || []).some(
+    role =>
+      role
+        .trim()
+        .toLowerCase() ===
+      'credit_team_l1'
+  );
+  
+  const getStages = (userId: number): string[] =>
+    this.getUserStagesFromRoles(
+      rolesMap[userId] || []
+    );
+
+  /*
+   * =====================================================
+   * RM TOTAL WORKLOAD
+   *
+   * customers.rmId is source of truth.
+   *
+   * One customer = one case.
+   * =====================================================
+   */
+
+  const rmUserIds = userIds.filter(isRm);
+
+  if (
+    rmUserIds.length > 0 &&
+    (!stage || stage === 'rm')
+  ) {
+    const customerQuery = this.customerRepository
+      .createQueryBuilder('customer')
+      .select('customer.id', 'customerId')
+      .addSelect('customer.rmId', 'rmId')
+      .where(
+        'customer.rmId IN (:...rmUserIds)',
+        { rmUserIds }
+      );
+
+    if (startDate) {
+      customerQuery.andWhere(
+        'customer.createdAt >= :startDate',
+        { startDate }
+      );
+    }
+
+    if (endDate) {
+      customerQuery.andWhere(
+        'customer.createdAt <= :endDate',
+        { endDate }
+      );
+    }
+
+    const rmCustomers =
+      await customerQuery.getRawMany();
+
+    for (const row of rmCustomers) {
+      const rmId = Number(row.rmId);
+      const customerId = Number(row.customerId);
+
+      if (!rmId || !customerId) continue;
+
+      getSets(rmId).total.add(
+        `customer:${customerId}`
+      );
+    }
+  }
+
+  /*
+ * ============================================
+ * RM SUBMITTED CASES
+ * ============================================
+ */
+if (
+  rmUserIds.length > 0 &&
+  (!stage || stage === 'rm')
+) {
+  const rmSubmittedRows = await this.customerRepository
+    .createQueryBuilder('customer')
+    .select('customer.id', 'customerId')
+    .addSelect('customer.rmId', 'rmId')
+    .where(
+      'customer.rmId IN (:...rmUserIds)',
+      { rmUserIds }
+    )
+       .andWhere(`
+        EXISTS (
+          SELECT 1
+          FROM case_status_history csh
+          WHERE csh.customerId = customer.id
+            AND LOWER(csh.previousStatus) = 'submitted'
+        )
+      `)
+    .getRawMany();
+
+  console.log(
+    'RM SUBMITTED ROWS:',
+    rmSubmittedRows
+  );
+
+  for (const row of rmSubmittedRows) {
+    const rmId = Number(row.rmId);
+    const customerId = Number(row.customerId);
+
+    if (!rmId || !customerId) {
+      continue;
+    }
+
+    // Submitted/completed RM cases
+    getSets(rmId).completed.add(
+      `customer:${customerId}`
+    );
+  }
+}
+
+const creditL1ApprovedRows =
+  await AppDataSource.query(
+    `
+      SELECT DISTINCT
+        h.customerId,
+        h.changedBy AS userId
+      FROM case_status_history h
+      WHERE LOWER(h.previousStatus) = 'submitted'
+        AND LOWER(h.status) = 'credit_l1_approved'
+        ${startDate ? 'AND h.createdAt >= ?' : ''}
+        ${endDate ? 'AND h.createdAt <= ?' : ''}
+    `,
+    [
+      ...(startDate ? [startDate] : []),
+      ...(endDate ? [endDate] : []),
+    ],
+  );
+
+for (const row of creditL1ApprovedRows) {
+  const creditUserId =
+    Number(row.userId);
+
+  const customerId =
+    Number(row.customerId);
+
+  if (
+    !creditUserId ||
+    !customerId
+  ) {
+    continue;
+  }
+
+  const userRoles =
+    rolesMap[creditUserId] || [];
+
+  const isCreditL1 =
+    userRoles.some(
+      role =>
+        role
+          .trim()
+          .toLowerCase() ===
+        'credit_team_l1'
+    );
+
+  if (!isCreditL1) {
+    continue;
+  }
+
+  if (
+    stage &&
+    stage !== 'credit_l1'
+  ) {
+    continue;
+  }
+
+  getSets(
+    creditUserId
+  ).total.add(
+    `customer:${customerId}`
+  );
+}
+/*
+ * =====================================================
+ * CREDIT L1 TOTAL CASES
+ *
+ * Customer must have:
+ *
+ * 1. draft -> submitted
+ * 2. submitted -> credit_l1_approved
+ *
+ * changedBy on Credit L1 approval identifies
+ * the Credit L1 user.
+ * =====================================================
+ */
+
+const creditL1TotalRows =
+  await AppDataSource.query(
+    `
+      SELECT DISTINCT
+        approval.customerId,
+        approval.changedBy AS userId
+      FROM case_status_history approval
+
+      WHERE LOWER(approval.previousStatus) = 'submitted'
+        AND LOWER(approval.status) IN (
+          'credit_l1_approved',
+          'credit_l1approved'
+        )
+
+        AND approval.changedBy IN (${userIds
+          .map(() => '?')
+          .join(',')})
+
+        AND EXISTS (
+          SELECT 1
+          FROM case_status_history submitted
+          WHERE submitted.customerId = approval.customerId
+            AND LOWER(submitted.previousStatus) = 'draft'
+            AND LOWER(submitted.status) = 'submitted'
+        )
+
+        ${
+          startDate
+            ? 'AND approval.createdAt >= ?'
+            : ''
+        }
+
+        ${
+          endDate
+            ? 'AND approval.createdAt <= ?'
+            : ''
+        }
+    `,
+    [
+      ...userIds,
+
+      ...(startDate
+        ? [startDate]
+        : []),
+
+      ...(endDate
+        ? [endDate]
+        : []),
+    ],
+  );
+
+for (const row of creditL1TotalRows) {
+  const creditUserId =
+    Number(row.userId);
+
+  const customerId =
+    Number(row.customerId);
+
+  if (
+    !creditUserId ||
+    !customerId
+  ) {
+    continue;
+  }
+
+  const userRoles =
+    rolesMap[creditUserId] || [];
+
+  const isCreditL1 =
+    userRoles.some(
+      role =>
+        role
+          .trim()
+          .toLowerCase() ===
+        'credit_team_l1'
+    );
+
+  if (!isCreditL1) {
+    continue;
+  }
+
+  if (
+    stage &&
+    stage !== 'credit_l1'
+  ) {
+    continue;
+  }
+
+  getSets(
+    creditUserId
+  ).total.add(
+    `customer:${customerId}`
+  );
+}
+
+  /*
+   * =====================================================
+   * CREDIT / OPS HISTORICAL QUEUE
+   *
+   * task_time_tracking tells us which user received
+   * the case historically.
+   * =====================================================
+   */
+
+  const trackingQuery =
+    this.taskTimeTrackingRepository
+      .createQueryBuilder('tracking')
+      .leftJoin(
+        'tracking.caseWorkflow',
+        'workflow'
+      )
+      .select('tracking.userId', 'userId')
+      .addSelect('tracking.taskId', 'taskId')
+      .addSelect('tracking.bucket', 'bucket')
+      .addSelect(
+        'workflow.customerId',
+        'customerId'
+      )
+      .addSelect(
+        'tracking.assignedAt',
+        'assignedAt'
+      )
+      .where(
+        'tracking.userId IN (:...userIds)',
+        { userIds }
+      );
+
+  if (startDate) {
+    trackingQuery.andWhere(
+      'tracking.assignedAt >= :startDate',
+      { startDate }
+    );
+  }
+
+  if (endDate) {
+    trackingQuery.andWhere(
+      'tracking.assignedAt <= :endDate',
+      { endDate }
+    );
+  }
+
+  if (stage) {
+    trackingQuery.andWhere(
+      'tracking.bucket = :stage',
+      { stage }
+    );
+  }
+
+  const trackingRows =
+    await trackingQuery.getRawMany();
+
+  for (const row of trackingRows) {
+    const currentUserId = Number(row.userId);
+
+    if (!currentUserId || isRm(currentUserId)) {
+      continue;
+    }
+
+    const userStages = getStages(currentUserId);
+
+    if (
+      row.bucket &&
+      !userStages.includes(row.bucket)
+    ) {
+      continue;
+    }
+
+    const key = row.customerId
+      ? `customer:${row.customerId}`
+      : `task:${row.taskId}`;
+
+   
+
+
+if (!isCreditL1(currentUserId)) {
+  getSets(currentUserId)
+    .total.add(key);
+}  
+}
+
+  /*
+   * =====================================================
+   * CURRENT WORKFLOW QUEUE
+   *
+   * Covers currently assigned cases even when old
+   * tracking rows are unavailable.
+   *
+   * DISTINCT customer id prevents duplicate workflows.
+   * =====================================================
+   */
+
+  const workflowQuery =
+    this.caseWorkflowRepository
+      .createQueryBuilder('workflow')
+      .select(
+        'workflow.customerId',
+        'customerId'
+      )
+      .addSelect(
+        'workflow.assignedUserId',
+        'assignedUserId'
+      )
+      .addSelect(
+        'workflow.currentStatus',
+        'currentStatus'
+      )
+      .addSelect(
+        'workflow.currentApproverRoleName',
+        'currentApproverRoleName'
+      )
+      .addSelect(
+        'workflow.assignedStage',
+        'assignedStage'
+      )
+      .where(
+        'workflow.assignedUserId IN (:...userIds)',
+        { userIds }
+      );
+
+  const currentWorkflowRows =
+    await workflowQuery.getRawMany();
+
+  for (const row of currentWorkflowRows) {
+    const currentUserId =
+      Number(row.assignedUserId);
+
+    const customerId =
+      Number(row.customerId);
+
+    if (
+      !currentUserId ||
+      !customerId ||
+      isRm(currentUserId)
+    ) {
+      continue;
+    }
+
+    const workflowStage =
+      this.getStageFromWorkflowStatus(
+        row.currentStatus,
+        row.currentApproverRoleName
+      ) ||
+      row.assignedStage;
+
+    const userStages =
+      getStages(currentUserId);
+
+    if (
+      !workflowStage ||
+      !userStages.includes(workflowStage)
+    ) {
+      continue;
+    }
+
+    if (
+      stage &&
+      workflowStage !== stage
+    ) {
+      continue;
+    }
+
+  if (!isCreditL1(currentUserId)) {
+  getSets(currentUserId).total.add(
+    `customer:${customerId}`
+  );
+}
+  }
+
+  /*
+   * =====================================================
+   * ACTUAL ACTIONS
+   *
+   * case_status_history.userId =
+   * user who actually performed the action.
+   * =====================================================
+   */
+
+  if (userIds.length > 0) {
+    const placeholders =
+      userIds.map(() => '?').join(',');
+
+    const params: any[] = [...userIds];
+
+    let dateWhere = '';
+
+    if (startDate) {
+      dateWhere +=
+        ' AND h.createdAt >= ?';
+
+      params.push(startDate);
+    }
+
+    if (endDate) {
+      dateWhere +=
+        ' AND h.createdAt <= ?';
+
+      params.push(endDate);
+    }
+
+  const historyRows = await AppDataSource.query(
+  `
+    SELECT
+      h.changedBy AS userId,
+      h.customerId,
+      h.previousStatus,
+      h.status AS currentStatus,
+      h.remarks,
+      h.createdAt,
+      c.rmId AS rmId
+    FROM case_status_history h
+    LEFT JOIN customers c
+      ON c.id = h.customerId
+    WHERE h.changedBy IN (${placeholders})
+    ${dateWhere}
+  `,
+  params
+);
+
+    for (const row of historyRows) {
+      const currentUserId =
+        Number(row.userId);
+
+      const customerId =
+        Number(row.customerId);
+
+      if (
+        !currentUserId ||
+        !customerId
+      ) {
+        continue;
+      }
+
+      const previousStatus =
+        String(
+          row.previousStatus || ''
+        )
+          .trim()
+          .toLowerCase();
+
+      const currentStatus =
+        String(
+          row.currentStatus || ''
+        )
+          .trim()
+          .toLowerCase();
+
+      /*
+       * ==============================
+       * RM
+       *
+       * completed = submitted to Credit
+       * ==============================
+       */
+
+      if (isRm(currentUserId)) {
+        if (
+          Number(row.rmId) !==
+          currentUserId
+        ) {
+          continue;
+        }
+
+        if (
+          stage &&
+          stage !== 'rm'
+        ) {
+          continue;
+        }
+
+        if (
+          currentStatus === 'submitted'
+        ) {
+          getSets(
+            currentUserId
+          ).completed.add(
+            `customer:${customerId}`
+          );
+        }
+
+        continue;
+      }
+
+      /*
+       * ==============================
+       * CREDIT / OPS
+       * ==============================
+       */
+
+      const previousStage =
+        this.getStageFromWorkflowStatus(
+          previousStatus
+        );
+
+      const currentStage =
+        this.getStageFromWorkflowStatus(
+          currentStatus
+        );
+
+      const userStages =
+        getStages(currentUserId);
+
+      if (
+        !previousStage ||
+        !userStages.includes(previousStage)
+      ) {
+        continue;
+      }
+
+      if (
+        stage &&
+        previousStage !== stage
+      ) {
+        continue;
+      }
+
+      const caseKey =
+        `customer:${customerId}`;
+
+      /*
+       * History proves this case was
+       * processed by this user.
+       *
+       * Therefore make sure it exists
+       * in their workload.
+       */
+      getSets(
+        currentUserId
+      ).total.add(caseKey);
+
+      /*
+       * Rejected by that user
+       */
+      if (
+        currentStatus === 'rejected'
+      ) {
+        getSets(
+          currentUserId
+        ).rejected.add(caseKey);
+
+        continue;
+      }
+
+      /*
+       * Approval/action completed when
+       * case moves out of user's stage.
+       */
+      if (
+        currentStage &&
+        currentStage !== previousStage
+      ) {
+        getSets(
+          currentUserId
+        ).completed.add(caseKey);
+      }
+    }
+  }
+
+  /*
+   * =====================================================
+   * FINAL COUNTS
+   * =====================================================
+   */
+
+  const result: Record<
+    number,
+    {
+      totalCases: number;
+      completedCases: number;
+      pendingCases: number;
+      inProgressCases: number;
+      rejectedCases: number;
+    }
+  > = {};
+
+  for (const currentUserId of userIds) {
+    const current =
+      getSets(currentUserId);
+
+    const processed = new Set([
+      ...current.completed,
+      ...current.rejected,
+    ]);
+
+    const totalCases =
+      current.total.size;
+
+    const completedCases =
+      current.completed.size;
+
+    const rejectedCases =
+      current.rejected.size;
+
+    const pendingCases =
+      Math.max(
+        0,
+        totalCases - processed.size
+      );
+
+    result[currentUserId] = {
+      totalCases,
+      completedCases,
+      rejectedCases,
+      pendingCases,
+
+      // Current frontend calls this "active".
+      inProgressCases: pendingCases,
+    };
+  }
+
+  return result;
+}
   /**
    * Get overall performance summary for superadmin dashboard
    */
@@ -263,6 +1278,213 @@ export class UserPerformanceService {
     };
   }
 
+  private normalizeWorkflowApproverRole(
+  role?: string | null,
+): string | null {
+  const value = String(role || '')
+    .trim()
+    .toLowerCase();
+
+  if (!value) return null;
+
+  const roleMap: Record<string, string> = {
+    credit_l1: 'credit_team_l1',
+    credit_team_l1: 'credit_team_l1',
+
+    credit_l2: 'credit_team_l2',
+    credit_team_l2: 'credit_team_l2',
+
+    credit_head: 'credit_head',
+
+    ops_l1: 'operations_team_l1',
+    operations_team_l1: 'operations_team_l1',
+
+    ops_l2: 'operations_team_l2',
+    operations_team_l2: 'operations_team_l2',
+
+    ops_head: 'operations_head',
+    operations_head: 'operations_head',
+
+    ceo: 'ceo',
+    md: 'md',
+  };
+
+  return roleMap[value] || value;
+}
+
+private async getCurrentPendingWorkflowMap(
+  userIds: number[],
+  rolesMap: Record<number, string[]>,
+  startDate?: Date,
+  endDate?: Date,
+): Promise<Record<number, number>> {
+
+  const result: Record<number, number> = {};
+
+  if (!userIds.length) {
+    return result;
+  }
+
+  const rows =
+    await this.caseWorkflowRepository
+      .createQueryBuilder('workflow')
+      .select(
+        'workflow.customerId',
+        'customerId',
+      )
+      .addSelect(
+        'workflow.assignedUserId',
+        'assignedUserId',
+      )
+      .addSelect(
+        'workflow.currentStatus',
+        'currentStatus',
+      )
+      .addSelect(
+        'workflow.currentApproverRoleName',
+        'currentApproverRoleName',
+      )
+      .addSelect(
+        'workflow.isCompleted',
+        'isCompleted',
+      )
+      .addSelect(
+        'workflow.isRejected',
+        'isRejected',
+      )
+      .addSelect(
+        'workflow.createdAt',
+        'createdAt',
+      )
+      .where(
+        'workflow.assignedUserId IN (:...userIds)',
+        { userIds },
+      )
+      .getRawMany();
+
+  const pendingSets:
+    Record<number, Set<number>> = {};
+
+  for (const userId of userIds) {
+    pendingSets[userId] =
+      new Set<number>();
+  }
+
+  for (const row of rows) {
+    const assignedUserId =
+      Number(row.assignedUserId);
+
+    const customerId =
+      Number(row.customerId);
+
+    if (
+      !assignedUserId ||
+      !customerId
+    ) {
+      continue;
+    }
+
+    /*
+     * RM pending comes from customers table,
+     * so ignore RM here.
+     */
+    const userRoles =
+      (rolesMap[assignedUserId] || [])
+        .map(role =>
+          role.trim().toLowerCase()
+        );
+
+    if (
+      userRoles.includes(
+        'relationship_manager'
+      )
+    ) {
+      continue;
+    }
+
+    const currentStatus =
+      String(
+        row.currentStatus || ''
+      )
+        .trim()
+        .toLowerCase();
+
+    /*
+     * Terminal workflow = not pending.
+     */
+    if (
+      Boolean(row.isCompleted) ||
+      Boolean(row.isRejected) ||
+      [
+        'completed',
+        'disbursed',
+        'active',
+        'invoice_active',
+        'rejected',
+      ].includes(currentStatus)
+    ) {
+      continue;
+    }
+
+    /*
+     * Current workflow approver role
+     * must belong to this user.
+     */
+    const currentApproverRole =
+      this.normalizeWorkflowApproverRole(
+        row.currentApproverRoleName
+      );
+
+    const normalizedUserRoles =
+      userRoles.map(role =>
+        this.normalizeWorkflowApproverRole(
+          role
+        )
+      );
+
+    if (
+      !currentApproverRole ||
+      !normalizedUserRoles.includes(
+        currentApproverRole
+      )
+    ) {
+      continue;
+    }
+
+    const createdAt =
+      row.createdAt
+        ? new Date(row.createdAt)
+        : null;
+
+    if (
+      startDate &&
+      createdAt &&
+      createdAt < startDate
+    ) {
+      continue;
+    }
+
+    if (
+      endDate &&
+      createdAt &&
+      createdAt > endDate
+    ) {
+      continue;
+    }
+
+    pendingSets[
+      assignedUserId
+    ].add(customerId);
+  }
+
+  for (const userId of userIds) {
+    result[userId] =
+      pendingSets[userId]?.size || 0;
+  }
+
+  return result;
+}
+
   /**
    * Get user performance list with filters
    */
@@ -305,18 +1527,48 @@ export class UserPerformanceService {
       return { data: [], total: 0 };
     }
 
-    const relationshipManagerRows = await this.userRoleRepository
-      .createQueryBuilder('ur')
-      .select('ur.userId', 'userId')
-      .innerJoin('ur.role', 'role')
-      .where('ur.userId IN (:...userIds)', { userIds })
-      .andWhere('ur.isActive = :isActive', { isActive: true })
-      .andWhere('role.name = :roleName', { roleName: 'relationship_manager' })
-      .getRawMany();
+    const rolesMap = await this.getUserRolesMap(userIds);
+const relationshipManagerUserIds =
+  new Set(
+    userIds.filter((userId) =>
+      (rolesMap[userId] || []).some(
+        (role) =>
+          role
+            .trim()
+            .toLowerCase() ===
+          'relationship_manager',
+      ),
+    ),
+  );
 
-    const relationshipManagerUserIds = new Set(
-      relationshipManagerRows.map(row => parseInt(row.userId))
-    );
+const rmPerformanceMap =
+  await this.getRmPerformanceMap(
+    Array.from(
+      relationshipManagerUserIds,
+    ),
+    startDate,
+    endDate,
+  );
+
+const correctWorkloadMap =
+  await this.getCorrectWorkloadMetrics(
+    userIds,
+    rolesMap,
+    {
+      startDate,
+      endDate,
+      stage,
+      userId,
+    }
+  );
+   
+  const currentPendingWorkflowMap =
+  await this.getCurrentPendingWorkflowMap(
+    userIds,
+    rolesMap,
+    startDate,
+    endDate,
+  );
 
     const trackingStatsQuery = this.taskTimeTrackingRepository
       .createQueryBuilder('tracking')
@@ -540,22 +1792,22 @@ export class UserPerformanceService {
     });
 
     // Get user roles
-    let rolesMap: Record<number, string[]> = {};
-    const userRoles = await this.userRoleRepository
-      .createQueryBuilder('ur')
-      .select('ur.userId', 'userId')
-      .addSelect('r.name', 'roleName')
-      .innerJoin('ur.role', 'r')
-      .where('ur.userId IN (:...userIds)', { userIds })
-      .andWhere('ur.isActive = :isActive', { isActive: true })
-      .getRawMany();
+    // let rolesMap: Record<number, string[]> = {};
+    // const userRoles = await this.userRoleRepository
+    //   .createQueryBuilder('ur')
+    //   .select('ur.userId', 'userId')
+    //   .addSelect('r.name', 'roleName')
+    //   .innerJoin('ur.role', 'r')
+    //   .where('ur.userId IN (:...userIds)', { userIds })
+    //   .andWhere('ur.isActive = :isActive', { isActive: true })
+    //   .getRawMany();
 
-    userRoles.forEach(ur => {
-      if (!rolesMap[parseInt(ur.userId)]) {
-        rolesMap[parseInt(ur.userId)] = [];
-      }
-      rolesMap[parseInt(ur.userId)].push(ur.roleName);
-    });
+    // userRoles.forEach(ur => {
+    //   if (!rolesMap[parseInt(ur.userId)]) {
+    //     rolesMap[parseInt(ur.userId)] = [];
+    //   }
+    //   rolesMap[parseInt(ur.userId)].push(ur.roleName);
+    // });
 
     // Build final results with performance scores
     const results: UserPerformanceSummary[] = eligibleUsers.map(user => {
@@ -569,12 +1821,120 @@ export class UserPerformanceService {
       const trackingRejectedCases = parseInt(stat.rejectedCases) || 0;
       const trackingTotalCompletionTime = stat.totalCompletionTime ? parseFloat(stat.totalCompletionTime) : 0;
       const trackingAvgTime = stat.avgCompletionTime ? parseFloat(stat.avgCompletionTime) : null;
-      const workflowCompletedCases = workflowStats?.completedCases || 0;
-      const workflowTotalCases = workflowStats?.totalCases || 0;
+      // const workflowCompletedCases = workflowStats?.completedCases || 0;
+      // const workflowTotalCases = workflowStats?.totalCases || 0;
       const workflowTotalCompletionTime = workflowStats?.totalCompletionTime || 0;
       const workflowCompletedWithTime = workflowStats?.completedWithTime || 0;
-      const completedCases = workflowCompletedCases || trackingCompletedCases;
-      const totalCases = workflowTotalCases || trackingTotalCases;
+      // const completedCases = workflowCompletedCases || trackingCompletedCases;
+      // const totalCases = workflowTotalCases || trackingTotalCases;
+
+      const isRelationshipManager =
+  relationshipManagerUserIds.has(currentUserId);
+
+const workload =
+  correctWorkloadMap[currentUserId] || {
+    totalCases: 0,
+    completedCases: 0,
+    pendingCases: 0,
+    inProgressCases: 0,
+    rejectedCases: 0,
+  };
+
+const rmPerformance =
+  rmPerformanceMap[currentUserId];
+
+let totalCases = 0;
+let completedCases = 0;
+let pendingCases = 0;
+let inProgressCases = 0;
+let rejectedCases = 0;
+
+const userRoles =
+  (rolesMap[currentUserId] || [])
+    .map(role =>
+      role.trim().toLowerCase()
+    );
+
+const isCreditUser =
+  userRoles.some(role =>
+    [
+      'credit_team_l1',
+      'credit_team_l2',
+      'credit_head',
+    ].includes(role)
+  );
+
+if (isRelationshipManager) {
+  /*
+   * RM
+   */
+  totalCases =
+    rmPerformance?.totalCases || 0;
+
+  pendingCases =
+    rmPerformance?.pendingCases || 0;
+
+  completedCases =
+    Math.max(
+      0,
+      totalCases - pendingCases
+    );
+
+  inProgressCases =
+    pendingCases;
+
+  rejectedCases = 0;
+
+} else if (isCreditUser) {
+  /*
+   * CREDIT
+   *
+   * completed = existing correct completed count
+   * pending   = current workflow pending
+   * total     = completed + pending
+   */
+
+  completedCases =
+    workload.completedCases;
+
+  pendingCases =
+    currentPendingWorkflowMap[
+      currentUserId
+    ] || 0;
+
+  totalCases =
+    completedCases + pendingCases;
+
+  inProgressCases =
+    pendingCases;
+
+  rejectedCases =
+    workload.rejectedCases;
+
+} else {
+  /*
+   * OPS / CEO / MD existing logic
+   */
+
+  totalCases =
+    workload.totalCases;
+
+  completedCases =
+    workload.completedCases;
+
+  pendingCases =
+    currentPendingWorkflowMap[
+      currentUserId
+    ] || 0;
+
+  inProgressCases =
+    pendingCases;
+
+  rejectedCases =
+    workload.rejectedCases;
+}
+
+
       const totalCompletionTime = workflowTotalCompletionTime || trackingTotalCompletionTime || null;
       const avgTime = workflowCompletedWithTime > 0
         ? workflowTotalCompletionTime / workflowCompletedWithTime
@@ -584,7 +1944,6 @@ export class UserPerformanceService {
       const derivedTrackingRewards = derivedTrackingRewardMap[currentUserId] || 0;
       const rewards = storedRewards + derivedTrackingRewards + derivedRmPoints;
       const rewardedTasks = (rewardTaskMap[currentUserId] || 0) + (derivedTrackingRewardTaskMap[currentUserId] || 0);
-      const isRelationshipManager = relationshipManagerUserIds.has(currentUserId);
       const rmPoints = isRelationshipManager
         ? (rmRewardMap[currentUserId] || 0) + derivedRmPoints
         : 0;
@@ -597,9 +1956,12 @@ export class UserPerformanceService {
         primaryRole: (rolesMap[currentUserId]?.[0]) || 'unknown',
         totalCases,
         completedCases,
-        pendingCases: workflowStats?.pendingCases ?? trackingPendingCases,
-        inProgressCases: workflowStats?.inProgressCases ?? trackingInProgressCases,
-        rejectedCases: workflowStats?.rejectedCases ?? trackingRejectedCases,
+        pendingCases,
+        inProgressCases,
+        rejectedCases,
+        // pendingCases: workflowStats?.pendingCases ?? trackingPendingCases,
+        // inProgressCases: workflowStats?.inProgressCases ?? trackingInProgressCases,
+        // rejectedCases: workflowStats?.rejectedCases ?? trackingRejectedCases,
         totalRewards: rewards,
         rewardedTasks,
         rmPoints,
@@ -632,6 +1994,7 @@ export class UserPerformanceService {
       total: results.length,
     };
   }
+
 
   /**
    * Get detailed performance for a specific user

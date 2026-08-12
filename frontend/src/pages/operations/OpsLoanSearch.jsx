@@ -17,6 +17,8 @@ import StatusBadge from "../../components/StatusBadge";
 import { loanServicingService } from "../../services/loanServicingService";
 import { operationsService } from "../../services/operationsService";
 import { formatCurrency, formatDate } from "../../utils/format";
+import { useAuth } from "../../hooks/useAuth";
+import { ROLES } from "../../constants/roles";
 
 const scfReportExports = [
   { id: "soa", label: "SOA", fileName: "SCF_SOA.xlsx" },
@@ -87,6 +89,25 @@ const getLanOptionLabel = (loanAccount) =>
     .join(" - ");
 
 const OpsLoanSearch = () => {
+   const { user } = useAuth();
+
+  const userRoles = useMemo(
+    () =>
+      [
+        ...(user?.roles || []).map(
+          (role) => role?.name || role
+        ),
+        user?.role,
+        user?.defaultRole,
+      ]
+        .filter(Boolean)
+        .map((role) =>
+          String(role).trim().toLowerCase()
+        ),
+    [user]
+  );
+
+  const isSuperAdmin = userRoles.includes( String(ROLES.SUPERADMIN || "superadmin") .toLowerCase() );
   const [filters, setFilters] = useState({ startDate: "", endDate: "" });
   const [lan, setLan] = useState("");
   const [customerSearch, setCustomerSearch] = useState("");
@@ -221,45 +242,112 @@ const OpsLoanSearch = () => {
     }
   };
 
-  const downloadScfReport = async (report) => {
-    const cleanLan = lan.trim().toUpperCase();
-    if (!cleanLan) {
-      toast.info("Enter a LAN");
-      return;
-    }
+const downloadScfReport = async (report) => {
+  const cleanLan = lan.trim().toUpperCase();
+  if (!cleanLan && !isSuperAdmin) {
+    toast.info("Enter a LAN");
+    return;
+  }
 
-    try {
-      setDownloadingReport(report.id);
-      const response = await loanServicingService.downloadScfReport(report.id, {
-        ...filters,
-        lan: cleanLan,
-      });
-      const blob = new Blob([response.data], {
-        type:
-          response.headers?.["content-type"] ||
-          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      });
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = getReportFileName(
-        response.headers,
-        `${cleanLan}_${report.fileName}`,
+  try {
+    setDownloadingReport(report.id);
+    const today = new Date()
+      .toISOString()
+      .slice(0, 10);
+
+    const params = cleanLan
+      ? {
+          ...filters,
+          lan: cleanLan,
+        }
+      : {
+          allCases: true,
+          endDate: today,
+        };
+
+    console.log("SCF REPORT PARAMS:", params);
+
+    const response =
+      await loanServicingService.downloadScfReport(
+        report.id,
+        params
       );
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
-      toast.success(`${report.label} generated`);
-    } catch (error) {
-      console.error("SCF report download failed:", error);
-      toast.error(
-        error.response?.data?.message || "Failed to generate SCF report",
-      );
-    } finally {
-      setDownloadingReport(null);
-    }
-  };
+
+    const blob = new Blob([response.data], {
+      type:
+        response.headers?.["content-type"] ||
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = getReportFileName(
+      response.headers,
+      cleanLan
+        ? `${cleanLan}_${report.fileName}`
+        : `ALL_CASES_${report.fileName}`
+    );
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+    toast.success(
+      cleanLan
+        ? `${report.label} generated`
+        : `${report.label} generated for all cases`
+    );
+  } catch (error) {
+    console.error(
+      "SCF report download failed:",
+      error
+    );
+    toast.error(
+      error.response?.data?.message || "Failed to generate SCF report"
+    );
+  } finally {
+    setDownloadingReport(null);
+  }
+};
+  
+  // const downloadScfReport = async (report) => {
+  //   const cleanLan = lan.trim().toUpperCase();
+  //   if (!cleanLan) {
+  //     toast.info("Enter a LAN");
+  //     return;
+  //   }
+
+  //   try {
+  //     setDownloadingReport(report.id);
+  //     const response = await loanServicingService.downloadScfReport(report.id, {
+  //       ...filters,
+  //       lan: cleanLan,
+  //     });
+  //     const blob = new Blob([response.data], {
+  //       type:
+  //         response.headers?.["content-type"] ||
+  //         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  //     });
+  //     const url = window.URL.createObjectURL(blob);
+  //     const link = document.createElement("a");
+  //     link.href = url;
+  //     link.download = getReportFileName(
+  //       response.headers,
+  //       `${cleanLan}_${report.fileName}`,
+  //     );
+  //     document.body.appendChild(link);
+  //     link.click();
+  //     link.remove();
+  //     window.URL.revokeObjectURL(url);
+  //     toast.success(`${report.label} generated`);
+  //   } catch (error) {
+  //     console.error("SCF report download failed:", error);
+  //     toast.error(
+  //       error.response?.data?.message || "Failed to generate SCF report",
+  //     );
+  //   } finally {
+  //     setDownloadingReport(null);
+  //   }
+  // };
 
   const downloadMigrationTemplate = async (upload) => {
     try {
@@ -606,7 +694,7 @@ const OpsLoanSearch = () => {
               key={report.id}
               type="button"
               onClick={() => downloadScfReport(report)}
-              disabled={Boolean(downloadingReport) || !lan.trim()}
+              disabled={Boolean(downloadingReport) ||  (!isSuperAdmin && !lan.trim())}
               className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-300"
             >
               <FiDownload
@@ -614,8 +702,10 @@ const OpsLoanSearch = () => {
                   downloadingReport === report.id ? "animate-pulse" : ""
                 }
               />
-              {report.label}
-            </button>
+
+ {isSuperAdmin && !lan.trim()
+      ? `${report.label} - All Cases`
+      : report.label}            </button>
           ))}
         </div>
       </section>

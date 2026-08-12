@@ -1,19 +1,25 @@
 import { Request, Response } from 'express';
 import { loanManagementService } from '../services/loan-management.service';
 
-const getReportFilters = (req: Request) => ({
+type ReportFilters = {
+  startDate?: string;
+  endDate?: string;
+  asOfDate?: string;
+  lan?: string;
+};
+
+type LoanSpecificReportFilters = ReportFilters & {
+  lan: string;
+};
+
+const getReportFilters = (req: Request): ReportFilters => ({
   startDate: req.query.startDate as string | undefined,
   endDate: req.query.endDate as string | undefined,
   asOfDate: req.query.asOfDate as string | undefined,
   lan: req.query.lan ? String(req.query.lan).trim().toUpperCase() : undefined,
 });
 
-const getLoanSpecificReportFilters = (req: Request): {
-  startDate?: string;
-  endDate?: string;
-  asOfDate?: string;
-  lan: string;
-} => {
+const getLoanSpecificReportFilters = (req: Request): LoanSpecificReportFilters => {
   const filters = getReportFilters(req);
   if (!filters.lan) {
     throw new Error('LAN is required for SCF report export');
@@ -23,7 +29,7 @@ const getLoanSpecificReportFilters = (req: Request): {
 
 const getSafeFilePrefix = (value: string): string => String(value || 'loan').replace(/[^a-z0-9_-]/gi, '_');
 
-const getScfExportFileName = (filters: { lan?: string }, suffix: string): string => {
+const getScfExportFileName = (filters: ReportFilters, suffix: string): string => {
   const prefix = filters.lan ? `${getSafeFilePrefix(filters.lan)}_` : 'All_Customers_';
   return `${prefix}${suffix}`;
 };

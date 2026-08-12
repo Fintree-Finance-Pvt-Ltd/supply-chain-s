@@ -8,7 +8,6 @@ const router = Router();
 const loanManagementController = new LoanManagementController();
 
 const OPS_ROLES = [
-  ROLES.OPERATIONS_TEAM,
   ROLES.OPERATIONS_TEAM_L1,
   ROLES.OPERATIONS_TEAM_L2,
   ROLES.OPERATIONS_HEAD,
@@ -24,7 +23,6 @@ const REPORT_ROLES = [
 ];
 
 const REPORT_EXPORT_ROLES = [
-  ROLES.OPERATIONS_TEAM,
   ROLES.OPERATIONS_TEAM_L1,
   ROLES.OPERATIONS_TEAM_L2,
   ROLES.OPERATIONS_HEAD,

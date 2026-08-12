@@ -16,10 +16,6 @@ export const ROLE_MENU_CONFIG = {
     { path: '/calendar', label: 'Calendar', icon: 'FiCalendar' },
     { path: '/invoice-discounting/rm', label: 'Invoice Discounting', icon: 'FiFileText' },
   ],
-  [ROLES.OPERATIONS_TEAM]: [
-    { path: '/operations/loan-search', label: 'Loan Search', icon: 'FiSearch' },
-    { path: '/operations/mis-reports', label: 'MIS Reports', icon: 'FiBarChart' },
-  ],
    [ROLES.CREDIT_TEAM_L1]: [
      { path: '/credit/dashboard', label: 'Credit Dashboard', icon: 'FiHome' },
      { path: '/credit/pending', label: 'Pending Sanctions', icon: 'FiCheckCircle' },
