@@ -19,13 +19,6 @@ import { operationsService } from "../../services/operationsService";
 import { formatCurrency, formatDate } from "../../utils/format";
 
 const scfReportExports = [
-  { id: "fifteenDay", label: "15D Report", fileName: "SCF_15D_Report.xlsx" },
-  { id: "asOfNow", label: "As of Now", fileName: "SCF_As_of_Now_Format.xlsx" },
-  {
-    id: "collections",
-    label: "Collection Format",
-    fileName: "SCF_Collection_Format.xlsx",
-  },
   { id: "soa", label: "SOA", fileName: "SCF_SOA.xlsx" },
 ];
 
@@ -462,8 +455,8 @@ const OpsLoanSearch = () => {
             Customer Loan Search
           </h1>
           <p className="mt-1 text-sm text-slate-500">
-            Search by company name or customer LAN, view loan details, and generate SCF
-            reports.
+            Search by company name or customer LAN, view loan details, and generate
+            SOA.
           </p>
         </div>
 

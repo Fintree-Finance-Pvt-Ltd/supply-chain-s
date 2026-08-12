@@ -23,6 +23,11 @@ const getLoanSpecificReportFilters = (req: Request): {
 
 const getSafeFilePrefix = (value: string): string => String(value || 'loan').replace(/[^a-z0-9_-]/gi, '_');
 
+const getScfExportFileName = (filters: { lan?: string }, suffix: string): string => {
+  const prefix = filters.lan ? `${getSafeFilePrefix(filters.lan)}_` : 'All_Customers_';
+  return `${prefix}${suffix}`;
+};
+
 const sendWorkbook = (res: Response, workbook: Buffer, fileName: string): void => {
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
@@ -140,9 +145,9 @@ export class LoanManagementController {
 
   exportScf15DReport = async (req: Request, res: Response): Promise<void> => {
     try {
-      const filters = getLoanSpecificReportFilters(req);
+      const filters = getReportFilters(req);
       const workbook = await loanManagementService.generateScf15DReportWorkbook(filters);
-      sendWorkbook(res, workbook, `${getSafeFilePrefix(filters.lan)}_SCF_15D_Report.xlsx`);
+      sendWorkbook(res, workbook, getScfExportFileName(filters, 'SCF_15D_Report.xlsx'));
     } catch (error: any) {
       sendReportError(res, error, 'Failed to generate SCF 15D report');
     }
@@ -150,9 +155,9 @@ export class LoanManagementController {
 
   exportScfAsOfNowReport = async (req: Request, res: Response): Promise<void> => {
     try {
-      const filters = getLoanSpecificReportFilters(req);
+      const filters = getReportFilters(req);
       const workbook = await loanManagementService.generateScfAsOfNowReportWorkbook(filters);
-      sendWorkbook(res, workbook, `${getSafeFilePrefix(filters.lan)}_SCF_As_of_Now_Format.xlsx`);
+      sendWorkbook(res, workbook, getScfExportFileName(filters, 'SCF_As_of_Now_Format.xlsx'));
     } catch (error: any) {
       sendReportError(res, error, 'Failed to generate SCF as-of-now report');
     }
@@ -160,9 +165,9 @@ export class LoanManagementController {
 
   exportScfCollectionsReport = async (req: Request, res: Response): Promise<void> => {
     try {
-      const filters = getLoanSpecificReportFilters(req);
+      const filters = getReportFilters(req);
       const workbook = await loanManagementService.generateScfCollectionReportWorkbook(filters);
-      sendWorkbook(res, workbook, `${getSafeFilePrefix(filters.lan)}_SCF_Collection_Format.xlsx`);
+      sendWorkbook(res, workbook, getScfExportFileName(filters, 'SCF_Collection_Format.xlsx'));
     } catch (error: any) {
       sendReportError(res, error, 'Failed to generate SCF collection report');
     }

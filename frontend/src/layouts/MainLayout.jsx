@@ -24,7 +24,7 @@ const MainLayout = () => {
          credit_team_l1: '/credit/dashboard',
          credit_team_l2: '/credit/dashboard',
          credit_head: '/credit/dashboard',
-         operations_team: '/operations/dashboard',
+         operations_team: '/operations/loan-search',
          operations_team_l1: '/operations/dashboard',
          operations_team_l2: '/operations/dashboard',
          operations_head: '/operations/dashboard',

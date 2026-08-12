@@ -47,6 +47,7 @@ import OperationsDashboard from './pages/operations/OperationsWorkbench'
 import OperationsCaseScreen from './pages/operations/OperationsCaseScreen'
 import RepaymentUpload from './pages/operations/RepaymentUpload'
 import OpsLoanSearch from './pages/operations/OpsLoanSearch'
+import MisReports from './pages/operations/MisReports'
 import SupplierDashboard from './pages/supplier/SupplierDashboard'
 import SupplierCreate from './pages/supplier/SupplierCreate'
 import SupplierDetail from './pages/supplier/SupplierDetail'
@@ -142,6 +143,14 @@ function App() {
             element={
               <ProtectedRoute allowedRoles={[ROLES.SUPERADMIN]}>
                 <OpsLoanSearch />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="superadmin/mis-reports"
+            element={
+              <ProtectedRoute allowedRoles={[ROLES.SUPERADMIN]}>
+                <MisReports />
               </ProtectedRoute>
             }
           />
@@ -355,6 +364,7 @@ function App() {
             element={
               <ProtectedRoute
                 allowedRoles={[
+                  ROLES.OPERATIONS_TEAM,
                   ROLES.OPERATIONS_TEAM_L1,
                   ROLES.OPERATIONS_TEAM_L2,
                   ROLES.OPERATIONS_HEAD,
@@ -362,6 +372,22 @@ function App() {
                 ]}
               >
                 <OpsLoanSearch />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="operations/mis-reports"
+            element={
+              <ProtectedRoute
+                allowedRoles={[
+                  ROLES.OPERATIONS_TEAM,
+                  ROLES.OPERATIONS_TEAM_L1,
+                  ROLES.OPERATIONS_TEAM_L2,
+                  ROLES.OPERATIONS_HEAD,
+                  ROLES.SUPERADMIN,
+                ]}
+              >
+                <MisReports />
               </ProtectedRoute>
             }
           />

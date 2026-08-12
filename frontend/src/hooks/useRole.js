@@ -16,6 +16,10 @@ export const ROLE_MENU_CONFIG = {
     { path: '/calendar', label: 'Calendar', icon: 'FiCalendar' },
     { path: '/invoice-discounting/rm', label: 'Invoice Discounting', icon: 'FiFileText' },
   ],
+  [ROLES.OPERATIONS_TEAM]: [
+    { path: '/operations/loan-search', label: 'Loan Search', icon: 'FiSearch' },
+    { path: '/operations/mis-reports', label: 'MIS Reports', icon: 'FiBarChart' },
+  ],
    [ROLES.CREDIT_TEAM_L1]: [
      { path: '/credit/dashboard', label: 'Credit Dashboard', icon: 'FiHome' },
      { path: '/credit/pending', label: 'Pending Sanctions', icon: 'FiCheckCircle' },
@@ -34,6 +38,7 @@ export const ROLE_MENU_CONFIG = {
     { path: '/operations/suppliers', label: 'Supplier Onboarding', icon: 'FiUserPlus' },
     { path: '/invoice-discounting/ops-l1', label: 'Invoice Discounting', icon: 'FiFileText' },
     { path: '/operations/loan-search', label: 'Loan Search', icon: 'FiSearch' },
+    { path: '/operations/mis-reports', label: 'MIS Reports', icon: 'FiBarChart' },
     { path: '/operations/repayment-upload', label: 'UTR Upload', icon: 'FiDollarSign' },
     { path: '/calendar', label: 'Calendar', icon: 'FiCalendar' },
   ],
@@ -43,6 +48,7 @@ export const ROLE_MENU_CONFIG = {
     { path: '/operations/suppliers', label: 'Supplier Onboarding', icon: 'FiUserPlus' },
     { path: '/invoice-discounting/ops-l2', label: 'Invoice Discounting', icon: 'FiFileText' },
     { path: '/operations/loan-search', label: 'Loan Search', icon: 'FiSearch' },
+    { path: '/operations/mis-reports', label: 'MIS Reports', icon: 'FiBarChart' },
     { path: '/operations/repayment-upload', label: 'UTR Upload', icon: 'FiDollarSign' },
     { path: '/calendar', label: 'Calendar', icon: 'FiCalendar' },
   ],
@@ -52,6 +58,7 @@ export const ROLE_MENU_CONFIG = {
     { path: '/operations/suppliers', label: 'Supplier Onboarding', icon: 'FiUserPlus' },
     { path: '/invoice-discounting/ops-head', label: 'Invoice Discounting', icon: 'FiFileText' },
     { path: '/operations/loan-search', label: 'Loan Search', icon: 'FiSearch' },
+    { path: '/operations/mis-reports', label: 'MIS Reports', icon: 'FiBarChart' },
     { path: '/operations/repayment-upload', label: 'UTR Upload', icon: 'FiDollarSign' },
     { path: '/calendar', label: 'Calendar', icon: 'FiCalendar' },
   ],
@@ -75,6 +82,7 @@ export const ROLE_MENU_CONFIG = {
     { path: '/superadmin/analytics', label: 'Analytics', icon: 'FiFileText' },
     { path: '/superadmin/cases', label: 'All Cases', icon: 'FiFolder' },
     { path: '/superadmin/loan-search', label: 'Loan Search', icon: 'FiSearch' },
+    { path: '/superadmin/mis-reports', label: 'MIS Reports', icon: 'FiBarChart' },
     { path: '/superadmin/performance', label: 'User Performance', icon: 'FiBarChart' },
   ],
 }

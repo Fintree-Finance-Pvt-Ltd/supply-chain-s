@@ -2089,7 +2089,15 @@ export class OperationsService {
     if (!customer) {
       throw new Error(`Customer for LAN ${loanAccount.lanId} was not found`);
     }
-    if (customer.status !== CASE_STATUS.COMPLETED) {
+    const customerIsCompleted = customer.status === CASE_STATUS.COMPLETED;
+    const loanAccountIsOnboarded =
+      String(loanAccount.status || '').toLowerCase() === 'active' &&
+      loanAccount.isOnboarded === true;
+
+    // A customer can move back into approval when another partner section is in flow.
+    // Invoice migration should still be allowed for the selected partner LAN once that
+    // LAN has already been onboarded into local loan management.
+    if (!customerIsCompleted && !loanAccountIsOnboarded) {
       throw new Error(`Customer for LAN ${loanAccount.lanId} is not completed/onboarded`);
     }
 

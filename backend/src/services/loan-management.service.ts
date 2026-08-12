@@ -1370,6 +1370,11 @@ private calculateAccruedCharges(
     return cleanLan;
   }
 
+  private getOptionalScfReportLan(filters?: ScfReportFilters): string | null {
+    const cleanLan = String(filters?.lan || '').trim().toUpperCase();
+    return cleanLan || null;
+  }
+
   private getCustomerCode(loanAccount: LoanAccount | null | undefined): string | null {
     return loanAccount?.customer?.customerCode || null;
   }
@@ -1546,9 +1551,11 @@ private calculateAccruedCharges(
     options?: { dueWithinDays?: number; onlyOutstanding?: boolean },
   ): Promise<any[]> {
     const asOfDate = this.getScfReportAsOfDate(filters);
-    const cleanLan = this.getRequiredScfReportLan(filters);
+    const cleanLan = this.getOptionalScfReportLan(filters);
     const where: any = { status: Not(In([DEMAND_STATUS.REVERSED])) };
-    where.lan = cleanLan;
+    if (cleanLan) {
+      where.lan = cleanLan;
+    }
 
     const demands = await this.demandRepository.find({
       where,
@@ -1580,8 +1587,11 @@ private calculateAccruedCharges(
   }
 
   private async getScfCollectionRows(filters?: ScfReportFilters): Promise<any[]> {
-    const cleanLan = this.getRequiredScfReportLan(filters);
-    const where: any = { lan: cleanLan };
+    const cleanLan = this.getOptionalScfReportLan(filters);
+    const where: any = {};
+    if (cleanLan) {
+      where.lan = cleanLan;
+    }
 
     const allocations = await this.allocationRepository.find({
       where,
