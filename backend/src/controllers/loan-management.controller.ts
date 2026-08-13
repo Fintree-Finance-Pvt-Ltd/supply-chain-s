@@ -84,6 +84,19 @@ export class LoanManagementController {
     }
   };
 
+  deleteCollectionsByLan = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const result = await loanManagementService.deleteCollectionsByLan(req.params.lan);
+      res.json({
+        success: true,
+        message: `Deleted ${result.deletedCollections} collection(s) for LAN ${result.lan}`,
+        data: result,
+      });
+    } catch (error: any) {
+      res.status(400).json({ success: false, message: error.message || 'Failed to delete collections' });
+    }
+  };
+
   getLoanAccountSummary = async (req: Request, res: Response): Promise<void> => {
     try {
       const result = await loanManagementService.getLoanAccountSummary(req.params.lan);

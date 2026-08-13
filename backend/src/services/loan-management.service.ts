@@ -10,6 +10,7 @@ import {
   LoanLedgerEntry,
   Repayment,
   RepaymentAllocation,
+  RepaymentUpload,
   REPAYMENT_STATUS,
 } from '../entities';
 import { Invoice } from '../entities/Invoice';
@@ -562,6 +563,35 @@ private calculateAccruedCharges(
     return manager.getRepository(LoanLedgerEntry).save(entry);
   }
 
+  private async recalculateLedgerRunningBalances(
+    manager: EntityManager,
+    loanAccountId: number,
+  ): Promise<void> {
+    const ledgerRepository = manager.getRepository(LoanLedgerEntry);
+    const entries = await ledgerRepository.find({
+      where: { loanAccountId },
+      order: { id: 'ASC' },
+    });
+
+    let runningBalance = 0;
+    const changedEntries: LoanLedgerEntry[] = [];
+
+    entries.forEach((entry) => {
+      runningBalance = this.roundMoney(
+        runningBalance + this.toNumber(entry.debit) - this.toNumber(entry.credit),
+      );
+
+      if (this.toNumber(entry.runningBalance) !== runningBalance) {
+        entry.runningBalance = runningBalance;
+        changedEntries.push(entry);
+      }
+    });
+
+    if (changedEntries.length > 0) {
+      await ledgerRepository.save(changedEntries);
+    }
+  }
+
   async bookInvoiceDisbursement(
     invoiceId: number,
     userId?: number,
@@ -787,6 +817,166 @@ private calculateAccruedCharges(
 
       const snapshot = await this.refreshSnapshot(manager, loanAccount.id);
       return { repayment, allocations, snapshot };
+    });
+  }
+
+  async deleteCollectionsByLan(lan: string): Promise<{
+    lan: string;
+    deletedCollections: number;
+    deletedAllocations: number;
+    deletedUploadRows: number;
+    deletedLedgerEntries: number;
+    snapshot: LoanAccountSnapshot;
+  }> {
+    return AppDataSource.transaction(async (manager) => {
+      const cleanLan = String(lan || '').trim().toUpperCase();
+      if (!cleanLan) throw new Error('LAN is required');
+
+      const loanAccount = await manager.getRepository(LoanAccount).findOne({
+        where: { lanId: cleanLan },
+      });
+      if (!loanAccount) throw new Error(`LAN ${cleanLan} not found`);
+
+      const repaymentRepository = manager.getRepository(Repayment);
+      const allocationRepository = manager.getRepository(RepaymentAllocation);
+      const demandRepository = manager.getRepository(LoanDemand);
+      const disbursementRepository = manager.getRepository(LoanDisbursement);
+      const uploadRepository = manager.getRepository(RepaymentUpload);
+
+      const repayments = await repaymentRepository.find({
+        where: { lan: cleanLan },
+        order: { repaymentDate: 'ASC', id: 'ASC' },
+      });
+      const repaymentIds = repayments.map((repayment) => repayment.id);
+
+      const allocations = repaymentIds.length > 0
+        ? await allocationRepository.find({
+            where: { repaymentId: In(repaymentIds) },
+            relations: ['demand'],
+          })
+        : [];
+
+      const demandReversals = new Map<number, MoneyBreakup & { total: number }>();
+      allocations.forEach((allocation) => {
+        const demandId = this.toNumber(allocation.demandId);
+        if (!demandId) return;
+
+        const current = demandReversals.get(demandId) || {
+          principal: 0,
+          interest: 0,
+          penal: 0,
+          fee: 0,
+          total: 0,
+        };
+
+        current.principal = this.roundMoney(current.principal + this.toNumber(allocation.principalAmount));
+        current.interest = this.roundMoney(current.interest + this.toNumber(allocation.interestAmount));
+        current.penal = this.roundMoney(current.penal + this.toNumber(allocation.penalAmount));
+        current.fee = this.roundMoney(current.fee + this.toNumber(allocation.feeAmount));
+        current.total = this.roundMoney(current.total + this.toNumber(allocation.totalAmount));
+        demandReversals.set(demandId, current);
+      });
+
+      const demandIds = Array.from(demandReversals.keys());
+      const demands = demandIds.length > 0
+        ? await demandRepository.find({ where: { id: In(demandIds) } })
+        : [];
+      const demandById = new Map(demands.map((demand) => [demand.id, demand]));
+
+      demands.forEach((demand) => {
+        const reversal = demandReversals.get(demand.id);
+        if (!reversal) return;
+
+        demand.principalPaid = this.roundMoney(
+          Math.max(this.toNumber(demand.principalPaid) - reversal.principal, 0),
+        );
+        demand.interestPaid = this.roundMoney(
+          Math.max(this.toNumber(demand.interestPaid) - reversal.interest, 0),
+        );
+        demand.penalPaid = this.roundMoney(
+          Math.max(this.toNumber(demand.penalPaid) - reversal.penal, 0),
+        );
+        demand.feePaid = this.roundMoney(
+          Math.max(this.toNumber(demand.feePaid) - reversal.fee, 0),
+        );
+        demand.totalPaid = this.roundMoney(
+          Math.max(this.toNumber(demand.totalPaid) - reversal.total, 0),
+        );
+        demand.outstandingAmount = this.roundMoney(
+          Math.max(this.toNumber(demand.totalDue) - this.toNumber(demand.totalPaid), 0),
+        );
+        demand.status = this.getDemandStatus(demand);
+      });
+
+      if (demands.length > 0) {
+        await demandRepository.save(demands);
+      }
+
+      const disbursementPrincipalReversals = new Map<number, number>();
+      allocations.forEach((allocation) => {
+        const principalAmount = this.toNumber(allocation.principalAmount);
+        if (principalAmount <= 0) return;
+
+        const demand = allocation.demand || demandById.get(allocation.demandId);
+        const disbursementId = this.toNumber(demand?.loanDisbursementId);
+        if (!disbursementId) return;
+
+        disbursementPrincipalReversals.set(
+          disbursementId,
+          this.roundMoney((disbursementPrincipalReversals.get(disbursementId) || 0) + principalAmount),
+        );
+      });
+
+      const disbursementIds = Array.from(disbursementPrincipalReversals.keys());
+      const disbursements = disbursementIds.length > 0
+        ? await disbursementRepository.find({ where: { id: In(disbursementIds) } })
+        : [];
+
+      disbursements.forEach((disbursement) => {
+        const principalAmount = disbursementPrincipalReversals.get(disbursement.id) || 0;
+        disbursement.principalOutstanding = this.roundMoney(
+          Math.min(
+            this.toNumber(disbursement.disbursementAmount),
+            this.toNumber(disbursement.principalOutstanding) + principalAmount,
+          ),
+        );
+      });
+
+      if (disbursements.length > 0) {
+        await disbursementRepository.save(disbursements);
+      }
+
+      const ledgerDeleteResult = await manager
+        .createQueryBuilder()
+        .delete()
+        .from(LoanLedgerEntry)
+        .where('lan = :lan', { lan: cleanLan })
+        .andWhere('entryType IN (:...entryTypes)', {
+          entryTypes: [LEDGER_ENTRY_TYPE.REPAYMENT, LEDGER_ENTRY_TYPE.ALLOCATION],
+        })
+        .execute();
+
+      if (allocations.length > 0) {
+        await allocationRepository.delete({ id: In(allocations.map((allocation) => allocation.id)) });
+      }
+
+      if (repaymentIds.length > 0) {
+        await repaymentRepository.delete({ id: In(repaymentIds) });
+      }
+
+      const uploadDeleteResult = await uploadRepository.delete({ lan: cleanLan });
+
+      await this.recalculateLedgerRunningBalances(manager, loanAccount.id);
+      const snapshot = await this.refreshSnapshot(manager, loanAccount.id);
+
+      return {
+        lan: cleanLan,
+        deletedCollections: repaymentIds.length,
+        deletedAllocations: allocations.length,
+        deletedUploadRows: uploadDeleteResult.affected || 0,
+        deletedLedgerEntries: ledgerDeleteResult.affected || 0,
+        snapshot,
+      };
     });
   }
 

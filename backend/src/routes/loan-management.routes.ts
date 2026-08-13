@@ -43,6 +43,12 @@ router.post(
   loanManagementController.recordCollection,
 );
 
+router.delete(
+  '/collections/:lan',
+  roleMiddleware([ROLES.OPERATIONS_HEAD, ROLES.SUPERADMIN, ROLES.ADMIN]),
+  loanManagementController.deleteCollectionsByLan,
+);
+
 router.get(
   '/accounts/:lan',
   roleMiddleware(OPS_ROLES),

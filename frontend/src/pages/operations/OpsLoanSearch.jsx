@@ -8,6 +8,7 @@ import {
   FiFileText,
   FiRefreshCw,
   FiSearch,
+  FiTrash2,
   FiUpload,
 } from "react-icons/fi";
 import { toast } from "react-toastify";
@@ -108,6 +109,7 @@ const OpsLoanSearch = () => {
   );
 
   const isSuperAdmin = userRoles.includes( String(ROLES.SUPERADMIN || "superadmin") .toLowerCase() );
+
   const [filters, setFilters] = useState({ startDate: "", endDate: "" });
   const [lan, setLan] = useState("");
   const [customerSearch, setCustomerSearch] = useState("");
@@ -120,6 +122,7 @@ const OpsLoanSearch = () => {
   const [loading, setLoading] = useState(false);
   const [downloadingReport, setDownloadingReport] = useState(null);
   const [downloadingTemplate, setDownloadingTemplate] = useState(null);
+  const [deletingCollections, setDeletingCollections] = useState(false);
   const [migrationFiles, setMigrationFiles] = useState({
     customer: null,
     supplier: null,
@@ -305,6 +308,34 @@ const downloadScfReport = async (report) => {
     );
   } finally {
     setDownloadingReport(null);
+  }
+};
+
+const deleteCollectionsForLan = async () => {
+  const cleanLan = lan.trim().toUpperCase();
+  if (!cleanLan) {
+    toast.info("Enter a LAN");
+    return;
+  }
+
+  const confirmed = window.confirm(
+    `Delete all collections for LAN ${cleanLan}? This cannot be undone.`,
+  );
+
+  if (!confirmed) return;
+
+  try {
+    setDeletingCollections(true);
+    const response = await loanServicingService.deleteCollectionsByLan(cleanLan);
+    toast.success(response.message || "Collections deleted");
+    await loadLan(cleanLan);
+  } catch (error) {
+    console.error("Collection delete failed:", error);
+    toast.error(
+      error.response?.data?.message || error.message || "Failed to delete collections",
+    );
+  } finally {
+    setDeletingCollections(false);
   }
 };
 
@@ -666,6 +697,19 @@ const downloadScfReport = async (report) => {
       ? `${report.label} - All Cases`
       : report.label}            </button>
           ))}
+          
+            <button
+              type="button"
+              onClick={deleteCollectionsForLan}
+              disabled={deletingCollections || loading || !lan.trim()}
+              className="inline-flex items-center justify-center gap-2 rounded-lg border border-rose-300 bg-white px-4 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-300"
+            >
+              <FiTrash2
+                className={deletingCollections ? "animate-pulse" : ""}
+              />
+              {deletingCollections ? "Deleting..." : "Delete Collections"}
+            </button>
+        
         </div>
       </section>
 
