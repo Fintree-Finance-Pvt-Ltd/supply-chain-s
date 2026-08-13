@@ -46,7 +46,12 @@ type ScfReportFilters = {
   allCases?: boolean;
 };
 
-type WorkbookCellValue = string | number | Date | null | undefined;
+type WorkbookFormulaCell = {
+  formula: string;
+  result?: number;
+};
+
+type WorkbookCellValue = string | number | Date | WorkbookFormulaCell | null | undefined;
 
 type WorkbookSheet = {
   name: string;
@@ -1782,18 +1787,37 @@ private calculateAccruedCharges(
     };
   }
 
-  private buildScfDemandState(demand: LoanDemand, asOfDate: Date): any {
+  private buildScfDemandState(
+    demand: LoanDemand,
+    asOfDate: Date,
+    options: { closePaidDemands?: boolean } = {},
+  ): any {
     const loanAccount = demand.loanAccount;
     const disbursement = demand.disbursement || null;
     const disbursementDate = disbursement?.disbursementDate || demand.demandDate;
     const rules = this.getAccrualRules(loanAccount);
     const charges = this.calculateAccruedCharges(demand, disbursement, demand.invoice, asOfDate, rules);
     const allocations = this.getAllocationTotals(demand, asOfDate);
+    const isPaidClosedDemand = options.closePaidDemands === true && demand.status === DEMAND_STATUS.PAID;
     const interestAccrued = this.toNumber(charges.interestDue);
     const chargesAccrued = this.toNumber(charges.penalDue);
-    const interestOutstanding = this.roundMoney(Math.max(interestAccrued - allocations.interest, 0));
-    const chargesOutstanding = this.roundMoney(Math.max(chargesAccrued - allocations.penal, 0));
-    const principalOutstanding = this.roundMoney(Math.max(charges.principal, 0));
+    const interestOutstanding = isPaidClosedDemand
+      ? 0
+      : this.roundMoney(Math.max(interestAccrued - allocations.interest, 0));
+    const chargesOutstanding = isPaidClosedDemand
+      ? 0
+      : this.roundMoney(Math.max(chargesAccrued - allocations.penal, 0));
+    const principalOutstanding = isPaidClosedDemand
+      ? 0
+      : this.roundMoney(Math.max(charges.principal, 0));
+    const interestDays = isPaidClosedDemand ? 0 : charges.dayCount;
+    const chargesDays = isPaidClosedDemand ? 0 : Math.max(0, charges.dayCount - rules.penalStartDay + 1);
+    const calculationTill = isPaidClosedDemand
+      ? allocations.lastPaymentDate || asOfDate
+      : asOfDate;
+    const totalOutstanding = isPaidClosedDemand
+      ? 0
+      : this.roundMoney(principalOutstanding + interestOutstanding + chargesOutstanding);
 
     return {
       customerCode: this.getCustomerCode(loanAccount),
@@ -1803,18 +1827,18 @@ private calculateAccruedCharges(
       invoiceId: this.getInvoiceDisplayId(demand),
       status: demand.status,
       dueDate: demand.dueDate,
-      dpd: this.getOverdueDayCount(demand.dueDate, asOfDate),
+      dpd: isPaidClosedDemand ? 0 : this.getOverdueDayCount(demand.dueDate, asOfDate),
       disbursementDate,
       disbursementAmount: disbursement ? this.toNumber(disbursement.disbursementAmount) : this.toNumber(demand.principalDue),
       principalOutstanding,
       roi: this.toNumber(disbursement?.interestRate ?? demand.invoice?.roiPercentage),
       penalRate: normalizeMonthlyPenalRate(disbursement?.penalRate ?? demand.invoice?.penalCharges),
       lastPaymentDate: allocations.lastPaymentDate,
-      calculationTill: asOfDate,
-      interestDays: charges.dayCount,
+      calculationTill,
+      interestDays,
       interest: interestOutstanding,
       previousInterest: allocations.interest,
-      chargesDays: Math.max(0, charges.dayCount - rules.penalStartDay + 1),
+      chargesDays,
       charges: chargesOutstanding,
       previousCharges: allocations.penal,
       principalSettled: allocations.principal,
@@ -1824,7 +1848,7 @@ private calculateAccruedCharges(
       principalDue: principalOutstanding,
       interestDue: interestOutstanding,
       chargesDue: chargesOutstanding,
-      totalOutstanding: this.roundMoney(principalOutstanding + interestOutstanding + chargesOutstanding),
+      totalOutstanding,
       demand,
     };
   }
@@ -1890,7 +1914,8 @@ private calculateAccruedCharges(
       (demand) =>
         this.buildScfDemandState(
           demand,
-          asOfDate
+          asOfDate,
+          { closePaidDemands: true },
         )
     );
 
@@ -2181,7 +2206,7 @@ private async getScfCollectionRows(filters?: ScfReportFilters,): Promise<any[]> 
 
 
   async generateScf15DReportWorkbook(filters?: ScfReportFilters): Promise<Buffer> {
-    const rows = await this.getScfDemandStates(filters, { dueWithinDays: 15, onlyOutstanding: true });
+    const rows = await this.getScfDemandStates(filters, { dueWithinDays: 15, onlyOutstanding: false });
     return this.createXlsxWorkbook([{
       name: 'Sheet1',
       rows: [
@@ -2209,7 +2234,9 @@ private async getScfCollectionRows(filters?: ScfReportFilters,): Promise<any[]> 
           'Previous Charges',
           'Total Outstanding',
         ],
-        ...rows.map(row => [
+        ...rows.map((row, index) => {
+          const rowNumber = index + 2;
+          return [
           row.customerCode,
           row.customerName,
           row.product,
@@ -2231,14 +2258,18 @@ private async getScfCollectionRows(filters?: ScfReportFilters,): Promise<any[]> 
           row.chargesDays,
           row.charges,
           row.previousCharges,
-          row.totalOutstanding,
-        ]),
+          {
+            formula: `IF(F${rowNumber}="PAID",0,K${rowNumber}+Q${rowNumber}+T${rowNumber})`,
+            result: row.totalOutstanding,
+          },
+        ];
+        }),
       ],
     }]);
   }
 
   async generateScfAsOfNowReportWorkbook(filters?: ScfReportFilters): Promise<Buffer> {
-    const rows = await this.getScfDemandStates(filters, { onlyOutstanding: true });
+    const rows = await this.getScfDemandStates(filters, { onlyOutstanding: false });
     return this.createXlsxWorkbook([{
       name: 'Sheet1',
       rows: [
@@ -2268,7 +2299,9 @@ private async getScfCollectionRows(filters?: ScfReportFilters,): Promise<any[]> 
           'Last Payment',
           'Calc. Till',
         ],
-        ...rows.map(row => [
+        ...rows.map((row, index) => {
+          const rowNumber = index + 2;
+          return [
           row.lan,
           row.invoiceId,
           row.customerCode,
@@ -2290,10 +2323,14 @@ private async getScfCollectionRows(filters?: ScfReportFilters,): Promise<any[]> 
           row.principalSettled,
           row.interestSettled,
           row.chargesSettled,
-          row.totalOutstanding,
+          {
+            formula: `IF(H${rowNumber}="PAID",0,K${rowNumber}+N${rowNumber}+Q${rowNumber})`,
+            result: row.totalOutstanding,
+          },
           row.lastPaymentDate,
           row.calculationTill,
-        ]),
+        ];
+        }),
       ],
     }]);
   }
@@ -2549,6 +2586,7 @@ private async getScfCollectionRows(filters?: ScfReportFilters,): Promise<any[]> 
   <sheets>
     ${safeSheets.map((sheet, index) => `<sheet name="${this.escapeXml(sheet.name)}" sheetId="${index + 1}" r:id="rId${index + 1}"/>`).join('')}
   </sheets>
+  <calcPr calcId="0" fullCalcOnLoad="1" forceFullCalc="1"/>
 </workbook>`;
 
     const workbookRelsXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -2613,6 +2651,14 @@ private async getScfCollectionRows(filters?: ScfReportFilters,): Promise<any[]> 
     const cellRef = `${this.getExcelColumnName(columnNumber)}${rowNumber}`;
     if (value === null || value === undefined || value === '') {
       return `<c r="${cellRef}"/>`;
+    }
+
+    if (typeof value === 'object' && !(value instanceof Date) && 'formula' in value) {
+      const formula = String(value.formula || '').replace(/^=/, '');
+      const result = typeof value.result === 'number' && Number.isFinite(value.result)
+        ? `<v>${value.result}</v>`
+        : '';
+      return `<c r="${cellRef}"><f>${this.escapeXml(formula)}</f>${result}</c>`;
     }
 
     if (typeof value === 'number' && Number.isFinite(value)) {
