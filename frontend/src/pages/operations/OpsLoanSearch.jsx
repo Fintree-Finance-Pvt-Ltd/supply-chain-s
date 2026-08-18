@@ -80,6 +80,46 @@ const getCustomerDisplayName = (customer) =>
 const getLoanAccounts = (customer) =>
   Array.isArray(customer?.loanAccounts) ? customer.loanAccounts : [];
 
+const normalizeLan = (value) => String(value || "").trim().toUpperCase();
+
+const loanAccountMatchesLan = (loanAccount, cleanLan) =>
+  [loanAccount?.lanId, loanAccount?.partnerLanId].some(
+    (value) => normalizeLan(value) === cleanLan,
+  );
+
+const findCustomerByLan = (customers, cleanLan) =>
+  (customers || []).find((customer) =>
+    getLoanAccounts(customer).some((loanAccount) =>
+      loanAccountMatchesLan(loanAccount, cleanLan),
+    ),
+  ) || null;
+
+const buildCustomerFromAccount = (accountData) => {
+  const loanAccount = accountData?.loanAccount;
+  const customer = loanAccount?.customer;
+  if (!loanAccount?.lanId || !customer) return null;
+
+  return {
+    customerId: customer.id || loanAccount.customerId,
+    companyName: customer.companyName || null,
+    customerName: customer.customerName || customer.name || null,
+    customerCode: customer.customerCode || null,
+    status: customer.status || null,
+    loanAccounts: [
+      {
+        id: loanAccount.id,
+        lanId: loanAccount.lanId,
+        partnerLanId: loanAccount.partnerLanId || null,
+        lender: loanAccount.lender || null,
+        partnerName: loanAccount.partner?.name || null,
+        status: loanAccount.status || null,
+        sanctionedAmount: loanAccount.sanctionedAmount ?? null,
+        disbursedAmount: loanAccount.disbursedAmount ?? null,
+      },
+    ],
+  };
+};
+
 const getLanOptionLabel = (loanAccount) =>
   [
     loanAccount.lanId,
@@ -132,7 +172,6 @@ const OpsLoanSearch = () => {
   const [migrationResult, setMigrationResult] = useState(null);
 
   const snapshot = account?.snapshot;
-
   const demandTotals = useMemo(() => {
     return schedule.reduce(
       (totals, row) => ({
@@ -184,7 +223,7 @@ const OpsLoanSearch = () => {
 
   const loadLan = async (targetLan) => {
     const lanToSearch = typeof targetLan === "string" ? targetLan : lan;
-    const cleanLan = lanToSearch.trim().toUpperCase();
+    const cleanLan = normalizeLan(lanToSearch);
     if (!cleanLan) {
       toast.info("Enter a LAN");
       return;
@@ -192,15 +231,36 @@ const OpsLoanSearch = () => {
 
     try {
       setLoading(true);
-      const [accountRes, scheduleRes, statementRes] = await Promise.all([
+      const customerContextPromise = operationsService
+        .searchLoanCustomers({
+          q: cleanLan,
+          limit: 20,
+        })
+        .catch((error) => {
+          console.error("Customer context lookup failed:", error);
+          return { data: [] };
+        });
+
+      const [accountRes, scheduleRes, statementRes, customerContextRes] = await Promise.all([
         loanServicingService.getAccount(cleanLan),
         loanServicingService.getSchedule(cleanLan),
         loanServicingService.getStatement(cleanLan, filters),
+        customerContextPromise,
       ]);
+      const accountData = accountRes.data;
+      const matchedCustomer =
+        findCustomerByLan(customerContextRes.data, cleanLan) ||
+        buildCustomerFromAccount(accountData);
+
       setLan(cleanLan);
-      setAccount(accountRes.data);
+      setAccount(accountData);
       setSchedule(scheduleRes.data || []);
       setStatement(statementRes.data || []);
+      setSelectedCustomer(matchedCustomer);
+      setCustomerSearch(
+        matchedCustomer ? getCustomerDisplayName(matchedCustomer) : "",
+      );
+      setCustomerMatches([]);
     } catch (error) {
       console.error("Loan detail search failed:", error);
       toast.error(
@@ -678,6 +738,21 @@ const deleteCollectionsForLan = async () => {
           </button>
         </div>
 
+        {selectedCustomer && (
+          <div className="mt-4 border-t border-slate-100 pt-4">
+            <p className="text-xs font-semibold uppercase text-slate-500">
+              Company Name
+            </p>
+            <p className="mt-1 text-sm font-semibold text-slate-950">
+              {getCustomerDisplayName(selectedCustomer)}
+            </p>
+            <p className="mt-1 text-xs text-slate-500">
+              {selectedCustomer.customerCode ||
+                `Customer #${selectedCustomer.customerId}`}
+            </p>
+          </div>
+        )}
+
         <div className="mt-4 flex flex-wrap gap-2">
           {scfReportExports.map((report) => (
             <button
@@ -702,7 +777,7 @@ const deleteCollectionsForLan = async () => {
               type="button"
               onClick={deleteCollectionsForLan}
               disabled={deletingCollections || loading || !lan.trim()}
-              className="inline-flex items-center justify-center gap-2 rounded-lg border border-rose-300 bg-white px-4 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-300"
+              className="inline-flex items-center justify-end gap-2 rounded-lg border border-rose-300 bg-white px-4 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-300"
             >
               <FiTrash2
                 className={deletingCollections ? "animate-pulse" : ""}

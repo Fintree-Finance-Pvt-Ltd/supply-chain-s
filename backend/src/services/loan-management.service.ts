@@ -391,62 +391,56 @@ private calculateAccruedCharges(
   let accumulatedInterest = 0;
   let accumulatedFee = 0;
   let accumulatedPenal = 0;
+  let settledInterest = 0;
   let allocationIndex = 0;
 
-  // Frozen base used after penalStartDay (matches nitya block calculation)
-  let compoundBase: number | null = null;
+  const applyAllocationToOutstanding = (allocation: RepaymentAllocation): void => {
+    principal = this.roundMoney(
+      Math.max(principal - this.toNumber(allocation.principalAmount), 0),
+    );
+    settledInterest = this.roundMoney(
+      settledInterest + this.toNumber(allocation.interestAmount),
+    );
+  };
 
   for (let day = 1; day <= dayCount; day += 1) {
     const accrualDate = this.getAccrualDate(disbursementDate, day, rules);
 
-    // 1. Apply allocations strictly BEFORE this day (all products)
+    // Apply collections before the day starts. Once overdue, interest and
+    // penal both use outstanding principal plus unpaid accrued interest.
     while (
       allocationIndex < allocations.length &&
       this.toDateOnly(allocations[allocationIndex].allocationDate).getTime() < accrualDate.getTime()
     ) {
-      principal = this.roundMoney(
-        Math.max(principal - this.toNumber(allocations[allocationIndex].principalAmount), 0),
-      );
+      applyAllocationToOutstanding(allocations[allocationIndex]);
       allocationIndex += 1;
-      // If principal reduced after compounding started, reduce the frozen base too
-      if (compoundBase !== null) {
-        compoundBase = this.roundMoney(Math.max(compoundBase - this.toNumber(allocations[allocationIndex - 1].principalAmount), 0));
-      }
     }
 
-    // 2. Decide the base for interest
-    if (day >= rules.penalStartDay) {
-      if (compoundBase === null) {
-        // First day of compounding – freeze (P + I so far)
-        compoundBase = this.roundMoney(principal + accumulatedInterest);
-      }
-    }
+    const openingInterestOutstanding = this.roundMoney(
+      Math.max(accumulatedInterest - settledInterest, 0),
+    );
+    const overdueBase = this.roundMoney(principal + openingInterestOutstanding);
 
-    const interestBase = compoundBase !== null ? compoundBase : principal;
+    const interestBase = day >= rules.penalStartDay ? overdueBase : principal;
 
     accumulatedInterest += this.calculatePercentageAmountRaw(interestBase, interestRate, 1);
     accumulatedFee += this.calculatePercentageAmountRaw(principal, serviceFeeRate, 1);
 
-    if (day >= rules.penalStartDay && compoundBase !== null) {
-      // Penal also on the same frozen base (exact match to nitya)
+    if (day >= rules.penalStartDay && overdueBase > 0) {
       accumulatedPenal += calculateMonthlyPenalAmountRaw(
-        compoundBase,
+        overdueBase,
         penalMonthlyRate,
         1,
       );
     }
 
-    // 3. ONLY for MFL – apply same-day allocations AFTER accruing
+    // For MFL, apply same-day allocations after accruing.
     if (rules.includeDisbursementDate) {
       while (
         allocationIndex < allocations.length &&
         this.toDateOnly(allocations[allocationIndex].allocationDate).getTime() <= accrualDate.getTime()
       ) {
-        const paidPrincipal = this.toNumber(allocations[allocationIndex].principalAmount);
-        principal = this.roundMoney(Math.max(principal - paidPrincipal, 0));
-        if (compoundBase !== null) {
-          compoundBase = this.roundMoney(Math.max(compoundBase - paidPrincipal, 0));
-        }
+        applyAllocationToOutstanding(allocations[allocationIndex]);
         allocationIndex += 1;
       }
     }
