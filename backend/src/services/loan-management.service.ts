@@ -1712,6 +1712,35 @@ private calculateAccruedCharges(
     };
   }
 
+  private calculateScfDelayedInterestAfterDefault(
+    demand: LoanDemand,
+    disbursement: LoanDisbursement | null | undefined,
+    invoice: Invoice | null | undefined,
+    asOfDate: Date,
+    rules: AccrualRules,
+  ): number {
+    const currentCharges = this.calculateAccruedCharges(demand, disbursement, invoice, asOfDate, rules);
+    if (currentCharges.dayCount < rules.penalStartDay) return 0;
+
+    const disbursementDate = disbursement?.disbursementDate || demand.demandDate;
+    const interestBeforeDefaultDate = this.getAccrualDate(
+      disbursementDate,
+      Math.max(rules.penalStartDay - 1, 1),
+      rules,
+    );
+    const interestBeforeDefault = this.calculateAccruedCharges(
+      demand,
+      disbursement,
+      invoice,
+      interestBeforeDefaultDate,
+      rules,
+    );
+
+    return this.roundMoney(
+      Math.max(this.toNumber(currentCharges.interestDue) - this.toNumber(interestBeforeDefault.interestDue), 0),
+    );
+  }
+
   private getSettledDemandAllocations(demand: LoanDemand): RepaymentAllocation[] {
     return [...(demand.allocations || [])]
       .filter(allocation => allocation.repayment?.status !== REPAYMENT_STATUS.REVERSED)
@@ -1741,6 +1770,37 @@ private calculateAccruedCharges(
     });
 
     return previousAllocations[previousAllocations.length - 1] || null;
+  }
+
+  private getScfOpeningPrincipalForAllocation(
+    demand: LoanDemand,
+    currentAllocation: RepaymentAllocation,
+  ): number {
+    const disbursement = demand.disbursement || null;
+    const basePrincipal = disbursement
+      ? this.toNumber(disbursement.disbursementAmount)
+      : this.toNumber(demand.principalDue);
+    const currentDateTime = this.toDateOnly(currentAllocation.allocationDate).getTime();
+    const currentRepaymentId = this.toNumber(currentAllocation.repaymentId);
+    const currentId = this.toNumber(currentAllocation.id);
+    const previousPrincipalSettled = this.getSettledDemandAllocations(demand)
+      .filter((allocation) => {
+        const allocationDateTime = this.toDateOnly(allocation.allocationDate).getTime();
+        if (allocationDateTime !== currentDateTime) return allocationDateTime < currentDateTime;
+
+        const repaymentId = this.toNumber(allocation.repaymentId);
+        if (repaymentId !== currentRepaymentId) return repaymentId < currentRepaymentId;
+
+        return this.toNumber(allocation.id) < currentId;
+      })
+      .reduce(
+        (sum, allocation) => sum + this.toNumber(allocation.principalAmount),
+        0,
+      );
+
+    return this.roundMoney(
+      Math.max(basePrincipal - previousPrincipalSettled, 0),
+    );
   }
 
   private getScfSoaChargeWindow(
@@ -1809,6 +1869,13 @@ private calculateAccruedCharges(
     const calculationTill = isPaidClosedDemand
       ? allocations.lastPaymentDate || asOfDate
       : asOfDate;
+    const delayedInterestSettled = this.calculateScfDelayedInterestAfterDefault(
+      demand,
+      disbursement,
+      demand.invoice,
+      this.toDateOnly(calculationTill),
+      rules,
+    );
     const totalOutstanding = isPaidClosedDemand
       ? 0
       : this.roundMoney(principalOutstanding + interestOutstanding + chargesOutstanding);
@@ -1837,6 +1904,7 @@ private calculateAccruedCharges(
       previousCharges: allocations.penal,
       principalSettled: allocations.principal,
       interestSettled: allocations.interest,
+      delayedInterestSettled,
       chargesSettled: allocations.penal,
       totalSettled: allocations.total,
       principalDue: principalOutstanding,
@@ -2126,7 +2194,10 @@ private async getScfCollectionRows(filters?: ScfReportFilters,): Promise<any[]> 
           ),
 
         soaPrincipal:
-          state.disbursementAmount,
+          this.getScfOpeningPrincipalForAllocation(
+            demand,
+            allocation,
+          ),
 
         soaInterestDays:
           soaChargeWindow.interestDays,
@@ -2288,6 +2359,7 @@ private async getScfCollectionRows(filters?: ScfReportFilters,): Promise<any[]> 
           'Prev. Charges',
           'Prin. Settled',
           'Int. Settled',
+          'Delayed Interest Settled',
           'Chg. Settled',
           'Total O/S',
           'Last Payment',
@@ -2295,6 +2367,12 @@ private async getScfCollectionRows(filters?: ScfReportFilters,): Promise<any[]> 
         ],
         ...rows.map((row, index) => {
           const rowNumber = index + 2;
+          const interestSettled = this.toNumber(row.interestSettled);
+          const delayedInterestSettled = this.toNumber(row.delayedInterestSettled);
+          const chargesSettled = this.toNumber(row.chargesSettled);
+          const regularInterestSettled = this.roundMoney(
+            Math.max(interestSettled - delayedInterestSettled, 0),
+          );
           return [
           row.lan,
           row.invoiceId,
@@ -2310,13 +2388,14 @@ private async getScfCollectionRows(filters?: ScfReportFilters,): Promise<any[]> 
           row.roi,
           row.interestDays,
           row.interest,
-          row.previousInterest,
+          interestSettled > 0 ? 0 : row.previousInterest,
           row.chargesDays,
           row.charges,
-          row.previousCharges,
+          chargesSettled > 0 ? 0 : row.previousCharges,
           row.principalSettled,
-          row.interestSettled,
-          row.chargesSettled,
+          regularInterestSettled,
+          delayedInterestSettled,
+          chargesSettled,
           {
             formula: `IF(H${rowNumber}="PAID",0,K${rowNumber}+N${rowNumber}+Q${rowNumber})`,
             result: row.totalOutstanding,
