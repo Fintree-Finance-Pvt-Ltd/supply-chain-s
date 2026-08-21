@@ -69,6 +69,24 @@ const getReportFileName = (headers, fallbackName) => {
 
 const normalizeLan = (value) => String(value || "").trim().toUpperCase();
 
+const getCustomerDisplayName = (customer) =>
+  customer?.companyName ||
+  customer?.customerName ||
+  customer?.customerCode ||
+  "Selected customer";
+
+const getLoanAccounts = (customer) =>
+  Array.isArray(customer?.loanAccounts) ? customer.loanAccounts : [];
+
+const getLanOptionLabel = (loanAccount) =>
+  [
+    loanAccount.lanId,
+    loanAccount.partnerName || loanAccount.lender,
+    loanAccount.status,
+  ]
+    .filter(Boolean)
+    .join(" - ");
+
 const OpsMigration = () => {
   const [downloadingTemplate, setDownloadingTemplate] = useState(null);
   const [migrationFiles, setMigrationFiles] = useState({
@@ -88,6 +106,49 @@ const OpsMigration = () => {
   ] = useState(false);
   const [invoiceMigrationSubmitting, setInvoiceMigrationSubmitting] =
     useState(false);
+  const [invoiceCustomerSearch, setInvoiceCustomerSearch] = useState("");
+  const [invoiceCustomerMatches, setInvoiceCustomerMatches] = useState([]);
+  const [invoiceCustomerSearchLoading, setInvoiceCustomerSearchLoading] =
+    useState(false);
+  const [selectedInvoiceCustomer, setSelectedInvoiceCustomer] = useState(null);
+
+  useEffect(() => {
+    const search = invoiceCustomerSearch.trim();
+    if (search.length < 2 || selectedInvoiceCustomer) {
+      setInvoiceCustomerMatches([]);
+      setInvoiceCustomerSearchLoading(false);
+      return undefined;
+    }
+
+    let cancelled = false;
+    const timer = window.setTimeout(async () => {
+      try {
+        setInvoiceCustomerSearchLoading(true);
+        const response = await operationsService.searchLoanCustomers({
+          companyName: search,
+          limit: 8,
+        });
+
+        if (!cancelled) {
+          setInvoiceCustomerMatches(response.data || []);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          console.error("Invoice migration customer lookup failed:", error);
+          setInvoiceCustomerMatches([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setInvoiceCustomerSearchLoading(false);
+        }
+      }
+    }, 250);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [invoiceCustomerSearch, selectedInvoiceCustomer]);
 
   useEffect(() => {
     const cleanLan = normalizeLan(invoiceMigrationForm.lan);
@@ -214,6 +275,31 @@ const OpsMigration = () => {
     }));
   };
 
+  const setInvoiceMigrationLan = (value) => {
+    setInvoiceMigrationForm((prev) => ({
+      ...prev,
+      lan: value,
+      supplierCode: "",
+    }));
+  };
+
+  const handleInvoiceCustomerSelect = (customer) => {
+    const loanAccounts = getLoanAccounts(customer);
+    setSelectedInvoiceCustomer(customer);
+    setInvoiceCustomerSearch(getCustomerDisplayName(customer));
+    setInvoiceCustomerMatches([]);
+
+    if (loanAccounts.length === 0) {
+      setInvoiceMigrationLan("");
+      toast.info("No LAN found for selected customer");
+      return;
+    }
+
+    setInvoiceMigrationLan(
+      loanAccounts.length === 1 ? loanAccounts[0].lanId : "",
+    );
+  };
+
   const getOptionalMigrationNumber = (value, label) => {
     const raw = String(value || "").trim();
     if (!raw) return undefined;
@@ -229,17 +315,20 @@ const OpsMigration = () => {
     const cleanLan = normalizeLan(invoiceMigrationForm.lan);
     const supplierCode = invoiceMigrationForm.supplierCode.trim();
     const invoiceNumber = invoiceMigrationForm.invoiceNumber.trim();
+    const invoiceDate = invoiceMigrationForm.invoiceDate.trim();
     const disbursementUtr = invoiceMigrationForm.disbursementUtr.trim();
+    const disbursementDate = invoiceMigrationForm.disbursementDate.trim();
+    const invoiceDueDate = invoiceMigrationForm.invoiceDueDate.trim();
 
     const requiredFields = [
       [cleanLan, "LAN"],
       [supplierCode, "Supplier"],
       [invoiceNumber, "Invoice Number"],
-      [invoiceMigrationForm.invoiceDate, "Invoice Date"],
+      [invoiceDate, "Invoice Date"],
       [invoiceMigrationForm.invoiceAmount, "Invoice Amount"],
       [invoiceMigrationForm.disbursementAmount, "Disbursement Amount"],
       [disbursementUtr, "Disbursement UTR"],
-      [invoiceMigrationForm.disbursementDate, "Disbursement Date"],
+      [disbursementDate, "Disbursement Date"],
     ];
     const missingField = requiredFields.find(
       ([value]) => !String(value || "").trim(),
@@ -289,12 +378,12 @@ const OpsMigration = () => {
       lan: cleanLan,
       supplierCode,
       invoiceNumber,
-      invoiceDate: invoiceMigrationForm.invoiceDate,
+      invoiceDate,
       invoiceAmount,
       disbursementAmount,
       disbursementUtr,
-      disbursementDate: invoiceMigrationForm.disbursementDate,
-      invoiceDueDate: invoiceMigrationForm.invoiceDueDate || undefined,
+      disbursementDate,
+      invoiceDueDate: invoiceDueDate || undefined,
       roiPercentage,
       penalCharges,
       serviceFee,
@@ -521,17 +610,74 @@ const OpsMigration = () => {
           </div>
 
           <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <div>
-              <label className={migrationLabelClass}>LAN *</label>
+            <div className="relative md:col-span-2">
+              <label className={migrationLabelClass}>Customer *</label>
               <input
                 type="text"
-                value={invoiceMigrationForm.lan}
-                onChange={(event) =>
-                  setInvoiceMigrationField("lan", event.target.value)
-                }
-                placeholder="Generated LAN"
+                value={invoiceCustomerSearch}
+                onChange={(event) => {
+                  setInvoiceCustomerSearch(event.target.value);
+                  setSelectedInvoiceCustomer(null);
+                  setInvoiceMigrationLan("");
+                }}
+                placeholder="Search customer name"
                 className={migrationInputClass}
               />
+              {invoiceCustomerSearch.trim().length >= 2 &&
+                !selectedInvoiceCustomer && (
+                  <div className="absolute left-0 right-0 z-20 mt-2 max-h-64 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg">
+                    {invoiceCustomerSearchLoading ? (
+                      <div className="px-3 py-2 text-sm text-slate-500">
+                        Searching...
+                      </div>
+                    ) : invoiceCustomerMatches.length > 0 ? (
+                      invoiceCustomerMatches.map((customer) => {
+                        const loanAccounts = getLoanAccounts(customer);
+                        return (
+                          <button
+                            key={customer.customerId}
+                            type="button"
+                            onClick={() => handleInvoiceCustomerSelect(customer)}
+                            className="block w-full px-3 py-2 text-left hover:bg-slate-50"
+                          >
+                            <span className="block text-sm font-semibold text-slate-900">
+                              {getCustomerDisplayName(customer)}
+                            </span>
+                            <span className="block text-xs text-slate-500">
+                              {customer.customerCode ||
+                                `Customer #${customer.customerId}`}{" "}
+                              - {loanAccounts.length} LAN
+                              {loanAccounts.length === 1 ? "" : "s"}
+                            </span>
+                          </button>
+                        );
+                      })
+                    ) : (
+                      <div className="px-3 py-2 text-sm text-slate-500">
+                        No matching customers
+                      </div>
+                    )}
+                  </div>
+                )}
+            </div>
+
+            <div>
+              <label className={migrationLabelClass}>LAN *</label>
+              <select
+                value={invoiceMigrationForm.lan}
+                onChange={(event) => setInvoiceMigrationLan(event.target.value)}
+                disabled={!selectedInvoiceCustomer}
+                className={`${migrationInputClass} disabled:bg-slate-50 disabled:text-slate-400`}
+              >
+                <option value="">
+                  {selectedInvoiceCustomer ? "Select LAN" : "Select customer first"}
+                </option>
+                {getLoanAccounts(selectedInvoiceCustomer).map((loanAccount) => (
+                  <option key={loanAccount.id} value={loanAccount.lanId}>
+                    {getLanOptionLabel(loanAccount)}
+                  </option>
+                ))}
+              </select>
             </div>
 
             <div>
@@ -552,7 +698,7 @@ const OpsMigration = () => {
                     ? "Loading suppliers..."
                     : normalizeLan(invoiceMigrationForm.lan)
                       ? "Select supplier"
-                      : "Enter LAN first"}
+                      : "Select LAN first"}
                 </option>
                 {invoiceMigrationSuppliers.map((supplier) => (
                   <option key={supplier.id} value={supplier.supplierCode}>
@@ -584,11 +730,13 @@ const OpsMigration = () => {
             <div>
               <label className={migrationLabelClass}>Invoice Date *</label>
               <input
-                type="date"
+                type="text"
+                inputMode="numeric"
                 value={invoiceMigrationForm.invoiceDate}
                 onChange={(event) =>
                   setInvoiceMigrationField("invoiceDate", event.target.value)
                 }
+                placeholder="YYYY-MM-DD or DD-MM-YYYY"
                 className={migrationInputClass}
               />
             </div>
@@ -643,7 +791,8 @@ const OpsMigration = () => {
                 Disbursement Date *
               </label>
               <input
-                type="date"
+                type="text"
+                inputMode="numeric"
                 value={invoiceMigrationForm.disbursementDate}
                 onChange={(event) =>
                   setInvoiceMigrationField(
@@ -651,6 +800,7 @@ const OpsMigration = () => {
                     event.target.value,
                   )
                 }
+                placeholder="YYYY-MM-DD or DD-MM-YYYY"
                 className={migrationInputClass}
               />
             </div>
@@ -658,11 +808,13 @@ const OpsMigration = () => {
             <div>
               <label className={migrationLabelClass}>Invoice Due Date</label>
               <input
-                type="date"
+                type="text"
+                inputMode="numeric"
                 value={invoiceMigrationForm.invoiceDueDate}
                 onChange={(event) =>
                   setInvoiceMigrationField("invoiceDueDate", event.target.value)
                 }
+                placeholder="YYYY-MM-DD or DD-MM-YYYY"
                 className={migrationInputClass}
               />
             </div>
