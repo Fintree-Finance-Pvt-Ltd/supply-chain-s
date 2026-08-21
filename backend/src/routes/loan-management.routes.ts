@@ -49,6 +49,12 @@ router.delete(
   loanManagementController.deleteCollectionsByLan,
 );
 
+router.delete(
+  '/invoices/:lan',
+  roleMiddleware([ROLES.OPERATIONS_HEAD, ROLES.SUPERADMIN, ROLES.ADMIN]),
+  loanManagementController.deleteInvoicesByLan,
+);
+
 router.get(
   '/accounts/:lan',
   roleMiddleware(OPS_ROLES),

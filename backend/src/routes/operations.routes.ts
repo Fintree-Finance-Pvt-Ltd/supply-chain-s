@@ -38,6 +38,18 @@ router.post(
   operationsController.migrateCustomers
 );
 
+router.get(
+  '/migrations/invoices/suppliers',
+  roleMiddleware([ROLES.OPERATIONS_TEAM_L1, ROLES.OPERATIONS_TEAM_L2, ROLES.OPERATIONS_HEAD]),
+  operationsController.getInvoiceMigrationSuppliers
+);
+
+router.post(
+  '/migrations/invoices/single',
+  roleMiddleware([ROLES.OPERATIONS_TEAM_L1, ROLES.OPERATIONS_TEAM_L2, ROLES.OPERATIONS_HEAD]),
+  operationsController.migrateSingleInvoice
+);
+
 router.post(
   '/migrations/invoices',
   roleMiddleware([ROLES.OPERATIONS_TEAM_L1, ROLES.OPERATIONS_TEAM_L2, ROLES.OPERATIONS_HEAD]),

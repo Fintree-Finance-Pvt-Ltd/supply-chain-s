@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { NavLink } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
-import { useRole, ROLE_MENU_CONFIG } from '../hooks/useRole'
+import { useRole } from '../hooks/useRole'
 import { ROLE_LABELS } from '../constants/roles'
 import {
   FiHome,
@@ -44,7 +44,7 @@ const iconMap = {
 
 const Sidebar = () => {
   const { logout, user } = useAuth()
-  const { roles, getAllMenuItems, getAvailableRoles, getMenuItemsForRoles } = useRole()
+  const { getAllMenuItems, getAvailableRoles, getMenuItemsForRoles } = useRole()
   const [showRoleSwitcher, setShowRoleSwitcher] = useState(false)
   const [selectedRole, setSelectedRole] = useState(null)
 

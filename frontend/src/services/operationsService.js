@@ -96,6 +96,31 @@ export const operationsService = {
     }
   },
 
+  uploadSingleInvoiceMigration: async (invoice) => {
+    try {
+      const response = await api.post(API_ENDPOINTS.INVOICE_MIGRATION_SINGLE_UPLOAD, invoice)
+      return response.data
+    } catch (error) {
+      if (error.response?.data) return error.response.data
+      const message = error.message || 'Failed to migrate invoice'
+      throw new Error(message)
+    }
+  },
+
+  getInvoiceMigrationSuppliers: async (lan) => {
+    try {
+      const response = await api.get(API_ENDPOINTS.INVOICE_MIGRATION_SUPPLIERS, {
+        params: { lan },
+      })
+      return {
+        data: response.data.success ? response.data.data : [],
+      }
+    } catch (error) {
+      console.error('Error fetching invoice migration suppliers:', error)
+      throw error
+    }
+  },
+
   downloadMigrationTemplate: async (type) => {
     const templateEndpoints = {
       customer: API_ENDPOINTS.CUSTOMER_MIGRATION_TEMPLATE,

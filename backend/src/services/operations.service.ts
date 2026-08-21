@@ -36,6 +36,51 @@ export interface RepaymentRecord {
   collection_amount: number;
 }
 
+export interface SingleInvoiceMigrationRecord {
+  [key: string]: unknown;
+  lan?: string;
+  systemLan?: string;
+  system_lan?: string;
+  lanId?: string;
+  lan_id?: string;
+  customerLan?: string;
+  customer_lan?: string;
+  partnerLanId?: string;
+  partner_lan_id?: string;
+  supplierCode?: string;
+  supplier_code?: string;
+  invoiceNumber?: string;
+  invoice_number?: string;
+  invoiceDate?: string;
+  invoice_date?: string;
+  invoiceAmount?: string | number;
+  invoice_amount?: string | number;
+  disbursementAmount?: string | number;
+  disbursement_amount?: string | number;
+  disbursementUtr?: string;
+  disbursement_utr?: string;
+  disbursementDate?: string;
+  disbursement_date?: string;
+  invoiceDueDate?: string;
+  invoice_due_date?: string;
+  dueDate?: string;
+  due_date?: string;
+  roiPercentage?: string | number;
+  roi_percentage?: string | number;
+  roi?: string | number;
+  penalCharges?: string | number;
+  penal_charges?: string | number;
+  penalRate?: string | number;
+  penal_rate?: string | number;
+  serviceFee?: string | number;
+  service_fee?: string | number;
+  description?: string;
+  customerApprovalRemarks?: string;
+  customer_approval_remarks?: string;
+  opsRemarks?: string;
+  ops_remarks?: string;
+}
+
 export interface ValidationError {
   field: string;
   message: string;
@@ -104,6 +149,14 @@ interface LoanSearchCustomer {
   customerCode: string | null;
   status: string | null;
   loanAccounts: LoanSearchLoanAccount[];
+}
+
+interface InvoiceMigrationSupplierOption {
+  id: number;
+  supplierName: string;
+  supplierCode: string;
+  email: string | null;
+  contactNumber: string | null;
 }
 
 export class OperationsService {
@@ -1234,8 +1287,11 @@ export class OperationsService {
 
   private validateInvoiceMigrationRow(row: ExcelRow): string[] {
     const errors: string[] = [];
+    if (!this.getCell(row, ['lan', 'system_lan', 'lan_id', 'customer_lan', 'partner_lan_id', 'partner_lan', 'old_lan_id'])) {
+      errors.push('lan or partner_lan_id is required');
+    }
+
     const requiredFields: Array<[string[], string]> = [
-      [['partner_lan_id', 'partner_lan', 'old_lan_id'], 'partner_lan_id'],
       [['supplier_code'], 'supplier_code'],
       [['invoice_number'], 'invoice_number'],
       [['invoice_date'], 'invoice_date'],
@@ -2071,18 +2127,19 @@ export class OperationsService {
   ): Promise<{ loanAccount: LoanAccount; customer: Customer; lanId: string }> {
     const loanAccountRepo = manager.getRepository(LoanAccount);
     const customerRepo = manager.getRepository(Customer);
+    const lanId = this.getCell(row, ['lan', 'system_lan', 'lan_id', 'customer_lan']).toUpperCase();
     const partnerLanId = this.getCell(row, ['partner_lan_id', 'partner_lan', 'old_lan_id']).toUpperCase();
 
-    if (!partnerLanId) {
-      throw new Error('partner_lan_id is required');
+    if (!lanId && !partnerLanId) {
+      throw new Error('lan or partner_lan_id is required');
     }
 
     const loanAccount = await loanAccountRepo.findOne({
-      where: { partnerLanId },
+      where: lanId ? { lanId } : { partnerLanId },
       relations: ['partner'],
     });
     if (!loanAccount) {
-      throw new Error(`Partner LAN ${partnerLanId} was not found`);
+      throw new Error(lanId ? `LAN ${lanId} was not found` : `Partner LAN ${partnerLanId} was not found`);
     }
 
     const customer = await customerRepo.findOne({ where: { id: loanAccount.customerId } });
@@ -2476,14 +2533,41 @@ export class OperationsService {
     return this.buildMigrationResult('Supplier', rows.length, results);
   }
 
-  async migrateInvoicesFromExcel(file: Express.Multer.File, userId: number): Promise<MigrationUploadResult> {
-    const rows = await this.parseXlsxRows(file);
+  private buildSingleInvoiceMigrationRow(data: SingleInvoiceMigrationRecord): ExcelRow {
+    const row: ExcelRow = { __rowNumber: 1 };
+    const setCell = (key: string, value: unknown): void => {
+      if (value === undefined || value === null) return;
+      row[key] = typeof value === 'number' ? value : String(value).trim();
+    };
+
+    setCell('lan', data.lan ?? data.systemLan ?? data.system_lan ?? data.lanId ?? data.lan_id ?? data.customerLan ?? data.customer_lan);
+    setCell('partner_lan_id', data.partnerLanId ?? data.partner_lan_id);
+    setCell('supplier_code', data.supplierCode ?? data.supplier_code);
+    setCell('invoice_number', data.invoiceNumber ?? data.invoice_number);
+    setCell('invoice_date', data.invoiceDate ?? data.invoice_date);
+    setCell('invoice_amount', data.invoiceAmount ?? data.invoice_amount);
+    setCell('disbursement_amount', data.disbursementAmount ?? data.disbursement_amount);
+    setCell('disbursement_utr', data.disbursementUtr ?? data.disbursement_utr);
+    setCell('disbursement_date', data.disbursementDate ?? data.disbursement_date);
+    setCell('invoice_due_date', data.invoiceDueDate ?? data.invoice_due_date ?? data.dueDate ?? data.due_date);
+    setCell('roi_percentage', data.roiPercentage ?? data.roi_percentage ?? data.roi);
+    setCell('penal_charges', data.penalCharges ?? data.penal_charges ?? data.penalRate ?? data.penal_rate);
+    setCell('service_fee', data.serviceFee ?? data.service_fee);
+    setCell('description', data.description);
+    setCell('customer_approval_remarks', data.customerApprovalRemarks ?? data.customer_approval_remarks);
+    setCell('ops_remarks', data.opsRemarks ?? data.ops_remarks);
+
+    return row;
+  }
+
+  private async migrateInvoiceRows(rows: ExcelRow[], userId: number): Promise<MigrationUploadResult> {
     const results: MigrationRowResult[] = [];
 
     for (const row of rows) {
       const rowNumber = Number(row.__rowNumber);
       const reference = this.getCell(row, ['invoice_number']) || `Row ${rowNumber}`;
       const customerReference =
+        this.getCell(row, ['lan', 'system_lan', 'lan_id', 'customer_lan']) ||
         this.getCell(row, ['partner_lan_id', 'partner_lan', 'old_lan_id']) ||
         `Row ${rowNumber}`;
       const validationErrors = this.validateInvoiceMigrationRow(row);
@@ -2546,6 +2630,15 @@ export class OperationsService {
     }
 
     return this.buildMigrationResult('Invoice', rows.length, results);
+  }
+
+  async migrateSingleInvoice(data: SingleInvoiceMigrationRecord, userId: number): Promise<MigrationUploadResult> {
+    return this.migrateInvoiceRows([this.buildSingleInvoiceMigrationRow(data)], userId);
+  }
+
+  async migrateInvoicesFromExcel(file: Express.Multer.File, userId: number): Promise<MigrationUploadResult> {
+    const rows = await this.parseXlsxRows(file);
+    return this.migrateInvoiceRows(rows, userId);
   }
 
   async searchLoanCustomers(search: string, limit = 8): Promise<LoanSearchCustomer[]> {
@@ -2651,6 +2744,38 @@ export class OperationsService {
     return Array.from(grouped.values())
       .filter((customer) => customer.loanAccounts.length > 0)
       .sort((a, b) => (order.get(a.customerId) ?? 0) - (order.get(b.customerId) ?? 0));
+  }
+
+  async getInvoiceMigrationSuppliers(lan: string): Promise<InvoiceMigrationSupplierOption[]> {
+    const cleanLan = String(lan || '').trim().toUpperCase();
+    if (!cleanLan) {
+      throw new Error('LAN is required');
+    }
+
+    const loanAccount = await this.loanAccountRepository.findOne({
+      where: [{ lanId: cleanLan }, { partnerLanId: cleanLan }] as any,
+    });
+    if (!loanAccount) {
+      throw new Error(`LAN ${cleanLan} was not found`);
+    }
+
+    const suppliers = await this.supplierRepository.find({
+      where: {
+        customerId: loanAccount.customerId,
+        status: 'COMPLETED',
+        isActive: true,
+      } as any,
+      order: { supplierName: 'ASC' },
+      select: ['id', 'supplierName', 'supplierCode', 'email', 'contactNumber'],
+    });
+
+    return suppliers.map((supplier) => ({
+      id: supplier.id,
+      supplierName: supplier.supplierName,
+      supplierCode: supplier.supplierCode,
+      email: supplier.email || null,
+      contactNumber: supplier.contactNumber || null,
+    }));
   }
 
   /**

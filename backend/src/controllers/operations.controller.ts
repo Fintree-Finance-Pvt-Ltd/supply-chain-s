@@ -243,6 +243,45 @@ export class OperationsController {
     }
   };
 
+  migrateSingleInvoice = async (req: Request, res: Response): Promise<void> => {
+    try {
+      if (!req.userId) {
+        res.status(401).json({
+          success: false,
+          message: 'Authentication required',
+        });
+        return;
+      }
+
+      const result = await this.operationsService.migrateSingleInvoice(req.body, req.userId);
+
+      res.json(result);
+    } catch (error: any) {
+      res.status(400).json({
+        success: false,
+        message: error.message || 'Failed to migrate invoice',
+      });
+    }
+  };
+
+  getInvoiceMigrationSuppliers = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const suppliers = await this.operationsService.getInvoiceMigrationSuppliers(
+        String(req.query.lan || ''),
+      );
+
+      res.json({
+        success: true,
+        data: suppliers,
+      });
+    } catch (error: any) {
+      res.status(400).json({
+        success: false,
+        message: error.message || 'Failed to fetch suppliers',
+      });
+    }
+  };
+
   uploadRepayments = async (req: Request, res: Response): Promise<void> => {
     try {
       if (!req.userId) {

@@ -97,6 +97,19 @@ export class LoanManagementController {
     }
   };
 
+  deleteInvoicesByLan = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const result = await loanManagementService.deleteInvoicesByLan(req.params.lan);
+      res.json({
+        success: true,
+        message: `Deleted ${result.deletedInvoices} invoice(s) for LAN ${result.lan}`,
+        data: result,
+      });
+    } catch (error: any) {
+      res.status(400).json({ success: false, message: error.message || 'Failed to delete invoices' });
+    }
+  };
+
   getLoanAccountSummary = async (req: Request, res: Response): Promise<void> => {
     try {
       const result = await loanManagementService.getLoanAccountSummary(req.params.lan);

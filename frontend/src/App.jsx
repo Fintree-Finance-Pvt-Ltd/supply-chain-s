@@ -47,6 +47,7 @@ import OperationsDashboard from './pages/operations/OperationsWorkbench'
 import OperationsCaseScreen from './pages/operations/OperationsCaseScreen'
 import RepaymentUpload from './pages/operations/RepaymentUpload'
 import OpsLoanSearch from './pages/operations/OpsLoanSearch'
+import OpsMigration from './pages/operations/OpsMigration'
 import MisReports from './pages/operations/MisReports'
 import SupplierDashboard from './pages/supplier/SupplierDashboard'
 import SupplierCreate from './pages/supplier/SupplierCreate'
@@ -368,6 +369,20 @@ function App() {
                 ]}
               >
                 <OpsLoanSearch />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="operations/migration"
+            element={
+              <ProtectedRoute
+                allowedRoles={[
+                  ROLES.OPERATIONS_TEAM_L1,
+                  ROLES.OPERATIONS_TEAM_L2,
+                  ROLES.OPERATIONS_HEAD,
+                ]}
+              >
+                <OpsMigration />
               </ProtectedRoute>
             }
           />

@@ -12,6 +12,8 @@ import {
   RepaymentAllocation,
   RepaymentUpload,
   REPAYMENT_STATUS,
+  CaseStatusHistory,
+  CaseWorkflow,
 } from '../entities';
 import { Invoice } from '../entities/Invoice';
 import { EntityManager, In, Not } from 'typeorm';
@@ -974,6 +976,124 @@ private calculateAccruedCharges(
         deletedAllocations: allocations.length,
         deletedUploadRows: uploadDeleteResult.affected || 0,
         deletedLedgerEntries: ledgerDeleteResult.affected || 0,
+        snapshot,
+      };
+    });
+  }
+
+  async deleteInvoicesByLan(lan: string): Promise<{
+    lan: string;
+    customerId: number;
+    deletedInvoices: number;
+    deletedDemands: number;
+    deletedDisbursements: number;
+    deletedLedgerEntries: number;
+    deletedWorkflows: number;
+    deletedHistoryRows: number;
+    snapshot: LoanAccountSnapshot;
+  }> {
+    return AppDataSource.transaction(async (manager) => {
+      const cleanLan = String(lan || '').trim().toUpperCase();
+      if (!cleanLan) throw new Error('LAN is required');
+
+      const loanAccount = await manager.getRepository(LoanAccount).findOne({
+        where: { lanId: cleanLan },
+      });
+      if (!loanAccount) throw new Error(`LAN ${cleanLan} not found`);
+
+      const invoiceRepository = manager.getRepository(Invoice);
+      const demandRepository = manager.getRepository(LoanDemand);
+      const disbursementRepository = manager.getRepository(LoanDisbursement);
+      const allocationRepository = manager.getRepository(RepaymentAllocation);
+
+      const invoices = await invoiceRepository.find({
+        where: {
+          loanAccountId: loanAccount.id,
+          customerId: loanAccount.customerId,
+        },
+        order: { id: 'ASC' },
+      });
+      const invoiceIds = invoices.map((invoice) => invoice.id);
+
+      if (invoiceIds.length === 0) {
+        const snapshot = await this.refreshSnapshot(manager, loanAccount.id);
+        return {
+          lan: cleanLan,
+          customerId: loanAccount.customerId,
+          deletedInvoices: 0,
+          deletedDemands: 0,
+          deletedDisbursements: 0,
+          deletedLedgerEntries: 0,
+          deletedWorkflows: 0,
+          deletedHistoryRows: 0,
+          snapshot,
+        };
+      }
+
+      const [demands, disbursements] = await Promise.all([
+        demandRepository.find({ where: { invoiceId: In(invoiceIds) } }),
+        disbursementRepository.find({ where: { invoiceId: In(invoiceIds) } }),
+      ]);
+      const demandIds = demands.map((demand) => demand.id);
+      const disbursementIds = disbursements.map((disbursement) => disbursement.id);
+
+      const allocations = await allocationRepository.find({
+        where: [
+          { invoiceId: In(invoiceIds) },
+          ...(demandIds.length > 0 ? [{ demandId: In(demandIds) }] : []),
+        ],
+      });
+      if (allocations.length > 0) {
+        throw new Error(
+          `Delete collections for LAN ${cleanLan} before deleting invoices. ${allocations.length} allocation(s) still reference these invoices.`,
+        );
+      }
+
+      const ledgerDeleteQuery = manager
+        .createQueryBuilder()
+        .delete()
+        .from(LoanLedgerEntry)
+        .where('invoiceId IN (:...invoiceIds)', { invoiceIds });
+
+      if (demandIds.length > 0) {
+        ledgerDeleteQuery.orWhere('demandId IN (:...demandIds)', { demandIds });
+      }
+      if (disbursementIds.length > 0) {
+        ledgerDeleteQuery.orWhere('loanDisbursementId IN (:...disbursementIds)', { disbursementIds });
+      }
+
+      const ledgerDeleteResult = await ledgerDeleteQuery.execute();
+
+      const historyDeleteResult = await manager
+        .getRepository(CaseStatusHistory)
+        .delete({ invoiceId: In(invoiceIds) });
+
+      const workflowDeleteResult = await manager
+        .getRepository(CaseWorkflow)
+        .delete({ invoiceId: In(invoiceIds), workflowType: 'INVOICE_DISCOUNTING' as any });
+
+      const demandDeleteResult = demandIds.length > 0
+        ? await demandRepository.delete({ id: In(demandIds) })
+        : { affected: 0 };
+
+      const disbursementDeleteResult = disbursementIds.length > 0
+        ? await disbursementRepository.delete({ id: In(disbursementIds) })
+        : { affected: 0 };
+
+      const invoiceDeleteResult = await invoiceRepository.delete({ id: In(invoiceIds) });
+
+      await this.recalculateLedgerRunningBalances(manager, loanAccount.id);
+      const snapshot = await this.refreshSnapshot(manager, loanAccount.id);
+
+      return {
+        lan: cleanLan,
+        customerId: loanAccount.customerId,
+        deletedInvoices: invoiceDeleteResult.affected || 0,
+        deletedDemands: demandDeleteResult.affected || 0,
+        deletedDisbursements: disbursementDeleteResult.affected || 0,
+        deletedLedgerEntries: ledgerDeleteResult.affected || 0,
+        deletedWorkflows: workflowDeleteResult.affected || 0,
+        deletedHistoryRows: historyDeleteResult.affected || 0,
         snapshot,
       };
     });

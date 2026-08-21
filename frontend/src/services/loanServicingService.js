@@ -83,6 +83,11 @@ export const loanServicingService = {
     return response.data
   },
 
+  deleteInvoicesByLan: async (lan) => {
+    const response = await api.delete(API_ENDPOINTS.LOAN_SERVICING_INVOICES_BY_LAN(lan))
+    return response.data
+  },
+
   downloadScfReport: async (reportType, filters = {}) => {
     const endpoint = SCF_REPORT_ENDPOINTS[reportType]
     if (!endpoint) {
