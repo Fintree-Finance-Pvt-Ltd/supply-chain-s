@@ -60,6 +60,7 @@ export class CustomerSanctionService {
             serviceFee: true,
             creditOfficerId: true,
             status: true,
+            renewalCycleId: true,
             createdAt: true,
             updatedAt: true,
           },

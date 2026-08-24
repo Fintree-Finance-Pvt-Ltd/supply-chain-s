@@ -115,6 +115,7 @@ export interface CustomerBasicDetail {
   gstNumber: string | null;
   status: string;
   assignedStage: string | null;
+  currentRenewalCycleId: number | null;
   createdAt: Date;
 }
 
@@ -336,6 +337,7 @@ const applicantAadhaarAddressRaw =cleanedData.applicantAddress ;
         "customer.gstNumber",
         "customer.status",
         "customer.assignedStage",
+        "customer.currentRenewalCycleId",
         "customer.createdAt",
       ])
       .where("customer.id = :id", { id })
@@ -352,6 +354,7 @@ const applicantAadhaarAddressRaw =cleanedData.applicantAddress ;
       gstNumber: customer.gstNumber || null,
       status: customer.status,
       assignedStage: customer.assignedStage || null,
+      currentRenewalCycleId: customer.currentRenewalCycleId || null,
       createdAt: customer.createdAt,
     };
   }

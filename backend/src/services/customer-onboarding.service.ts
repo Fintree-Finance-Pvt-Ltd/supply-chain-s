@@ -308,11 +308,17 @@ export class CustomerOnboardingService {
     customerId: number,
     partnerSanctions: any[],
   ): Promise<any[]> {
+    const customer = await this.customerRepository.findOne({
+      where: { id: customerId },
+      select: ["id", "currentRenewalCycleId"],
+    });
+    const isActiveRenewal = Boolean(customer?.currentRenewalCycleId);
     const existingSanctions = await this.sanctionRepository.find({
       where: { customerId },
     });
     const caseHasApprovedSanctions = existingSanctions.some(
-      (sanction) => sanction.status?.toLowerCase() === "approved",
+      (sanction) =>
+        !isActiveRenewal && sanction.status?.toLowerCase() === "approved",
     );
     const existingByPartner = new Map(
       existingSanctions.map((sanction) => [
@@ -327,7 +333,9 @@ export class CustomerOnboardingService {
       const partnerSanction =
         this.normalizePartnerSanctionInput(rawPartnerSanction);
       const existingSanction = existingByPartner.get(partnerSanction.partner);
-      const isLocked = existingSanction?.status?.toLowerCase() === "approved";
+      const isLocked =
+        !isActiveRenewal &&
+        existingSanction?.status?.toLowerCase() === "approved";
 
       if (caseHasApprovedSanctions && !existingSanction) {
         throw new Error(
@@ -349,6 +357,27 @@ export class CustomerOnboardingService {
     }
 
     return editablePartnerSanctions;
+  }
+
+  private async resetSanctionsForActiveRenewal(
+    customerId: number,
+    renewalCycleId: number | null,
+    userId: number,
+  ): Promise<void> {
+    if (!renewalCycleId) return;
+
+    const sanctions = await this.sanctionRepository.find({
+      where: { customerId },
+    });
+
+    for (const sanction of sanctions) {
+      sanction.status = "pending";
+      sanction.renewalCycleId = renewalCycleId;
+      sanction.sanctionDate = null;
+      sanction.sanctionExpiryDate = null;
+      sanction.creditOfficerId = userId;
+      await this.sanctionRepository.save(sanction);
+    }
   }
 
   async resendToNewPartnerSections(
@@ -631,6 +660,14 @@ export class CustomerOnboardingService {
     workflow.remarks = remarks;
     workflow.remarks = remarks;
 
+    if (newStatus === "submitted" && customer.currentRenewalCycleId) {
+      await this.resetSanctionsForActiveRenewal(
+        customerId,
+        customer.currentRenewalCycleId,
+        userId,
+      );
+    }
+
     // 🔧 FIX: Trigger task distribution and assign user
     try {
       const taskDistributionService = new TaskDistributionService();
@@ -764,7 +801,11 @@ export class CustomerOnboardingService {
 
     const workflow = await this.getOrCreateWorkflow(customerId);
     console.log("currentStatus:", workflow.currentStatus.toLowerCase());
-    if (workflow.currentStatus.toLowerCase() !== "submitted")
+    if (
+      !["submitted", "credit_l1_review"].includes(
+        workflow.currentStatus.toLowerCase(),
+      )
+    )
       throw new Error("Cannot approve: Pending at Credit Team L1");
 
     const previousStatus = workflow.currentStatus;
@@ -897,6 +938,7 @@ Fintree Finance Pvt. Ltd.
               penalCharges: ps.penalCharges || 0,
               processingFees: ps.processingFees || 0,
               status: "pending",
+              renewalCycleId: customer.currentRenewalCycleId || null,
             });
             await this.sanctionRepository.save(newSanction);
           } else {
@@ -904,6 +946,11 @@ Fintree Finance Pvt. Ltd.
             await this.sanctionRepository.update(creditSanction.id, {
               sanctionAmount: ps.sanctionAmount,
               creditOfficerId: userId,
+              status: "pending",
+              renewalCycleId:
+                customer.currentRenewalCycleId ||
+                creditSanction.renewalCycleId ||
+                null,
             });
           }
         }
@@ -937,6 +984,7 @@ Fintree Finance Pvt. Ltd.
             creditOfficerId: userId,
             ...normalizedSanction,
             status: "pending", // Pending full approval
+            renewalCycleId: customer.currentRenewalCycleId || null,
           });
           await this.sanctionRepository.save(newSanction);
         } else {
@@ -944,6 +992,9 @@ Fintree Finance Pvt. Ltd.
           await this.sanctionRepository.update(sanction.id, {
             sanctionAmount: sanctionData.sanctionAmount,
             creditOfficerId: userId,
+            status: "pending",
+            renewalCycleId:
+              customer.currentRenewalCycleId || sanction.renewalCycleId || null,
           });
         }
 
@@ -1140,7 +1191,11 @@ Fintree Finance Pvt. Ltd.
     if (!customer) throw new Error("Customer not found");
 
     const workflow = await this.getOrCreateWorkflow(customerId);
-    if (workflow.currentStatus.toLowerCase() !== "credit_l1_approved")
+    if (
+      !["credit_l1_approved", "credit_l2_review"].includes(
+        workflow.currentStatus.toLowerCase(),
+      )
+    )
       throw new Error("Cannot approve: Pending at Credit Team L2");
 
     const previousStatus = workflow.currentStatus;
@@ -1223,6 +1278,7 @@ Fintree Finance Pvt. Ltd.
               processingFees: 0,
               conditions: "",
               status: "pending",
+              renewalCycleId: customer.currentRenewalCycleId || null,
             });
             await this.sanctionRepository.save(newSanction);
           } else {
@@ -1230,6 +1286,9 @@ Fintree Finance Pvt. Ltd.
             await this.sanctionRepository.update(sanction.id, {
               sanctionAmount: partnerSanction.sanctionAmount,
               creditOfficerId: userId,
+              status: "pending",
+              renewalCycleId:
+                customer.currentRenewalCycleId || sanction.renewalCycleId || null,
             });
           }
         }
@@ -1261,6 +1320,7 @@ Fintree Finance Pvt. Ltd.
             tenure: 0,
             interestRate: 0,
             status: "pending",
+            renewalCycleId: customer.currentRenewalCycleId || null,
           });
           await this.sanctionRepository.save(newSanction);
         } else {
@@ -1268,6 +1328,9 @@ Fintree Finance Pvt. Ltd.
           await this.sanctionRepository.update(sanction.id, {
             sanctionAmount: sanctionData.sanctionAmount,
             creditOfficerId: userId,
+            status: "pending",
+            renewalCycleId:
+              customer.currentRenewalCycleId || sanction.renewalCycleId || null,
           });
         }
 

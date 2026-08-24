@@ -145,7 +145,9 @@ const CreditCaseDetail = () => {
   ].filter(Boolean).map((role) => role.toLowerCase());
   const hasL1Role = userRoles.includes("credit_team_l1");
   const hasL2Role = userRoles.includes("credit_team_l2");
+  const isActiveRenewalCase = Boolean(currentCase?.currentRenewalCycleId);
   const isSanctionLocked = (partnerCode) =>
+    !isActiveRenewalCase &&
     (
       partnerSanctions[normalizePartnerCode(partnerCode)]?.status || ""
     ).toLowerCase() === "approved";

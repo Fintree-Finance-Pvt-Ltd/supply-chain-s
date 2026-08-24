@@ -114,6 +114,7 @@ export class CreditController {
           cashCollateral: s.cashCollateral,
           legalCharges: s.legalCharges,
           serviceFee: s.serviceFee,
+          renewalCycleId: s.renewalCycleId,
   
           status: s.status,
         })),
@@ -152,6 +153,7 @@ export class CreditController {
         conditions: s.conditions,
         creditRemarks: s.creditRemarks,
         status: s.status,
+        renewalCycleId: s.renewalCycleId,
         createdAt: s.createdAt,
         updatedAt: s.updatedAt,
       }));
