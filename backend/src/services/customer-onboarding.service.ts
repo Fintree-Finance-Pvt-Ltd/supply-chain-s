@@ -1389,6 +1389,12 @@ Fintree Finance Pvt. Ltd.
     sanctionData?: any,
   ) {
     const workflow = await this.getOrCreateWorkflow(customerId);
+    const customer = await this.customerRepository.findOne({
+      where: { id: customerId },
+      select: ["id", "customerName", "companyName", "currentRenewalCycleId"],
+    });
+    if (!customer) throw new Error("Customer not found");
+    const isActiveRenewal = Boolean(customer.currentRenewalCycleId);
 
     const currentStatus = workflow.currentStatus.toLowerCase();
     if (!["credit_l2_approved", "ceo_approved"].includes(currentStatus)) {
@@ -1439,6 +1445,10 @@ Fintree Finance Pvt. Ltd.
             conditions: partnerSanction.conditions || "",
             status: "pending",
             creditOfficerId: rmId,
+            renewalCycleId:
+              customer.currentRenewalCycleId ||
+              existingSanction.renewalCycleId ||
+              null,
           });
         } else {
           // Create new sanction if not exists
@@ -1455,6 +1465,7 @@ Fintree Finance Pvt. Ltd.
             serviceFee: partnerSanction.serviceFee || 0,
             conditions: partnerSanction.conditions || "",
             status: "pending",
+            renewalCycleId: customer.currentRenewalCycleId || null,
           });
           await this.sanctionRepository.save(newSanction);
         }
@@ -1489,7 +1500,10 @@ Fintree Finance Pvt. Ltd.
         where: { customerId, partner },
       });
 
-      if (existingSanction?.status?.toLowerCase() === "approved") {
+      if (
+        !isActiveRenewal &&
+        existingSanction?.status?.toLowerCase() === "approved"
+      ) {
         if (
           this.hasLockedSanctionChanged(
             existingSanction,
@@ -1505,9 +1519,7 @@ Fintree Finance Pvt. Ltd.
           ...sanctionData,
           partner,
         });
-        await this.sanctionRepository.update(
-          { customerId, partner },
-          {
+        const sanctionUpdate = {
             sanctionAmount: normalizedSanction.sanctionAmount,
             tenure: normalizedSanction.tenure,
             interestRate: normalizedSanction.interestRate,
@@ -1518,8 +1530,26 @@ Fintree Finance Pvt. Ltd.
             conditions: normalizedSanction.conditions,
             status: "pending",
             creditOfficerId: rmId,
-          },
-        );
+            renewalCycleId:
+              customer.currentRenewalCycleId ||
+              existingSanction?.renewalCycleId ||
+              null,
+        };
+
+        if (existingSanction) {
+          await this.sanctionRepository.update(existingSanction.id, sanctionUpdate);
+        } else {
+          await this.sanctionRepository.save(
+            this.sanctionRepository.create({
+              customerId,
+              partner,
+              creditOfficerId: rmId,
+              ...normalizedSanction,
+              status: "pending",
+              renewalCycleId: customer.currentRenewalCycleId || null,
+            }),
+          );
+        }
         // Record history
         await this.sanctionHistoryRepository.save(
           this.sanctionHistoryRepository.create({
@@ -1540,11 +1570,6 @@ Fintree Finance Pvt. Ltd.
     await this.workflowRepository.save(workflow);
 
     // Notify MD
-    const customer = await this.customerRepository.findOne({
-      where: { id: customerId },
-      select: ["id", "customerName", "companyName"],
-    });
-
     const customerName = customer?.companyName || customer?.customerName || `ID ${customerId}`;
 
     const role = await this.roleRepository.findOne({
@@ -1763,6 +1788,13 @@ Fintree Finance Pvt. Ltd.
     sanctionData?: any,
   ) {
     const workflow = await this.getOrCreateWorkflow(customerId);
+    const renewalCustomer = await this.customerRepository.findOne({
+      where: { id: customerId },
+      select: ["id", "currentRenewalCycleId"],
+    });
+    if (!renewalCustomer) throw new Error("Customer not found");
+    const activeRenewalCycleId = renewalCustomer.currentRenewalCycleId || null;
+    const isActiveRenewal = Boolean(activeRenewalCycleId);
     const status = workflow.currentStatus.toLowerCase();
 
     if (status !== "md_terms_submitted") {
@@ -1821,6 +1853,7 @@ Fintree Finance Pvt. Ltd.
               cashCollateral: partnerSanction.cashCollateral || 0,
               conditions: partnerSanction.conditions || "",
               status: sanctionStatus,
+              renewalCycleId: activeRenewalCycleId,
             });
 
             await this.sanctionRepository.save(newSanction);
@@ -1837,6 +1870,7 @@ Fintree Finance Pvt. Ltd.
               conditions: partnerSanction.conditions || "",
               status: sanctionStatus,
               creditOfficerId: userId,
+              renewalCycleId: activeRenewalCycleId || sanction.renewalCycleId || null,
             });
           }
         }
@@ -1865,7 +1899,10 @@ Fintree Finance Pvt. Ltd.
           where: { customerId, partner: lender },
         });
 
-        if (sanction?.status?.toLowerCase() === "approved") {
+        if (
+          !isActiveRenewal &&
+          sanction?.status?.toLowerCase() === "approved"
+        ) {
           if (
             this.hasLockedSanctionChanged(
               sanction,
@@ -1891,6 +1928,7 @@ Fintree Finance Pvt. Ltd.
             processingFees: normalizedSanction.processingFees || 0,
             conditions: normalizedSanction.conditions || "",
             status: sanctionStatus,
+            renewalCycleId: activeRenewalCycleId,
           });
 
           await this.sanctionRepository.save(newSanction);
@@ -1904,6 +1942,7 @@ Fintree Finance Pvt. Ltd.
             conditions: normalizedSanction.conditions || "",
             status: sanctionStatus,
             creditOfficerId: userId,
+            renewalCycleId: activeRenewalCycleId || sanction.renewalCycleId || null,
           });
         }
 

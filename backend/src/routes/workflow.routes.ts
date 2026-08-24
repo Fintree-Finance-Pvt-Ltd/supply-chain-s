@@ -309,17 +309,23 @@ router.post('/customers/:customerId/credit-l1', checkRole(['credit_team_l1', 'cr
     if (hasBothRoles && approved) {
       // Check if user already created any sanctions for this customer as L1
       // We'll check the sanction history to see if this user was the creator
-      const { CreditSanction } = require('../entities');
-      const existingSanctions = await AppDataSource.getRepository(CreditSanction).find({
-        where: { customerId: parseInt(customerId) }
+      const { CreditSanction, Customer } = require('../entities');
+      const customer = await AppDataSource.getRepository(Customer).findOne({
+        where: { id: parseInt(customerId) },
+        select: ['id', 'currentRenewalCycleId'],
       });
-      const userAsCreator = existingSanctions.find(s => s.creditOfficerId === user.id);
-      if (userAsCreator) {
-        res.status(403).json({
-          success: false,
-          message: 'You have both L1 and L2 roles. You already created sanctions for this case as L1, so you cannot approve it at L1. Please assign this case to another L1 reviewer.',
+      if (!customer?.currentRenewalCycleId) {
+        const existingSanctions = await AppDataSource.getRepository(CreditSanction).find({
+          where: { customerId: parseInt(customerId) }
         });
-        return;
+        const userAsCreator = existingSanctions.find(s => s.creditOfficerId === user.id);
+        if (userAsCreator) {
+          res.status(403).json({
+            success: false,
+            message: 'You have both L1 and L2 roles. You already created sanctions for this case as L1, so you cannot approve it at L1. Please assign this case to another L1 reviewer.',
+          });
+          return;
+        }
       }
     }
 
@@ -466,22 +472,28 @@ router.post('/customers/:customerId/credit-l2', checkRole(['credit_team_l1', 'cr
     const hasBothRoles = userRoles.includes('credit_team_l1') && userRoles.includes('credit_team_l2');
     if (hasBothRoles && approved) {
       // Check if this user already approved this case at L1
-      const { CaseStatusHistory } = require('../entities');
-      const historyRepo = AppDataSource.getRepository(CaseStatusHistory);
-      const l1Approval = await historyRepo.findOne({
-        where: { 
-          caseWorkflow: { customerId: parseInt(customerId) },
-          status: 'credit_l1_approved'
-        },
-        relations: ['caseWorkflow', 'changedByUser'],
-        order: { createdAt: 'DESC' }
+      const { CaseStatusHistory, Customer } = require('../entities');
+      const customer = await AppDataSource.getRepository(Customer).findOne({
+        where: { id: parseInt(customerId) },
+        select: ['id', 'currentRenewalCycleId'],
       });
-      if (l1Approval && l1Approval.changedByUser?.id === user.id) {
-        res.status(403).json({
-          success: false,
-          message: 'You have both L1 and L2 roles. You already approved this case at L1, so you cannot approve it at L2. Please assign this case to another L2 reviewer.',
+      if (!customer?.currentRenewalCycleId) {
+        const historyRepo = AppDataSource.getRepository(CaseStatusHistory);
+        const l1Approval = await historyRepo.findOne({
+          where: { 
+            caseWorkflow: { customerId: parseInt(customerId) },
+            status: 'credit_l1_approved'
+          },
+          relations: ['caseWorkflow', 'changedByUser'],
+          order: { createdAt: 'DESC' }
         });
-        return;
+        if (l1Approval && l1Approval.changedByUser?.id === user.id) {
+          res.status(403).json({
+            success: false,
+            message: 'You have both L1 and L2 roles. You already approved this case at L1, so you cannot approve it at L2. Please assign this case to another L2 reviewer.',
+          });
+          return;
+        }
       }
     }
 

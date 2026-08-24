@@ -127,7 +127,9 @@ const ApprovalScreen = () => {
 
   // Track if initial data load is done (useRef to persist across renders)
   const dataLoadedRef = useRef(false);
+  const isActiveRenewalCase = Boolean(customer?.currentRenewalCycleId);
   const isPartnerLocked = (partnerSanction) =>
+    !isActiveRenewalCase &&
     (partnerSanction.status || "").toLowerCase() === "approved";
 
   useEffect(() => {

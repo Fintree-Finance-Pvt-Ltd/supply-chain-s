@@ -63,7 +63,9 @@ const RMCaseDetail = () => {
   // Store sanction data for each partner
   const [partnerSanctions, setPartnerSanctions] = useState({});
 
+  const isActiveRenewalCase = Boolean(currentCase?.currentRenewalCycleId);
   const isSanctionLocked = (partnerCode) =>
+    !isActiveRenewalCase &&
     (partnerSanctions[partnerCode]?.status || "").toLowerCase() === "approved";
 
   const buildUnlockedSanctionsArray = () =>
