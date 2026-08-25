@@ -51,7 +51,7 @@ router.get('/customers/:customerId/renewals', async (req: Request, res: Response
 
 router.post(
   '/customers/:customerId/renewals/start',
-  roleMiddleware(OPS_AND_MD_ROLES),
+  roleMiddleware(CALENDAR_ROLES),
   async (req: Request, res: Response) => {
     try {
       const result = await caseLifecycleService.startRenewal(

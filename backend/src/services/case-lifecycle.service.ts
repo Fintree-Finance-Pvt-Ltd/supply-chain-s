@@ -8,6 +8,8 @@ import {
   Customer,
   Document,
   Invoice,
+  LoanAccount,
+  Partner,
   User,
 } from '../entities';
 import { CASE_STATUS } from '../config/constants';
@@ -114,6 +116,41 @@ type CalendarFilters = {
   startDate?: Date;
   endDate?: Date;
   rmId?: number;
+  groupCollectionEvents?: boolean;
+};
+
+type CalendarEvent = {
+  id: string;
+  type: 'SANCTION_EXPIRY' | 'COLLECTION_DUE';
+  title: string;
+  date: Date;
+  daysUntil: number;
+  customerId: number;
+  customerName: string | undefined;
+  rmId: number | undefined;
+  rmName: string | null;
+  lender: string | null;
+  lenderCode: string | null;
+  referenceId: number;
+  invoiceId?: number;
+  invoiceNumber?: string;
+  supplierName?: string | null;
+  amount?: number;
+  invoiceCount?: number;
+  dueDateCount?: number;
+  sanctionCount?: number;
+};
+
+type CollectionEventGroup = CalendarEvent & {
+  invoiceNumbers: string[];
+  supplierNames: string[];
+  dueDates: string[];
+};
+
+type LenderInfo = {
+  key: string | null;
+  code: string | null;
+  label: string | null;
 };
 
 export class CaseLifecycleService {
@@ -126,6 +163,7 @@ export class CaseLifecycleService {
   private reminderRepository = AppDataSource.getRepository(CaseReminderLog);
   private invoiceRepository = AppDataSource.getRepository(Invoice);
   private userRepository = AppDataSource.getRepository(User);
+  private partnerRepository = AppDataSource.getRepository(Partner);
 
   getPostSanctionChecklists() {
     return Object.values(POST_SANCTION_LENDER_CHECKLISTS);
@@ -183,6 +221,73 @@ export class CaseLifecycleService {
   private daysUntil(date: Date | string, today = new Date()): number {
     const msPerDay = 24 * 60 * 60 * 1000;
     return Math.round((this.toDateOnly(date).getTime() - this.toDateOnly(today).getTime()) / msPerDay);
+  }
+
+  private toNumber(value: unknown): number {
+    if (value === null || value === undefined || value === '') return 0;
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  private normalizeLenderLookupValue(value?: string | null): string | null {
+    const normalized = String(value || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+    return normalized || null;
+  }
+
+  private lenderFromPartner(partner: Partner): LenderInfo {
+    const code = String(partner.code || partner.lanPrefix || partner.name || '').trim();
+    const label = code || String(partner.name || partner.lanPrefix || '').trim();
+
+    return {
+      key: this.normalizeLenderLookupValue(code || label),
+      code: code || null,
+      label: label || null,
+    };
+  }
+
+  private async getLenderLookup(): Promise<Map<string, LenderInfo>> {
+    const partners = await this.partnerRepository.find();
+    const lookup = new Map<string, LenderInfo>();
+
+    for (const partner of partners) {
+      const lender = this.lenderFromPartner(partner);
+      [partner.code, partner.name, partner.lanPrefix].forEach((value) => {
+        const key = this.normalizeLenderLookupValue(value);
+        if (key) lookup.set(key, lender);
+      });
+    }
+
+    return lookup;
+  }
+
+  private resolveLender(value: string | null | undefined, lookup: Map<string, LenderInfo>): LenderInfo {
+    const key = this.normalizeLenderLookupValue(value);
+    if (!key) return { key: null, code: null, label: null };
+
+    const matched = lookup.get(key);
+    if (matched) return matched;
+
+    const fallback = String(value || '').trim();
+    return {
+      key,
+      code: fallback || null,
+      label: fallback || null,
+    };
+  }
+
+  private getLoanAccountLender(
+    loanAccount: LoanAccount | null | undefined,
+    lookup: Map<string, LenderInfo>,
+  ): LenderInfo {
+    if (loanAccount?.partner) return this.lenderFromPartner(loanAccount.partner);
+    return this.resolveLender(loanAccount?.lender, lookup);
+  }
+
+  private formatCollectionReference(invoiceNumbers: string[]): string {
+    const uniqueNumbers = Array.from(new Set(invoiceNumbers.filter(Boolean)));
+    if (uniqueNumbers.length === 0) return '-';
+    if (uniqueNumbers.length === 1) return uniqueNumbers[0];
+    return `${uniqueNumbers[0]} +${uniqueNumbers.length - 1} more`;
   }
 
   private getApproverForStatus(status: string): string {
@@ -606,7 +711,8 @@ export class CaseLifecycleService {
       .createQueryBuilder('sanction')
       .leftJoinAndSelect('sanction.customer', 'customer')
       .leftJoinAndSelect('customer.rm', 'rm')
-      .where('sanction.sanctionExpiryDate IS NOT NULL');
+      .where('sanction.sanctionExpiryDate IS NOT NULL')
+      .andWhere('sanction.status = :sanctionStatus', { sanctionStatus: 'approved' });
 
     if (filters.startDate) {
       sanctionQuery.andWhere('sanction.sanctionExpiryDate >= :startDate', {
@@ -630,7 +736,9 @@ export class CaseLifecycleService {
       .leftJoinAndSelect('customer.rm', 'rm')
       .leftJoinAndSelect('invoice.supplier', 'supplier')
       .leftJoinAndSelect('invoice.loanAccount', 'loanAccount')
+      .leftJoinAndSelect('loanAccount.partner', 'partner')
       .where('invoice.invoiceDueDate IS NOT NULL')
+      .andWhere('invoice.isActive = :isActive', { isActive: true })
       .andWhere('invoice.status IN (:...statuses)', {
         statuses: ['ACTIVE', 'PENDING_FINAL_OPS_L2_APPROVAL', 'DISBURSEMENT_DATA_ENTRY'],
       });
@@ -650,45 +758,114 @@ export class CaseLifecycleService {
     }
 
     const invoices = await invoiceQuery.orderBy('invoice.invoiceDueDate', 'ASC').getMany();
+    const lenderLookup = await this.getLenderLookup();
 
-    const sanctionEvents = sanctions.map((sanction) => {
+    const sanctionEventsByKey = new Map<string, CalendarEvent>();
+
+    for (const sanction of sanctions) {
       const days = this.daysUntil(sanction.sanctionExpiryDate!, today);
-      return {
-        id: `sanction-${sanction.id}`,
+      const lender = this.resolveLender(sanction.partner, lenderLookup);
+      const lenderKey = lender.key || 'NO_LENDER';
+      const key = `${sanction.customerId}:${lenderKey}`;
+      const existing = sanctionEventsByKey.get(key);
+
+      if (existing) {
+        existing.sanctionCount = (existing.sanctionCount || 1) + 1;
+
+        if (new Date(sanction.sanctionExpiryDate as any).getTime() < new Date(existing.date as any).getTime()) {
+          existing.date = sanction.sanctionExpiryDate!;
+          existing.daysUntil = days;
+          existing.referenceId = sanction.id;
+        }
+
+        continue;
+      }
+
+      sanctionEventsByKey.set(key, {
+        id: `sanction-${sanction.customerId}-${lenderKey}`,
         type: 'SANCTION_EXPIRY',
         title: 'Sanction Expiry',
-        date: sanction.sanctionExpiryDate,
+        date: sanction.sanctionExpiryDate!,
         daysUntil: days,
         customerId: sanction.customerId,
         customerName: sanction.customer?.companyName || sanction.customer?.customerName || sanction.customer?.name,
         rmId: sanction.customer?.rmId,
         rmName: sanction.customer?.rm?.name || null,
-        lender: sanction.partner,
+        lender: lender.label,
+        lenderCode: lender.code,
         referenceId: sanction.id,
-        actionAvailable: days >= 0 && days <= 7,
-      };
-    });
+        sanctionCount: 1,
+      });
+    }
 
-    const collectionEvents = invoices.map((invoice) => {
+    const sanctionEvents = Array.from(sanctionEventsByKey.values());
+
+    const collectionEventsByKey = new Map<string, CollectionEventGroup>();
+    const groupCollectionEvents = filters.groupCollectionEvents !== false;
+
+    for (const invoice of invoices) {
       const days = this.daysUntil(invoice.invoiceDueDate!, today);
-      return {
-        id: `collection-${invoice.id}`,
+      const dueDate = this.formatDateOnly(invoice.invoiceDueDate!);
+      const lender = this.getLoanAccountLender(invoice.loanAccount, lenderLookup);
+      const lenderKey = lender.key || 'NO_LENDER';
+      const key = groupCollectionEvents
+        ? `${invoice.customerId}:${lenderKey}`
+        : `${invoice.customerId}:${dueDate}:${lenderKey}`;
+      const invoiceNumber = invoice.invoiceNumber || `#${invoice.id}`;
+      const supplierName = invoice.supplier?.supplierName || null;
+      const amount = this.toNumber(invoice.disbursementAmount || invoice.invoiceAmount);
+      const existing = collectionEventsByKey.get(key);
+
+      if (existing) {
+        existing.invoiceNumbers.push(invoiceNumber);
+        if (supplierName && !existing.supplierNames.includes(supplierName)) {
+          existing.supplierNames.push(supplierName);
+        }
+        existing.amount = (existing.amount || 0) + amount;
+        existing.invoiceCount = (existing.invoiceCount || 1) + 1;
+        if (!existing.dueDates.includes(dueDate)) {
+          existing.dueDates.push(dueDate);
+          existing.dueDateCount = existing.dueDates.length;
+        }
+        existing.invoiceNumber = this.formatCollectionReference(existing.invoiceNumbers);
+        existing.supplierName = existing.supplierNames.join(', ') || null;
+        if (new Date(invoice.invoiceDueDate as any).getTime() < new Date(existing.date as any).getTime()) {
+          existing.date = invoice.invoiceDueDate!;
+          existing.daysUntil = days;
+          existing.invoiceId = invoice.id;
+          existing.referenceId = invoice.id;
+        }
+        continue;
+      }
+
+      collectionEventsByKey.set(key, {
+        id: `collection-${invoice.customerId}-${dueDate}-${lenderKey}`,
         type: 'COLLECTION_DUE',
         title: 'Collection Due',
-        date: invoice.invoiceDueDate,
+        date: invoice.invoiceDueDate!,
         daysUntil: days,
         customerId: invoice.customerId,
         customerName: invoice.customer?.companyName || invoice.customer?.customerName || invoice.customer?.name,
         rmId: invoice.customer?.rmId,
         rmName: invoice.customer?.rm?.name || null,
-        lender: invoice.loanAccount?.lender || null,
+        lender: lender.label,
+        lenderCode: lender.code,
         invoiceId: invoice.id,
-        invoiceNumber: invoice.invoiceNumber,
-        supplierName: invoice.supplier?.supplierName || null,
-        amount: invoice.disbursementAmount || invoice.invoiceAmount,
+        invoiceNumber,
+        invoiceNumbers: [invoiceNumber],
+        supplierName,
+        supplierNames: supplierName ? [supplierName] : [],
+        amount,
+        invoiceCount: 1,
+        dueDates: [dueDate],
+        dueDateCount: 1,
         referenceId: invoice.id,
-        actionAvailable: false,
-      };
+      });
+    }
+
+    const collectionEvents = Array.from(collectionEventsByKey.values()).map((event) => {
+      const { invoiceNumbers, supplierNames, dueDates, ...calendarEvent } = event;
+      return calendarEvent;
     });
 
     return [...sanctionEvents, ...collectionEvents]
@@ -751,7 +928,7 @@ export class CaseLifecycleService {
       return { sent: 0, skipped: 0, errors: ['No reminder recipients configured'] };
     }
 
-    const events = await this.getCalendarEvents();
+    const events = await this.getCalendarEvents({ groupCollectionEvents: false });
     const reminderDate = this.toDateOnly(today);
     const dueEvents = events
       .map((event) => ({
