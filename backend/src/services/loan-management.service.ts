@@ -92,6 +92,13 @@ type AccruedDemandCharges = {
   dayCount: number;
 };
 
+type InterestTenureBreakup = {
+  defaultInterestDays: number;
+  defaultInterest: number;
+  remainingInterestDays: number;
+  remainingInterest: number;
+};
+
 export class LoanManagementService {
   private loanAccountRepository = AppDataSource.getRepository(LoanAccount);
   private invoiceRepository = AppDataSource.getRepository(Invoice);
@@ -1861,6 +1868,69 @@ private calculateAccruedCharges(
     );
   }
 
+  private calculateScfInterestTenureBreakup(
+    demand: LoanDemand,
+    disbursement: LoanDisbursement | null | undefined,
+    invoice: Invoice | null | undefined,
+    currentCharges: AccruedDemandCharges,
+    settledInterest: number,
+    rules: AccrualRules,
+  ): InterestTenureBreakup {
+    const defaultInterestDayLimit = Math.max(rules.penalStartDay - 1, 0);
+    const defaultInterestDays = Math.min(currentCharges.dayCount, defaultInterestDayLimit);
+    const remainingInterestDays = Math.max(currentCharges.dayCount - defaultInterestDays, 0);
+    const totalInterestOutstanding = this.roundMoney(
+      Math.max(this.toNumber(currentCharges.interestDue) - this.toNumber(settledInterest), 0),
+    );
+
+    if (defaultInterestDays <= 0) {
+      return {
+        defaultInterestDays,
+        defaultInterest: 0,
+        remainingInterestDays,
+        remainingInterest: totalInterestOutstanding,
+      };
+    }
+
+    let defaultInterestAccrued = this.toNumber(currentCharges.interestDue);
+    if (remainingInterestDays > 0) {
+      const disbursementDate = disbursement?.disbursementDate || demand.demandDate;
+      const defaultInterestTill = this.getAccrualDate(
+        disbursementDate,
+        defaultInterestDays,
+        rules,
+      );
+      const defaultCharges = this.calculateAccruedCharges(
+        demand,
+        disbursement,
+        invoice,
+        defaultInterestTill,
+        rules,
+      );
+      defaultInterestAccrued = Math.min(
+        this.toNumber(defaultCharges.interestDue),
+        this.toNumber(currentCharges.interestDue),
+      );
+    }
+
+    const defaultInterestSettled = Math.min(
+      this.toNumber(settledInterest),
+      defaultInterestAccrued,
+    );
+    const defaultInterest = this.roundMoney(
+      Math.max(defaultInterestAccrued - defaultInterestSettled, 0),
+    );
+
+    return {
+      defaultInterestDays,
+      defaultInterest,
+      remainingInterestDays,
+      remainingInterest: this.roundMoney(
+        Math.max(totalInterestOutstanding - defaultInterest, 0),
+      ),
+    };
+  }
+
   private getSettledDemandAllocations(demand: LoanDemand): RepaymentAllocation[] {
     return [...(demand.allocations || [])]
       .filter(allocation => allocation.repayment?.status !== REPAYMENT_STATUS.REVERSED)
@@ -1985,6 +2055,21 @@ private calculateAccruedCharges(
       ? 0
       : this.roundMoney(Math.max(charges.principal, 0));
     const interestDays = isPaidClosedDemand ? 0 : charges.dayCount;
+    const interestTenureBreakup = isPaidClosedDemand
+      ? {
+          defaultInterestDays: 0,
+          defaultInterest: 0,
+          remainingInterestDays: 0,
+          remainingInterest: 0,
+        }
+      : this.calculateScfInterestTenureBreakup(
+          demand,
+          disbursement,
+          demand.invoice,
+          charges,
+          allocations.interest,
+          rules,
+        );
     const chargesDays = isPaidClosedDemand ? 0 : Math.max(0, charges.dayCount - rules.penalStartDay + 1);
     const calculationTill = isPaidClosedDemand
       ? allocations.lastPaymentDate || asOfDate
@@ -2017,6 +2102,10 @@ private calculateAccruedCharges(
       lastPaymentDate: allocations.lastPaymentDate,
       calculationTill,
       interestDays,
+      defaultInterestDays: interestTenureBreakup.defaultInterestDays,
+      defaultInterest: interestTenureBreakup.defaultInterest,
+      remainingInterestDays: interestTenureBreakup.remainingInterestDays,
+      remainingInterest: interestTenureBreakup.remainingInterest,
       interest: interestOutstanding,
       previousInterest: allocations.interest,
       chargesDays,
@@ -2471,8 +2560,12 @@ private async getScfCollectionRows(filters?: ScfReportFilters,): Promise<any[]> 
           'Disb. Amt',
           'O/S Principal',
           'ROI %',
-          'Int. Days',
-          'Interest',
+          'Total Int. Days',
+          'Default Int. Days',
+          'Default Interest',
+          'Remaining Int. Days',
+          'Remaining Interest',
+          'Total Interest',
           'Prev. Interest',
           'Chg. Days',
           'OD Charges',
@@ -2507,8 +2600,12 @@ private async getScfCollectionRows(filters?: ScfReportFilters,): Promise<any[]> 
           row.principalOutstanding,
           row.roi,
           row.interestDays,
+          row.defaultInterestDays,
+          row.defaultInterest,
+          row.remainingInterestDays,
+          row.remainingInterest,
           row.interest,
-          interestSettled > 0 ? 0 : row.previousInterest,
+          row.previousInterest,
           row.chargesDays,
           row.charges,
           chargesSettled > 0 ? 0 : row.previousCharges,
@@ -2517,7 +2614,7 @@ private async getScfCollectionRows(filters?: ScfReportFilters,): Promise<any[]> 
           delayedInterestSettled,
           chargesSettled,
           {
-            formula: `IF(H${rowNumber}="PAID",0,K${rowNumber}+N${rowNumber}+Q${rowNumber})`,
+            formula: `IF(H${rowNumber}="PAID",0,K${rowNumber}+R${rowNumber}+U${rowNumber})`,
             result: row.totalOutstanding,
           },
           row.lastPaymentDate,
