@@ -1236,7 +1236,7 @@ if (existingInvoices.length > 0) {
     });
   }
 
-  // STEP 5: OPS L1 - Verification
+  // STEP 5: OPS L1 - Verification, then send directly to MD.
   async getOPSL1PendingInvoices() {
     console.log(
       "[OPS L1] Fetching pending invoices with status: PENDING_OPS_L1_APPROVAL",
@@ -1272,7 +1272,7 @@ if (existingInvoices.length > 0) {
 
     const previousStatus = invoice.status;
     const newStatus =
-      action === "approve" ? "PENDING_OPS_L2_APPROVAL" : "REJECTED";
+      action === "approve" ? "PENDING_MD_APPROVAL" : "REJECTED";
     invoice.status = newStatus;
     if (action === "reject") {
       await this.releaseInvoiceLimit(invoice);
@@ -1302,14 +1302,13 @@ if (existingInvoices.length > 0) {
     return { invoice, workflow };
   }
 
-  // STEP 6: OPS L2 - Verification
+  // Legacy pre-MD OPS L2 queue. New invoice flow skips this stage and uses
+  // final OPS L2 verification after Ops L1 enters disbursement data.
   async getOPSL2PendingInvoices() {
-    return this.invoiceRepository.find({
-      where: { status: "PENDING_OPS_L2_APPROVAL" as any },
-      relations: ["customer", "supplier", "loanAccount"],
-    });
+    return this.getFinalOPSL2PendingInvoices();
   }
 
+  // Legacy pre-MD OPS L2 action kept for older in-flight records.
   async opsL2Verification(
     invoiceId: number,
     userId: number,
@@ -1356,10 +1355,10 @@ if (existingInvoices.length > 0) {
     return { invoice, workflow };
   }
 
-  // STEP 7: MD - Approval
+  // STEP 6: MD - Approval, then send to Ops L1 for UTR entry.
   async getMDPendingInvoices() {
     return this.invoiceRepository.find({
-      where: { status: "PENDING_MD_APPROVAL" as any },
+      where: { status: In(["PENDING_MD_APPROVAL", "PENDING_OPS_L2_APPROVAL"]) as any },
       relations: ["customer", "supplier", "loanAccount"],
     });
   }
@@ -1375,13 +1374,13 @@ if (existingInvoices.length > 0) {
       relations: ["customer", "supplier"],
     });
     if (!invoice) throw new Error("Invoice not found");
-    if (invoice.status !== "PENDING_MD_APPROVAL") {
+    if (!["PENDING_MD_APPROVAL", "PENDING_OPS_L2_APPROVAL"].includes(invoice.status)) {
       throw new Error("Invoice is not pending MD approval");
     }
 
     const previousStatus = invoice.status;
     const newStatus =
-      action === "approve" ? "PENDING_OPS_HEAD_APPROVAL" : "REJECTED";
+      action === "approve" ? "DISBURSEMENT_DATA_ENTRY" : "REJECTED";
     invoice.status = newStatus;
     if (action === "reject") {
       await this.releaseInvoiceLimit(invoice);
@@ -1411,7 +1410,8 @@ if (existingInvoices.length > 0) {
     return { invoice, workflow };
   }
 
-  // STEP 8: OPS Head - Approval
+  // Legacy OPS Head approval. New invoice flow goes from MD approval directly
+  // to disbursement data entry.
   async getOPSHeadPendingInvoices() {
     return this.invoiceRepository.find({
       where: { status: "PENDING_OPS_HEAD_APPROVAL" as any },
@@ -1466,13 +1466,13 @@ if (existingInvoices.length > 0) {
     return { invoice, workflow };
   }
 
-  // STEP 9: OPS L1 - Disbursement Data Entry
+  // STEP 7: OPS L1 - Disbursement Data Entry
   async getDisbursementEntryInvoices() {
     console.log(
       "[Disbursement Entry] Fetching invoices with status: DISBURSEMENT_DATA_ENTRY",
     );
     const invoices = await this.invoiceRepository.find({
-      where: { status: "DISBURSEMENT_DATA_ENTRY" as any },
+      where: { status: In(["DISBURSEMENT_DATA_ENTRY", "PENDING_OPS_HEAD_APPROVAL"]) as any },
       relations: ["customer", "supplier", "loanAccount"],
     });
     console.log(`[Disbursement Entry] Found ${invoices.length} invoices`);
@@ -1649,7 +1649,7 @@ if (existingInvoices.length > 0) {
       relations: ["loanAccount", "loanAccount.partner", "approvalBatch"],
     });
     if (!invoice) throw new Error("Invoice not found");
-    if (invoice.status !== "DISBURSEMENT_DATA_ENTRY") {
+    if (!["DISBURSEMENT_DATA_ENTRY", "PENDING_OPS_HEAD_APPROVAL"].includes(invoice.status)) {
       throw new Error("Invoice is not in disbursement data entry stage");
     }
     if (!invoice.loanAccountId) {
@@ -1743,7 +1743,7 @@ if (existingInvoices.length > 0) {
     return { invoice, workflow };
   }
 
-  // STEP 10: OPS L2 - Final Verification
+  // STEP 8: OPS L2 - Final Verification
   async getFinalOPSL2PendingInvoices() {
     return this.invoiceRepository.find({
       where: { status: "PENDING_FINAL_OPS_L2_APPROVAL" as any },
@@ -1975,18 +1975,23 @@ if (existingInvoices.length > 0) {
   }
 
   async getPendingInvoices(role: string) {
-    const statusMap: { [key: string]: string } = {
-      OPS_L1: "PENDING_OPS_L1_APPROVAL",
-      OPS_L2: "PENDING_OPS_L2_APPROVAL",
+    const statusMap: { [key: string]: string | string[] } = {
+      OPS_L1: ["PENDING_OPS_L1_APPROVAL", "DISBURSEMENT_DATA_ENTRY", "PENDING_OPS_HEAD_APPROVAL"],
+      OPERATIONS_L1: ["PENDING_OPS_L1_APPROVAL", "DISBURSEMENT_DATA_ENTRY", "PENDING_OPS_HEAD_APPROVAL"],
+      OPERATIONS_TEAM_L1: ["PENDING_OPS_L1_APPROVAL", "DISBURSEMENT_DATA_ENTRY", "PENDING_OPS_HEAD_APPROVAL"],
+      OPS_L2: "PENDING_FINAL_OPS_L2_APPROVAL",
+      OPERATIONS_L2: "PENDING_FINAL_OPS_L2_APPROVAL",
+      OPERATIONS_TEAM_L2: "PENDING_FINAL_OPS_L2_APPROVAL",
       OPS_HEAD: "PENDING_OPS_HEAD_APPROVAL",
+      OPERATIONS_HEAD: "PENDING_OPS_HEAD_APPROVAL",
       MD: "PENDING_MD_APPROVAL",
     };
-    const status = statusMap[role];
+    const status = statusMap[String(role || "").toUpperCase()];
     if (!status) {
       return [];
     }
     return this.invoiceRepository.find({
-      where: { status: status as any },
+      where: { status: (Array.isArray(status) ? In(status) : status) as any },
       relations: ["customer", "supplier", "loanAccount"],
     });
   }

@@ -7,14 +7,12 @@ import { FiCheck, FiX, FiFileText, FiDollarSign, FiCalendar } from 'react-icons/
 
 export default function InvoiceDiscountingOPS2() {
   const [loading, setLoading] = useState(false);
-  const [pendingL1Invoices, setPendingL1Invoices] = useState([]);
   const [pendingFinalInvoices, setPendingFinalInvoices] = useState([]);
   const [selectedInvoice, setSelectedInvoice] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [actionType, setActionType] = useState('');
   const [showViewModal, setShowViewModal] = useState(false);
   const [remarks, setRemarks] = useState('');
-  const [activeTab, setActiveTab] = useState('initial');
   const [submitError, setSubmitError] = useState('');
 
   useEffect(() => {
@@ -24,12 +22,8 @@ export default function InvoiceDiscountingOPS2() {
   const loadData = async () => {
     try {
       setLoading(true);
-      const [l1Res, finalRes] = await Promise.all([
-        workflowService.getOPS2PendingInvoices(),
-        workflowService.getFinalOPS2PendingInvoices(),
-      ]);
+      const finalRes = await workflowService.getFinalOPS2PendingInvoices();
       // Backend returns { success: true, data: [...] }
-      setPendingL1Invoices(l1Res?.data?.data || []);
       setPendingFinalInvoices(finalRes?.data?.data || []);
     } catch (error) {
       console.error('Error loading data:', error);
@@ -50,14 +44,10 @@ export default function InvoiceDiscountingOPS2() {
       setSubmitError('');
 
       if (actionType === 'approve') {
-        if (activeTab === 'initial') {
-          await workflowService.opsL2Approve(selectedInvoice.id, remarks);
-        } else {
-          await workflowService.finalOpsL2Approve(selectedInvoice.id, remarks);
-        }
+        await workflowService.finalOpsL2Approve(selectedInvoice.id, remarks);
         toast.success('Invoice approved successfully');
       } else {
-        await workflowService.opsL2Reject(selectedInvoice.id, remarks);
+        await workflowService.finalOpsL2Reject(selectedInvoice.id, remarks);
         toast.success('Invoice rejected');
       }
 
@@ -577,44 +567,16 @@ export default function InvoiceDiscountingOPS2() {
     <div style={{ padding: '20px' }}>
       <h2 style={{ marginBottom: '20px' }}>Invoice Discounting - OPS L2 Dashboard</h2>
       
-      {/* Tabs */}
       <div style={{ marginBottom: '20px' }}>
-        <button
-          onClick={() => setActiveTab('initial')}
-          style={{
-            padding: '10px 20px',
-            background: activeTab === 'initial' ? '#007bff' : '#f5f5f5',
-            color: activeTab === 'initial' ? '#fff' : '#333',
-            border: 'none',
-            borderRadius: '4px 4px 0 0',
-            cursor: 'pointer',
-            marginRight: '4px',
-          }}
-        >
-          Initial Verification ({pendingL1Invoices.length})
-        </button>
-        <button
-          onClick={() => setActiveTab('final')}
-          style={{
-            padding: '10px 20px',
-            background: activeTab === 'final' ? '#007bff' : '#f5f5f5',
-            color: activeTab === 'final' ? '#fff' : '#333',
-            border: 'none',
-            borderRadius: '4px 4px 0 0',
-            cursor: 'pointer',
-          }}
-        >
-          Final Verification ({pendingFinalInvoices.length})
-        </button>
+        <h3 style={{ margin: 0 }}>Final Verification ({pendingFinalInvoices.length})</h3>
+        <p style={{ margin: '6px 0 0', color: '#64748b', fontSize: '14px' }}>
+          Invoices arrive here after MD approval and Ops L1 UTR entry.
+        </p>
       </div>
 
       {/* Content */}
       <div style={{ background: '#fff', padding: '20px', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
-        {activeTab === 'initial' ? (
-          renderInvoiceTable(pendingL1Invoices)
-        ) : (
-          renderInvoiceTable(pendingFinalInvoices)
-        )}
+        {renderInvoiceTable(pendingFinalInvoices)}
       </div>
 
       {/* Verification Modal */}

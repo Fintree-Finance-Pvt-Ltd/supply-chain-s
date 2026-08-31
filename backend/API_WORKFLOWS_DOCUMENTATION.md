@@ -354,13 +354,26 @@ All error responses follow this format:
 - **Request Body:**
 ```json
 {
-  "remarks": "Invoice submitted for operations review"
+  "remarks": "Invoice submitted for customer approval"
 }
 ```
-- **Response:** Workflow object with status = "SUBMITTED"
-- **Next Approver:** OPERATIONS_L1
+- **Response:** Workflow object with status = "PENDING_CUSTOMER_APPROVAL"
+- **Next Approver:** CUSTOMER
 
-### Step 3: Operations L1 Verification (OPERATIONS_L1)
+### Step 3: Customer Approval (CUSTOMER)
+- **Endpoint:** `POST /api/workflows/invoices/:invoiceId/customer-approve`
+- **Required Role:** Customer context / customer approval request
+- **Request Body:**
+```json
+{
+  "approved": true,
+  "remarks": "Invoice approved"
+}
+```
+- **If Approved:** Status = "PENDING_OPS_L1_APPROVAL", Next = OPERATIONS_L1
+- **If Rejected:** Status = "REJECTED_BY_CUSTOMER"
+
+### Step 4: Operations L1 Verification (OPERATIONS_L1)
 - **Endpoint:** `POST /api/workflows/invoices/:invoiceId/ops-l1`
 - **Required Role:** OPERATIONS_L1
 - **Request Body:**
@@ -371,65 +384,48 @@ All error responses follow this format:
 }
 ```
 - **Response:** Workflow object
-- **If Approved:** Status = "OPS_L1_VERIFIED", Next = OPERATIONS_L2
+- **If Approved:** Status = "PENDING_MD_APPROVAL", Next = MD
 - **If Rejected:** Status = "REJECTED"
 
-### Step 4: Operations L2 Validation (OPERATIONS_L2)
-- **Endpoint:** `POST /api/workflows/invoices/:invoiceId/ops-l2`
-- **Required Role:** OPERATIONS_L2
-- **Request Body:**
-```json
-{
-  "approved": true,
-  "remarks": "Document authenticity confirmed"
-}
-```
-- **Response:** Workflow object
-- **If Approved:** Status = "OPS_L2_VERIFIED", Next = OPERATIONS_HEAD
-- **If Rejected:** Status = "REJECTED"
-
-### Step 5: Operations Head Approval (OPERATIONS_HEAD)
-- **Endpoint:** `POST /api/workflows/invoices/:invoiceId/ops-head`
-- **Required Role:** OPERATIONS_HEAD
-- **Request Body:**
-```json
-{
-  "remarks": "Operations approval granted"
-}
-```
-- **Response:** Workflow object with status = "OPS_HEAD_APPROVED"
-- **Next Approver:** CEO
-
-### Step 6: CEO Review (CEO)
-- **Endpoint:** `POST /api/workflows/invoices/:invoiceId/ceo`
-- **Required Role:** CEO
-- **Request Body:**
-```json
-{
-  "approved": true,
-  "remarks": "Executive review completed"
-}
-```
-- **Response:** Workflow object
-- **If Approved:** Status = "CEO_APPROVED", Next = MD
-- **If Rejected:** Status = "REJECTED"
-
-### Step 7: MD Disbursal (MD)
-- **Endpoint:** `POST /api/workflows/invoices/:invoiceId/md-disburse`
+### Step 5: MD Approval (MD)
+- **Endpoint:** `POST /api/workflows/invoices/:invoiceId/md-approve`
 - **Required Role:** MD
 - **Request Body:**
 ```json
 {
   "approved": true,
-  "disbursedAmount": 475000,
-  "remarks": "Full amount disbursed with 5% discount"
+  "remarks": "Approved for disbursement"
 }
 ```
-- **Response:** Workflow object with status = "DISBURSED"
-- **Fields Updated:**
-  - `disbursedAmount`: Amount actually disbursed
-  - `disbursedDate`: Current date
-- **Workflow Status:** COMPLETED
+- **If Approved:** Status = "DISBURSEMENT_DATA_ENTRY", Next = OPERATIONS_L1
+- **If Rejected:** Status = "REJECTED"
+
+### Step 6: Operations L1 UTR Entry (OPERATIONS_L1)
+- **Endpoint:** `POST /api/workflows/invoices/:invoiceId/disburse`
+- **Required Role:** OPERATIONS_L1
+- **Request Body:**
+```json
+{
+  "disbursementUtr": "UTR123456789",
+  "disbursementDate": "2024-02-01"
+}
+```
+- **Response:** Workflow object with status = "PENDING_FINAL_OPS_L2_APPROVAL"
+- **Next Approver:** OPERATIONS_L2
+
+### Step 7: Final Operations L2 Verification (OPERATIONS_L2)
+- **Endpoint:** `POST /api/workflows/invoices/:invoiceId/final-ops-l2`
+- **Required Role:** OPERATIONS_L2
+- **Request Body:**
+```json
+{
+  "approved": true,
+  "remarks": "UTR/date/amount verified"
+}
+```
+- **If Approved:** Status = "ACTIVE"
+- **If Rejected:** Status = "REJECTED"
+- **Workflow Status:** COMPLETED when ACTIVE
 
 ### Invoice Dashboards
 
@@ -455,18 +451,16 @@ All error responses follow this format:
 
 #### Operations Dashboard
 - **Endpoint:** `GET /api/workflows/invoices/dashboard/operations`
-- **Required Role:** OPERATIONS_L1, OPERATIONS_L2, or OPERATIONS_HEAD
+- **Required Role:** OPERATIONS_L1 or OPERATIONS_L2
 - **Response:** Role-specific pending invoices
-  - OPERATIONS_L1: Invoices with status = "SUBMITTED"
-  - OPERATIONS_L2: Invoices with status = "OPS_L1_VERIFIED"
-  - OPERATIONS_HEAD: Invoices with status = "OPS_L2_VERIFIED"
+  - OPERATIONS_L1: Invoices with status = "PENDING_OPS_L1_APPROVAL" or "DISBURSEMENT_DATA_ENTRY"
+  - OPERATIONS_L2: Invoices with status = "PENDING_FINAL_OPS_L2_APPROVAL"
 
 #### Executive Dashboard
 - **Endpoint:** `GET /api/workflows/invoices/dashboard/executive`
-- **Required Role:** CEO or MD
+- **Required Role:** MD
 - **Response:** Role-specific pending invoices
-  - CEO: Invoices with status = "OPS_HEAD_APPROVED"
-  - MD: Invoices with status = "CEO_APPROVED"
+  - MD: Invoices with status = "PENDING_MD_APPROVAL"
 
 ### Invoice Retrieval Endpoints
 

@@ -61,9 +61,25 @@ const getInvoiceRouteForRoles = (roles) => {
   return '/operations/dashboard'
 }
 
+const getOPS1InvoiceWorkQueue = async () => {
+  const [verificationResult, disbursementResult] = await Promise.all([
+    workflowService.getOPS1PendingInvoices(),
+    workflowService.getDisbursementEntryInvoices(),
+  ])
+
+  return {
+    data: {
+      data: [
+        ...toArray(verificationResult.data?.data),
+        ...toArray(disbursementResult.data?.data),
+      ],
+    },
+  }
+}
+
 const getInvoiceLoaderForRoles = (roles) => {
-  if (roles.includes(ROLES.OPERATIONS_TEAM_L1)) return workflowService.getOPS1PendingInvoices
-  if (roles.includes(ROLES.OPERATIONS_TEAM_L2)) return workflowService.getOPS2PendingInvoices
+  if (roles.includes(ROLES.OPERATIONS_TEAM_L1)) return getOPS1InvoiceWorkQueue
+  if (roles.includes(ROLES.OPERATIONS_TEAM_L2)) return workflowService.getFinalOPS2PendingInvoices
   if (roles.includes(ROLES.OPERATIONS_HEAD)) return workflowService.getOPSHeadPendingInvoices
   return null
 }

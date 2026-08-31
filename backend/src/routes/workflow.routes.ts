@@ -1459,7 +1459,7 @@ router.post('/invoices/:invoiceId/ops-l1', checkRole(['operations_team_l1', 'ope
 
     res.json({
       success: true,
-      message: approved ? 'Invoice verified by Operations L1' : 'Invoice rejected by Operations L1',
+      message: approved ? 'Invoice verified by Operations L1 and sent to MD' : 'Invoice rejected by Operations L1',
       data: workflow,
     });
   } catch (error: any) {
@@ -1543,7 +1543,7 @@ router.post('/invoices/:invoiceId/ops-l2', checkRole(['operations_team_l1', 'ope
 
 /**
  * POST /api/workflows/invoices/:invoiceId/ops-head
- * Operations Head approves for financial review
+ * Legacy Operations Head approval for older/exception invoice records.
  */
 router.post('/invoices/:invoiceId/ops-head', checkRole(['operations_head']), async (req: Request, res: Response) => {
   try {
@@ -1620,7 +1620,7 @@ router.post('/invoices/:invoiceId/md-approve', checkRole(['md']), async (req: Re
 
     res.json({
       success: true,
-      message: approved ? 'Invoice approved by MD' : 'Invoice rejected by MD',
+      message: approved ? 'Invoice approved by MD and sent for disbursement entry' : 'Invoice rejected by MD',
       data: workflow,
     });
   } catch (error: any) {
@@ -1633,20 +1633,13 @@ router.post('/invoices/:invoiceId/md-approve', checkRole(['md']), async (req: Re
 
 /**
  * POST /api/workflows/invoices/:invoiceId/md-disburse
- * MD performs final approval and disburses amount
+ * Legacy alias for MD approval. Disbursement data/UTR is entered by Ops L1.
  */
 router.post('/invoices/:invoiceId/md-disburse', checkRole(['md']), async (req: Request, res: Response) => {
   try {
     const { invoiceId } = req.params;
-    const { approved, disbursedAmount, remarks } = req.body;
+    const { approved, remarks } = req.body;
     const user = (req as any).user;
-
-    if (!disbursedAmount || disbursedAmount <= 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'Valid disbursed amount is required',
-      });
-    }
 
     const workflow = await invoiceDiscountingService.mdApproval(
       parseInt(invoiceId),
@@ -1657,7 +1650,7 @@ router.post('/invoices/:invoiceId/md-disburse', checkRole(['md']), async (req: R
 
     res.json({
       success: true,
-      message: approved ? 'Invoice disbursed by MD' : 'Invoice rejected by MD',
+      message: approved ? 'Invoice approved by MD and sent for disbursement entry' : 'Invoice rejected by MD',
       data: workflow,
     });
   } catch (error: any) {
@@ -1693,7 +1686,7 @@ router.get('/invoices/dashboard/rm', checkRole(['relationship_manager']), async 
  * GET /api/workflows/invoices/dashboard/operations
  * Operations Dashboard
  */
-router.get('/invoices/dashboard/operations', checkRole(['OPERATIONS_L1', 'OPERATIONS_L2', 'OPERATIONS_HEAD']), async (req: Request, res: Response) => {
+router.get('/invoices/dashboard/operations', checkRole(['operations_team_l1', 'operations_team_l2', 'operations_head']), async (req: Request, res: Response) => {
   try {
     const user = (req as any).user;
     const userRole = user.roles?.[0]?.name || 'OPERATIONS_L1';
@@ -1715,7 +1708,7 @@ router.get('/invoices/dashboard/operations', checkRole(['OPERATIONS_L1', 'OPERAT
  * GET /api/workflows/invoices/dashboard/executive
  * Executive Dashboard
  */
-router.get('/invoices/dashboard/executive', checkRole(['CEO', 'MD']), async (req: Request, res: Response) => {
+router.get('/invoices/dashboard/executive', checkRole(['ceo', 'md']), async (req: Request, res: Response) => {
   try {
     const user = (req as any).user;
     const userRole = user.roles?.[0]?.name || 'CEO';
@@ -2230,7 +2223,7 @@ router.get('/invoices/pending/ops-l1', checkRole(['operations_team_l1']), async 
 
 /**
  * GET /api/workflows/invoices/pending/ops-l2
- * Get invoices pending OPS L2 verification
+ * Get invoices pending final OPS L2 verification in the shortened invoice flow
  */
 router.get('/invoices/pending/ops-l2', checkRole(['operations_team_l2']), async (req, res) => {
   try {
