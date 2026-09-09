@@ -1,10 +1,10 @@
 import { AppDataSource } from "../config/database";
-import { LMSDataSource } from "../config/lmsDatabase";
 import {
   Customer,
   CaseStatusHistory,
   CustomerAddress,
   OtpSession,
+  LoanAccount,
   Loan,
   LoanSchedule,
   LoanTransaction,
@@ -12,20 +12,23 @@ import {
   Notification,
   RefreshToken,
   Applicant,
+  Invoice,
+  Repayment,
 } from "../entities";
 import { CASE_STATUS, CaseStatus } from "../config/constants";
 import { In, Repository } from "typeorm";
 import { hashPassword, comparePassword } from "../utils/password";
 import { generateOtp } from "../integrations/otp/generators";
 import { IdentifierType, OtpSessionStatus } from "../entities/OtpSession";
+import { KycOwnerType } from "../entities/KycVerificationStatus";
 import {
   generateCustomerToken,
   generateTokenPair,
   refreshAccessToken,
   invalidateRefreshToken,
 } from "../utils/jwt";
-import { param } from "express-validator";
 import { AlotSmsProvider } from "../integrations/notifications/sms/alot.provider";
+import { loanManagementService } from "./loan-management.service";
 
 // DTO for simplified customer response
 export interface CustomerBasicInfo {
@@ -129,6 +132,7 @@ export class CustomerService {
   private customerRepository: Repository<Customer>;
   private statusHistoryRepository: Repository<CaseStatusHistory>;
   private otpSessionRepository: Repository<OtpSession>;
+  private loanAccountRepository: Repository<LoanAccount>;
   private loanRepository: Repository<Loan>;
   private loanScheduleRepository: Repository<LoanSchedule>;
   private loanTransactionRepository: Repository<LoanTransaction>;
@@ -142,6 +146,7 @@ export class CustomerService {
     this.statusHistoryRepository =
       AppDataSource.getRepository(CaseStatusHistory);
     this.otpSessionRepository = AppDataSource.getRepository(OtpSession);
+    this.loanAccountRepository = AppDataSource.getRepository(LoanAccount);
     this.loanRepository = AppDataSource.getRepository(Loan);
     this.loanScheduleRepository = AppDataSource.getRepository(LoanSchedule);
     this.loanTransactionRepository =
@@ -161,6 +166,228 @@ export class CustomerService {
       templateId: process.env.MOBILE_OTP_TEMPLATE_ID || "1707176622463150769",
       peid: process.env.DLT_PEID || "1201159568446234948",
     });
+  }
+
+  private toNumber(value: unknown): number {
+    const parsed = Number(value || 0);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  private getTokenPartnerLoanId(customerId: number): string {
+    return String(customerId);
+  }
+
+  private getCustomerDisplayName(customer: Customer): string {
+    return customer.name || customer.customerName || customer.companyName || "";
+  }
+
+  private getCustomerMobile(customer: Customer): string {
+    return customer.mobile || customer.companyMobile || "";
+  }
+
+  private getCustomerPan(customer: Customer): string {
+    return customer.pan || customer.companyPan || "";
+  }
+
+  private getAddressText(customer: Customer & { addresses?: CustomerAddress[] }): string {
+    const address = customer.addresses?.[0];
+    return address?.fullAddress || "";
+  }
+
+  private async findLocalCustomerEntityByIdentifier(
+    identifier: string | number,
+  ): Promise<(Customer & { password?: string | null; addresses?: CustomerAddress[] }) | null> {
+    const value = String(identifier || "").trim();
+    if (!value) return null;
+
+    const numericId = Number(value);
+    const hasNumericId = Number.isInteger(numericId) && numericId > 0;
+
+    const queryBuilder = this.customerRepository
+      .createQueryBuilder("customer")
+      .addSelect("customer.password")
+      .leftJoinAndSelect("customer.addresses", "addresses")
+      .leftJoin("customer.loanAccounts", "loanAccount")
+      .where(
+        [
+          hasNumericId ? "customer.id = :numericId" : null,
+          "customer.customerCode = :identifier",
+          "loanAccount.lanId = :identifier",
+          "loanAccount.partnerLanId = :identifier",
+        ]
+          .filter(Boolean)
+          .join(" OR "),
+        { numericId, identifier: value },
+      )
+      .orderBy("customer.createdAt", "DESC")
+      .addOrderBy("addresses.createdAt", "ASC");
+
+    return (await queryBuilder.getOne()) as
+      | (Customer & { password?: string | null; addresses?: CustomerAddress[] })
+      | null;
+  }
+
+  private async findLocalCustomerEntityByMobile(
+    mobile: string,
+  ): Promise<(Customer & { password?: string | null; addresses?: CustomerAddress[] }) | null> {
+    const cleanMobile = String(mobile || "").trim();
+    if (!cleanMobile) return null;
+
+    return (await this.customerRepository
+      .createQueryBuilder("customer")
+      .addSelect("customer.password")
+      .leftJoinAndSelect("customer.addresses", "addresses")
+      .where("customer.mobile = :mobile", { mobile: cleanMobile })
+      .orWhere("customer.companyMobile = :mobile", { mobile: cleanMobile })
+      .orderBy("customer.createdAt", "DESC")
+      .addOrderBy("addresses.createdAt", "ASC")
+      .getOne()) as
+      | (Customer & { password?: string | null; addresses?: CustomerAddress[] })
+      | null;
+  }
+
+  private async getPrimaryLoanAccount(customerId: number): Promise<LoanAccount | null> {
+    return await this.loanAccountRepository.findOne({
+      where: { customerId },
+      relations: ["partner"],
+      order: { createdAt: "DESC" },
+    });
+  }
+
+  private async getCustomerLoanAccounts(customerId: number): Promise<LoanAccount[]> {
+    return await this.loanAccountRepository.find({
+      where: { customerId },
+      relations: ["partner"],
+      order: { createdAt: "DESC" },
+    });
+  }
+
+  private mapLocalCustomerToLegacyShape(
+    customer: Customer & { password?: string | null; addresses?: CustomerAddress[] },
+    loanAccount?: LoanAccount | null,
+  ): any {
+    const displayName = this.getCustomerDisplayName(customer);
+    const mobile = this.getCustomerMobile(customer);
+    const pan = this.getCustomerPan(customer);
+    const address = this.getAddressText(customer);
+
+    return {
+      id: customer.id,
+      partner_loan_id: this.getTokenPartnerLoanId(customer.id),
+      customer_code: customer.customerCode || this.getTokenPartnerLoanId(customer.id),
+      applicant_name: displayName,
+      applicant_mobile: mobile,
+      applicant_pan: pan,
+      applicant_aadhaar: "",
+      applicant_address: address,
+      co_applicant_name: "",
+      co_applicant_pan: "",
+      co_applicant_aadhaar: "",
+      co_applicant_mobile: "",
+      co_applicant_address: "",
+      company_name: customer.companyName || displayName,
+      company_pan: customer.companyPan || pan,
+      company_address: address,
+      email: customer.email || customer.companyEmail || "",
+      mobile,
+      pan,
+      gst_number: customer.gstNumber || "",
+      bank_account_no: customer.bankAccountNo || "",
+      bank_name: customer.bankName || "",
+      bank_branch: customer.bankBranch || "",
+      bank_ifsc_code: customer.bankIfscCode || "",
+      bank_account_type: customer.bankType || "",
+      bank_verified: Boolean(customer.bankAccountNo && customer.bankIfscCode),
+      status: customer.status || "",
+      roi_percentage: null,
+      created_at: customer.createdAt,
+      updated_at: customer.updatedAt,
+      password: customer.password || null,
+      lan_id: loanAccount?.lanId || null,
+      partner_lan_id: loanAccount?.partnerLanId || null,
+      lender: loanAccount?.lender || loanAccount?.partner?.code || null,
+    };
+  }
+
+  private async mapLocalCustomerEntityToLegacyShape(
+    customer: Customer & { password?: string | null; addresses?: CustomerAddress[] },
+  ): Promise<any> {
+    const loanAccount = await this.getPrimaryLoanAccount(customer.id);
+    return this.mapLocalCustomerToLegacyShape(customer, loanAccount);
+  }
+
+  private async safeRefreshLoanAccountSnapshot(loanAccountId: number): Promise<any | null> {
+    try {
+      return await loanManagementService.refreshSnapshot(loanAccountId);
+    } catch (error: any) {
+      console.warn("[CustomerService] Unable to refresh loan account snapshot", {
+        loanAccountId,
+        message: error?.message,
+      });
+      return null;
+    }
+  }
+
+  private mapLoanAccountToLegacyLoan(loanAccount: LoanAccount, snapshot?: any | null): any {
+    return {
+      id: loanAccount.id,
+      customer_id: loanAccount.customerId,
+      loan_number: loanAccount.lanId,
+      lan: loanAccount.lanId,
+      partner_lan_id: loanAccount.partnerLanId,
+      product_type: loanAccount.partner?.name || loanAccount.partner?.code || loanAccount.lender || "SCF",
+      sanctioned_amount: this.toNumber(loanAccount.sanctionedAmount),
+      disbursed_amount: this.toNumber(snapshot?.totalDisbursed ?? loanAccount.disbursedAmount),
+      outstanding_amount: this.toNumber(snapshot?.totalOutstanding),
+      interest_rate: null,
+      tenure: null,
+      emi_amount: this.toNumber(snapshot?.totalOutstanding),
+      status: loanAccount.status,
+      start_date: loanAccount.createdAt,
+      end_date: snapshot?.nextDueDate || null,
+      processing_fee: null,
+      insurance_premium: null,
+      other_charges: null,
+      snapshot,
+    };
+  }
+
+  private mapDrawdownToLegacyShape(drawdown: Drawdown): any {
+    return {
+      id: drawdown.id,
+      customer_id: drawdown.customerId,
+      loan_id: drawdown.loanId,
+      drawdown_number: drawdown.drawdownNumber,
+      amount: this.toNumber(drawdown.requestedAmount),
+      requested_amount: this.toNumber(drawdown.requestedAmount),
+      approved_amount: this.toNumber(drawdown.approvedAmount),
+      disbursed_amount: this.toNumber(drawdown.disbursedAmount),
+      status: drawdown.status,
+      request_date: drawdown.requestDate,
+      approval_date: drawdown.approvalDate,
+      disbursement_date: drawdown.disbursementDate,
+      created_at: drawdown.createdAt,
+    };
+  }
+
+  private mapRepaymentToLegacyTransaction(repayment: Repayment): any {
+    return {
+      id: repayment.id,
+      customer_id: repayment.loanAccount?.customerId || null,
+      loan_id: repayment.loanAccountId,
+      loan_number: repayment.lan,
+      transaction_date: repayment.repaymentDate,
+      transaction_type: "REPAYMENT",
+      amount: this.toNumber(repayment.amount),
+      description: "Collection",
+      reference_number: repayment.utr,
+      payment_mode: repayment.source,
+      running_balance: null,
+      collection_date: repayment.repaymentDate,
+      collection_amount: this.toNumber(repayment.amount),
+      collection_utr: repayment.utr,
+      status: repayment.status,
+    };
   }
 
   private normalizePagination(options?: PaginationOptions): Required<PaginationOptions> {
@@ -467,100 +694,56 @@ const applicantAadhaarAddressRaw =cleanedData.applicantAddress ;
   }
 
   // =====================================================
-  // 🔹 SIMPLIFIED CUSTOMER BASIC INFO API (FROM LMS)
+  // 🔹 SIMPLIFIED CUSTOMER BASIC INFO API
   // =====================================================
 
   async getCustomerBasicInfo(
     partnerId: any,
   ): Promise<CustomerBasicInfo | null> {
     try {
-      // Fetch from LMS database
-      const lmsCustomer = await this.findCustomerById(partnerId);
+      const localCustomer = await this.findLocalCustomerEntityByIdentifier(partnerId);
+      if (!localCustomer) return null;
 
-      if (!lmsCustomer) {
-        // Fallback to local DB
+      const addressRows = await AppDataSource.getRepository(CustomerAddress).find({
+        where: { customerId: localCustomer.id },
+        select: {
+          id: true,
+          customerId: true,
+          type: true,
+          fullAddress: true,
+          pincode: true,
+          state: true,
+          city: true,
+        },
+        order: { createdAt: "ASC" },
+        take: MAX_DETAIL_ROWS,
+      });
 
-        console.info("[CustomerBasicInfo] LMS customer not found, using local fallback", {
-          partnerId,
-        });
-        const customer = await this.customerRepository.findOne({
-          where: { id: partnerId },
-          select: {
-            id: true,
-            companyName: true,
-            email: true,
-            companyEmail: true,
-            mobile: true,
-            companyMobile: true,
-            pan: true,
-            companyPan: true,
-            gstNumber: true,
-            bankAccountNo: true,
-            bankName: true,
-            bankBranch: true,
-            bankIfscCode: true,
-            bankType: true,
-          },
-        });
-
-        if (!customer) return null;
-
-        const addressRows = await AppDataSource.getRepository(CustomerAddress).find({
-          where: { customerId: Number(partnerId) },
-          select: {
-            id: true,
-            customerId: true,
-            type: true,
-            fullAddress: true,
-            pincode: true,
-            state: true,
-            city: true,
-          },
-          order: { createdAt: "ASC" },
-          take: MAX_DETAIL_ROWS,
-        });
-
-        const addresses =
-          addressRows.map((addr: CustomerAddress) => ({
-            type: addr.type,
-            fullAddress: addr.fullAddress,
-            pincode: addr.pincode,
-            state: addr.state,
-            city: addr.city,
-          })) || [];
-
-        return {
-          id: customer.id,
-          companyName: customer.companyName || "",
-          email: customer.email || customer.companyEmail || "",
-          mobile: customer.mobile || customer.companyMobile || "",
-          pan: customer.pan || customer.companyPan || "",
-          gstNumber: customer.gstNumber || "",
-          addresses,
-          bankAccountNo: customer.bankAccountNo || "",
-          bankName: customer.bankName || "",
-          bankBranch: customer.bankBranch || "",
-          bankIfscCode: customer.bankIfscCode || "",
-          bankType: customer.bankType || "",
-        };
-      }
+      const addresses =
+        addressRows.map((addr: CustomerAddress) => ({
+          type: addr.type,
+          fullAddress: addr.fullAddress,
+          pincode: addr.pincode,
+          state: addr.state,
+          city: addr.city,
+        })) || [];
 
       return {
-        id: lmsCustomer.id,
-        companyName: lmsCustomer.company_name || lmsCustomer.name || "",
-        email: lmsCustomer.email || "",
-        mobile: lmsCustomer.mobile || "",
-        pan: lmsCustomer.pan || "",
-        gstNumber: lmsCustomer.gst_number || "",
-        addresses: [],
-        bankAccountNo: lmsCustomer.bank_account_no || "",
-        bankName: lmsCustomer.bank_name || "",
-        bankBranch: lmsCustomer.bank_branch || "",
-        bankIfscCode: lmsCustomer.bank_ifsc_code || "",
-        bankType: lmsCustomer.bank_account_type || "",
+        id: localCustomer.id,
+        companyName: localCustomer.companyName || localCustomer.name || "",
+        email: localCustomer.email || localCustomer.companyEmail || "",
+        mobile: localCustomer.mobile || localCustomer.companyMobile || "",
+        pan: localCustomer.pan || localCustomer.companyPan || "",
+        gstNumber: localCustomer.gstNumber || "",
+        addresses,
+        bankAccountNo: localCustomer.bankAccountNo || "",
+        bankName: localCustomer.bankName || "",
+        bankBranch: localCustomer.bankBranch || "",
+        bankIfscCode: localCustomer.bankIfscCode || "",
+        bankType: localCustomer.bankType || "",
       };
     } catch (error) {
-      console.error("Error fetching customer basic info from LMS", error);
+      console.error("Error fetching customer basic info", error);
       return null;
     }
   }
@@ -674,53 +857,55 @@ const applicantAadhaarAddressRaw =cleanedData.applicantAddress ;
 
   /**
    * Login with mobile number and password
-   * READ ONLY from LMS supply_chain_loans table
-   * 1. Find customer by applicant_mobile from LMS
-   * 2. Validate password from internal DB if customer exists in LMS
-   * 3. Return JWT token
+   * Uses the local customers table only.
    */
   async loginWithPassword(
     mobile: string,
     password: string,
   ): Promise<CustomerLoginResponse> {
     try {
-      // Step 1: Find customer in LMS supply_chain_loans by applicant_mobile
-      const lmsCustomer = await this.findCustomerByMobile(mobile);
+      const customer = await this.findCustomerByMobile(mobile);
 
-      if (!lmsCustomer) {
+      if (!customer) {
         return {
           success: false,
           message: "Customer not found with this mobile number",
         };
       }
 
-      console.info("[CustomerLogin] LMS customer found", {
-        customerId: lmsCustomer.id,
-        partnerLoanId: lmsCustomer.partner_loan_id,
+      console.info("[CustomerLogin] Local customer found", {
+        customerId: customer.id,
       });
-      // Step 4: Validate password
+
+      if (!customer.password) {
+        return {
+          success: false,
+          message: "Password is not set. Please set password or use OTP login.",
+        };
+      }
+
       const isPasswordValid = await comparePassword(
         password,
-        lmsCustomer.password,
+        customer.password,
       );
       if (!isPasswordValid) {
         return { success: false, message: "Invalid password" };
       }
 
-      // Step 5: Generate JWT token with partnerLoanId from LMS
-      const partnerLoanId = lmsCustomer.partner_loan_id || "";
-      const token = generateCustomerToken(lmsCustomer.id, partnerLoanId);
+      const partnerLoanId = this.getTokenPartnerLoanId(customer.id);
+      const token = generateCustomerToken(customer.id, partnerLoanId);
 
       return {
         success: true,
         token,
         customer: {
-          id: lmsCustomer.id,
-          name: lmsCustomer.applicant_name || lmsCustomer.company_name || "",
-          companyName: lmsCustomer.company_name || "",
-          mobile: lmsCustomer.applicant_mobile,
+          id: customer.id,
+          name: customer.applicant_name || customer.company_name || "",
+          companyName: customer.company_name || "",
+          mobile: customer.applicant_mobile,
         },
-        partnerLoanId: partnerLoanId,
+        partnerLoanId,
+        partnerLanId: customer.lan_id || undefined,
       };
     } catch (error: any) {
       console.error("Login error", error);
@@ -730,43 +915,35 @@ const applicantAadhaarAddressRaw =cleanedData.applicantAddress ;
 
   /**
    * Request OTP for login
-   * READ ONLY from LMS supply_chain_loans table
+   * Uses local customer and OTP session tables.
    */
   async requestLoginOtp(mobile: string): Promise<{
     success: boolean;
     message?: string;
     expiresAt?: Date;
   }> {
-    // Check customer in LMS
-    const lmsCustomer = await this.findCustomerByMobile(mobile);
+    const customer = await this.findCustomerByMobile(mobile);
 
-    if (!lmsCustomer) {
+    if (!customer) {
       return {
         success: false,
         message: "Customer not found with this mobile number",
       };
     }
 
-    // Check existing OTP session in LMS DB
-    const existing = await LMSDataSource.query(
-      `
-    SELECT *
-    FROM otp_sessions
-    WHERE customer_id = ?
-    AND identifier = ?
-    AND identifier_type = 'MOBILE'
-    AND status = 'SENT'
-    ORDER BY created_at DESC
-    LIMIT 1
-    `,
-      [lmsCustomer.id, mobile],
-    );
-
-    const existingSession = existing[0];
+    const existingSession = await this.otpSessionRepository.findOne({
+      where: {
+        customerId: customer.id,
+        identifier: mobile,
+        identifierType: IdentifierType.MOBILE,
+        status: OtpSessionStatus.SENT,
+      },
+      order: { createdAt: "DESC" },
+    });
 
     if (existingSession) {
       const timeSinceLastSent =
-        Date.now() - new Date(existingSession.created_at).getTime();
+        Date.now() - new Date(existingSession.createdAt).getTime();
 
       if (timeSinceLastSent < 30000) {
         const remainingTime = Math.ceil((30000 - timeSinceLastSent) / 1000);
@@ -781,25 +958,20 @@ const applicantAadhaarAddressRaw =cleanedData.applicantAddress ;
     const otp = generateOtp();
     const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
 
-    // Insert OTP session into LMS DB
-    await LMSDataSource.query(
-      `
-    INSERT INTO otp_sessions
-    (
-      customer_id,
-      identifier,
-      identifier_type,
-      owner_type,
-      otp,
-      purpose,
-      status,
-      attempts,
-      expires_at,
-      created_at
-    )
-    VALUES (?, ?, 'MOBILE', 'COMPANY', ?, 'LOGIN', 'SENT', 0, ?, NOW())
-    `,
-      [lmsCustomer.id, mobile, otp, expiresAt],
+    await this.otpSessionRepository.save(
+      this.otpSessionRepository.create({
+        customerId: customer.id,
+        identifier: mobile,
+        identifierType: IdentifierType.MOBILE,
+        ownerType: KycOwnerType.COMPANY,
+        applicantId: null,
+        coApplicantId: null,
+        otp,
+        purpose: "LOGIN",
+        status: OtpSessionStatus.SENT,
+        attempts: 0,
+        expiresAt,
+      }),
     );
 
     // Send SMS
@@ -814,109 +986,94 @@ const applicantAadhaarAddressRaw =cleanedData.applicantAddress ;
 
   /**
    * Verify OTP and login
-   * READ ONLY from LMS supply_chain_loans table
+   * Uses local customer and OTP session tables.
    */
   async verifyLoginOtp(
     mobile: string,
     otp: string,
   ): Promise<CustomerLoginResponse> {
-    // Check if customer exists in LMS supply_chain_loans by applicant_mobile
-    const lmsCustomer = await this.findCustomerByMobile(mobile);
-    console.info("[CustomerOtp] LMS customer lookup completed", {
-      found: Boolean(lmsCustomer),
-      customerId: lmsCustomer?.id,
-      partnerLoanId: lmsCustomer?.partner_loan_id,
+    const customer = await this.findCustomerByMobile(mobile);
+    console.info("[CustomerOtp] Local customer lookup completed", {
+      found: Boolean(customer),
+      customerId: customer?.id,
     });
-    if (!lmsCustomer) {
+    if (!customer) {
       return {
         success: false,
         message: "Customer not found with this mobile number",
       };
     }
 
-    const result = await LMSDataSource.query(
-      `
-  SELECT *
-  FROM otp_sessions
-  WHERE customer_id = ?
-  AND identifier = ?
-  AND identifier_type = 'MOBILE'
-  AND status = 'SENT'
-  ORDER BY created_at DESC
-  LIMIT 1
-  `,
-      [lmsCustomer.id, mobile],
-    );
-    console.info("[CustomerOtp] OTP session lookup completed", {
-      rows: Array.isArray(result) ? result.length : 0,
+    const otpSession = await this.otpSessionRepository.findOne({
+      where: {
+        customerId: customer.id,
+        identifier: mobile,
+        identifierType: IdentifierType.MOBILE,
+        status: OtpSessionStatus.SENT,
+      },
+      order: { createdAt: "DESC" },
     });
-    const otpSession = result[0];
+    console.info("[CustomerOtp] OTP session lookup completed", {
+      found: Boolean(otpSession),
+    });
 
     if (!otpSession) {
       return { success: false, message: "No OTP request found." };
     }
 
     // Expiry check
-    if (new Date() > new Date(otpSession.expires_at)) {
-      await LMSDataSource.query(
-        `UPDATE otp_sessions SET status = 'EXPIRED' WHERE id = ?`,
-        [otpSession.id],
-      );
+    if (new Date() > new Date(otpSession.expiresAt)) {
+      otpSession.status = OtpSessionStatus.EXPIRED;
+      await this.otpSessionRepository.save(otpSession);
 
       return { success: false, message: "OTP expired" };
     }
 
     // Attempt check
     if (otpSession.attempts >= 3) {
-      await LMSDataSource.query(
-        `UPDATE otp_sessions SET status = 'FAILED' WHERE id = ?`,
-        [otpSession.id],
-      );
+      otpSession.status = OtpSessionStatus.FAILED;
+      await this.otpSessionRepository.save(otpSession);
 
       return { success: false, message: "Maximum attempts exceeded" };
     }
 
     // Wrong OTP
     if (otpSession.otp !== otp) {
-      await LMSDataSource.query(
-        `UPDATE otp_sessions SET attempts = attempts + 1 WHERE id = ?`,
-        [otpSession.id],
-      );
+      otpSession.attempts += 1;
+      await this.otpSessionRepository.save(otpSession);
 
       return { success: false, message: "Invalid OTP" };
     }
 
     // Mark verified
-    await LMSDataSource.query(
-      `UPDATE otp_sessions SET status = 'VERIFIED' WHERE id = ?`,
-      [otpSession.id],
-    );
+    otpSession.status = OtpSessionStatus.VERIFIED;
+    await this.otpSessionRepository.save(otpSession);
 
-    // Get partnerLoanId from LMS
-    const partnerLoanId = lmsCustomer.partner_loan_id || "";
-    console.info("[CustomerOtp] OTP verified for LMS customer", {
-      customerId: lmsCustomer.id,
+    const partnerLoanId = this.getTokenPartnerLoanId(customer.id);
+    console.info("[CustomerOtp] OTP verified for local customer", {
+      customerId: customer.id,
       partnerLoanId,
     });
     // Generate JWT token
-    const token = generateCustomerToken(lmsCustomer.id, partnerLoanId);
+    const token = generateCustomerToken(customer.id, partnerLoanId);
 
     return {
       success: true,
       token,
       customer: {
-        id: lmsCustomer.id,
-        name: lmsCustomer.applicant_name || lmsCustomer.company_name || "",
-        companyName: lmsCustomer.company_name || "",
-        mobile: lmsCustomer.applicant_mobile,
+        id: customer.id,
+        name: customer.applicant_name || customer.company_name || "",
+        companyName: customer.company_name || "",
+        mobile: customer.applicant_mobile,
       },
       partnerLoanId,
+      partnerLanId: customer.lan_id || undefined,
     };
   }
 
   /**
    * Set or update customer password
-   * READ ONLY from LMS supply_chain_loans table - customer must exist in LMS
+   * Stores the hashed password on the local customer record.
    */
 async setPassword(
   mobile: string,
@@ -926,10 +1083,9 @@ async setPassword(
   message?: string;
 }> {
   try {
-    // Check if customer exists in LMS
-    const lmsCustomer = await this.findCustomerByMobile(mobile);
+    const customer = await this.findCustomerByMobile(mobile);
 
-    if (!lmsCustomer) {
+    if (!customer) {
       return {
         success: false,
         message: "Customer not found with this mobile number",
@@ -939,15 +1095,9 @@ async setPassword(
     // Hash password
     const hashedPassword = await hashPassword(password);
 
-    // Update password in LMS database
-    await LMSDataSource.query(
-      `
-      UPDATE supply_chain_loans
-      SET password = ?
-      WHERE applicant_mobile = ?
-      `,
-      [hashedPassword, mobile]
-    );
+    await this.customerRepository.update(customer.id, {
+      password: hashedPassword,
+    });
 
     return {
       success: true,
@@ -1008,7 +1158,7 @@ async setPassword(
 
   /**
    * Login with mobile and password (with refresh token)
-   * READ ONLY from LMS supply_chain_loans table
+   * Uses local customer password and refresh token tables.
    */
   async loginWithPasswordFull(
     mobile: string,
@@ -1021,48 +1171,39 @@ async setPassword(
     message?: string;
   }> {
     try {
-      // Find customer in LMS supply_chain_loans by applicant_mobile
-      const lmsCustomer = await this.findCustomerByMobile(mobile);
+      const customer = await this.findCustomerByMobile(mobile);
 
-      if (!lmsCustomer) {
+      if (!customer) {
         return {
           success: false,
           message: "Customer not found with this mobile number",
         };
       }
 
-      // Try to find in internal DB for password validation
-      let customer = await this.customerRepository.findOne({
-        where: { mobile },
-        select: { id: true, mobile: true },
-      });
-
-      // If customer doesn't exist in internal DB, they can't login with password
-      if (!customer) {
+      if (!customer.password) {
         return {
           success: false,
-          message: "Customer not found. Please use OTP login.",
+          message: "Password is not set. Please set password or use OTP login.",
         };
       }
 
- 
+      const isPasswordValid = await comparePassword(password, customer.password);
+      if (!isPasswordValid) {
+        return { success: false, message: "Invalid password" };
+      }
 
-      // Generate JWT token with partnerLoanId from LMS
-      const partnerLoanId = lmsCustomer.partner_loan_id || "";
-      const token = generateCustomerToken(lmsCustomer.id, partnerLoanId);
-
-      // Generate refresh token
-      const tokens = await generateTokenPair(lmsCustomer.id, partnerLoanId);
+      const partnerLoanId = this.getTokenPartnerLoanId(customer.id);
+      const tokens = await generateTokenPair(customer.id, partnerLoanId);
 
       return {
         success: true,
-        token,
+        token: tokens.accessToken,
         refreshToken: tokens.refreshToken,
         customer: {
-          id: lmsCustomer.id,
-          name: lmsCustomer.applicant_name || lmsCustomer.company_name || "",
-          companyName: lmsCustomer.company_name || "",
-          mobile: lmsCustomer.applicant_mobile,
+          id: customer.id,
+          name: customer.applicant_name || customer.company_name || "",
+          companyName: customer.company_name || "",
+          mobile: customer.applicant_mobile,
         },
       };
     } catch (error: any) {
@@ -1073,7 +1214,7 @@ async setPassword(
 
   /**
    * Verify OTP and login (with refresh token)
-   * READ ONLY from LMS supply_chain_loans table
+   * Uses local customer and OTP session tables.
    */
   async verifyLoginOtpFull(
     mobile: string,
@@ -1085,26 +1226,12 @@ async setPassword(
     customer?: any;
     message?: string;
   }> {
-    // Check if customer exists in LMS supply_chain_loans by applicant_mobile
-    const lmsCustomer = await this.findCustomerByMobile(mobile);
-
-    if (!lmsCustomer) {
-      return {
-        success: false,
-        message: "Customer not found with this mobile number",
-      };
-    }
-
-    // Find customer in internal DB for OTP session
-    const customer = await this.customerRepository.findOne({
-      where: { mobile },
-      select: { id: true, mobile: true },
-    });
+    const customer = await this.findCustomerByMobile(mobile);
 
     if (!customer) {
       return {
         success: false,
-        message: "Customer not found. Please contact support.",
+        message: "Customer not found with this mobile number",
       };
     }
 
@@ -1152,20 +1279,19 @@ async setPassword(
     otpSession.status = OtpSessionStatus.VERIFIED;
     await this.otpSessionRepository.save(otpSession);
 
-    // Get partnerLoanId from LMS
-    const partnerLoanId = lmsCustomer.partner_loan_id || "";
+    const partnerLoanId = this.getTokenPartnerLoanId(customer.id);
 
-    const tokens = await generateTokenPair(lmsCustomer.id, partnerLoanId);
+    const tokens = await generateTokenPair(customer.id, partnerLoanId);
 
     return {
       success: true,
       token: tokens.accessToken,
       refreshToken: tokens.refreshToken,
       customer: {
-        id: lmsCustomer.id,
-        name: lmsCustomer.applicant_name || lmsCustomer.company_name || "",
-        companyName: lmsCustomer.company_name || "",
-        mobile: lmsCustomer.applicant_mobile,
+        id: customer.id,
+        name: customer.applicant_name || customer.company_name || "",
+        companyName: customer.company_name || "",
+        mobile: customer.applicant_mobile,
       },
     };
   }
@@ -1209,72 +1335,66 @@ async setPassword(
 
   /**
    * Get customer details by ID (with ownership validation) - FROM INTERNAL DB ONLY
-   * Note: This API does NOT fetch from LMS as per requirement
    */
   async getCustomerDetailsById(customerId: any): Promise<any> {
-    // Fetch from LMS supply_chain_loans table only (READ ONLY)
-    const lmsCustomer = await this.findCustomerById(customerId);
+    const customer = await this.findCustomerById(customerId);
 
-    if (!lmsCustomer) {
+    if (!customer) {
       throw new Error("Customer not found");
     }
 
-    // Map LMS supply_chain_loans fields to response format
     return {
-      id: lmsCustomer.id,
-      customerCode: lmsCustomer.partner_loan_id || "",
-      name: lmsCustomer.applicant_name || "",
-      companyName: lmsCustomer.company_name || "",
-      email: "",
-      mobile: lmsCustomer.applicant_mobile || "",
-      pan: lmsCustomer.applicant_pan || "",
-      gstNumber: lmsCustomer.gst_number || "",
-      lanId: lmsCustomer.partner_loan_id || "",
-      status: lmsCustomer.status || "",
+      id: customer.id,
+      customerCode: customer.customer_code || customer.partner_loan_id || "",
+      name: customer.applicant_name || "",
+      companyName: customer.company_name || "",
+      email: customer.email || "",
+      mobile: customer.applicant_mobile || "",
+      pan: customer.applicant_pan || "",
+      gstNumber: customer.gst_number || "",
+      lanId: customer.lan_id || "",
+      partnerLoanId: customer.partner_loan_id || "",
+      status: customer.status || "",
       addresses: [],
-      // Include all LMS fields
-      applicant_name: lmsCustomer.applicant_name,
-      applicant_mobile: lmsCustomer.applicant_mobile,
-      applicant_pan: lmsCustomer.applicant_pan,
-      applicant_aadhaar: lmsCustomer.applicant_aadhaar,
-      applicant_address: lmsCustomer.applicant_address,
-      co_applicant_name: lmsCustomer.co_applicant_name,
-      co_applicant_pan: lmsCustomer.co_applicant_pan,
-      co_applicant_aadhaar: lmsCustomer.co_applicant_aadhaar,
-      co_applicant_mobile: lmsCustomer.co_applicant_mobile,
-      co_applicant_address: lmsCustomer.co_applicant_address,
-      company_name: lmsCustomer.company_name,
-      company_pan: lmsCustomer.company_pan,
-      company_address: lmsCustomer.company_address,
-      roi_percentage: lmsCustomer.roi_percentage,
-      created_at: lmsCustomer.created_at,
-      isLmsData: true,
+      applicant_name: customer.applicant_name,
+      applicant_mobile: customer.applicant_mobile,
+      applicant_pan: customer.applicant_pan,
+      applicant_aadhaar: customer.applicant_aadhaar,
+      applicant_address: customer.applicant_address,
+      co_applicant_name: customer.co_applicant_name,
+      co_applicant_pan: customer.co_applicant_pan,
+      co_applicant_aadhaar: customer.co_applicant_aadhaar,
+      co_applicant_mobile: customer.co_applicant_mobile,
+      co_applicant_address: customer.co_applicant_address,
+      company_name: customer.company_name,
+      company_pan: customer.company_pan,
+      company_address: customer.company_address,
+      roi_percentage: customer.roi_percentage,
+      created_at: customer.created_at,
     };
   }
 
   /**
-   * Get dashboard data - FROM LMS using partner_loan_id
+   * Get dashboard data from internal loan management using the local customer id.
    */
   async getDashboard(partnerLoanId: string): Promise<any> {
     try {
-      if (!partnerLoanId) {
-        throw new Error("partnerLoanId missing");
-      }
+      const customer = await this.findCustomerById(partnerLoanId);
+      if (!customer) throw new Error("Customer not found");
 
-      const dashboard = await this.getCustomerDashboard(partnerLoanId);
+      const dashboard = await loanManagementService.getCustomerDashboard(customer.id);
 
       if (!dashboard.success) {
-        throw new Error("LMS dashboard failed");
+        throw new Error("Dashboard failed");
       }
 
       const unreadNotifications = await this.notificationRepository.count({
-        where: { readStatus: "UNREAD", isActive: true },
+        where: { customerId: customer.id, readStatus: "UNREAD", isActive: true },
       });
 
       return {
         ...dashboard.data,
         unreadNotifications,
-        isLmsData: true,
       };
     } catch (error) {
       console.error("Dashboard error", error);
@@ -1287,13 +1407,12 @@ async setPassword(
         pendingDrawdowns: 0,
         unreadNotifications: 0,
         recentTransactions: [],
-        isLmsData: false,
       };
     }
   }
 
   /**
-   * Get drawdown list - FROM LMS using partner_loan_id
+   * Get drawdown list from local drawdown records.
    */
   async getDrawdownList(
     partnerLoanId: string,
@@ -1333,7 +1452,6 @@ async setPassword(
             requestDate: d.request_date || d.created_at,
             approvalDate: d.approval_date,
             disbursementDate: d.disbursement_date,
-            isLmsData: true,
           })),
           total: result.total,
           page,
@@ -1341,7 +1459,7 @@ async setPassword(
         };
       }
     } catch (error) {
-      console.error("Error fetching drawdowns from LMS", error);
+      console.error("Error fetching drawdowns", error);
     }
 
     return { data: [], total: 0, page, limit };
@@ -1363,13 +1481,26 @@ async setPassword(
       beneficiaryIfsc?: string;
     },
   ): Promise<Drawdown> {
+    let legacyLoanId = data.loanId;
+
     if (data.loanId) {
       const loan = await this.loanRepository.findOne({
         where: { id: data.loanId, customerId },
       });
-      if (!loan) throw new Error("Loan not found");
-      if (!["ACTIVE", "DISBURSED"].includes(loan.status)) {
-        throw new Error("Loan is not active");
+
+      if (loan) {
+        if (!["ACTIVE", "DISBURSED"].includes(loan.status)) {
+          throw new Error("Loan is not active");
+        }
+      } else {
+        const loanAccount = await this.loanAccountRepository.findOne({
+          where: { id: data.loanId, customerId },
+        });
+        if (!loanAccount) throw new Error("Loan not found");
+        if (String(loanAccount.status || "").toLowerCase() !== "active") {
+          throw new Error("Loan is not active");
+        }
+        legacyLoanId = undefined;
       }
     }
 
@@ -1378,7 +1509,7 @@ async setPassword(
 
     const drawdown = this.drawdownRepository.create({
       customerId,
-      loanId: data.loanId,
+      loanId: legacyLoanId,
       drawdownNumber,
       requestedAmount: data.requestedAmount,
       purpose: data.purpose,
@@ -1396,32 +1527,15 @@ async setPassword(
   }
 
   /**
-   * Get loan list - FROM LMS using partner_loan_id
+   * Get loan list from local loan accounts.
    */
   async getLoanList(partnerLoanId: string) {
     try {
-      const loans = await LMSDataSource.query(
-        `
-      SELECT 
-        id,
-        lan,
-        sanction_amount,
-        utilized_sanction_limit,
-        unutilization_sanction_limit,
-        interest_rate,
-        penal_rate,
-        tenure_months,
-        created_at
-      FROM supply_chain_sanctions
-      WHERE partner_loan_id = ?
-      ORDER BY created_at DESC
-      `,
-        [partnerLoanId],
-      );
+      const result = await this.getLoansPaginated(partnerLoanId, 1, MAX_LIMIT);
 
       return {
         success: true,
-        data: loans,
+        data: result.data,
       };
     } catch (error: any) {
       return { success: false, message: error.message };
@@ -1429,38 +1543,29 @@ async setPassword(
   }
 
   /**
-   * Get loan details - FROM LMS
+   * Get loan details from local loan accounts.
    */
   async getLoanDetails(customerId: number, loanId: number): Promise<any> {
-    try {
-      // Try LMS first
-      const loan = await this.getLoanById(loanId);
+    const loanAccount = await this.loanAccountRepository.findOne({
+      where: { id: loanId, customerId },
+      relations: ["customer", "partner"],
+    });
 
-      if (loan && loan.customer_id === customerId) {
-        return {
-          id: loan.id,
-          loanNumber: loan.loan_number,
-          productType: loan.product_type,
-          sanctionedAmount: loan.sanctioned_amount,
-          disbursedAmount: loan.disbursed_amount,
-          outstandingAmount: loan.outstanding_amount,
-          interestRate: loan.interest_rate,
-          tenure: loan.tenure,
-          emiAmount: loan.emi_amount,
-          status: loan.status,
-          startDate: loan.start_date,
-          endDate: loan.end_date,
-          processingFee: loan.processing_fee,
-          insurancePremium: loan.insurance_premium,
-          otherCharges: loan.other_charges,
-          isLmsData: true,
-        };
-      }
-    } catch (error) {
-      console.error("Error fetching loan details from LMS", error);
+    if (loanAccount) {
+      const summary = await loanManagementService.getLoanAccountSummary(loanAccount.lanId);
+      return {
+        ...this.mapLoanAccountToLegacyLoan(loanAccount, summary.snapshot),
+        loanNumber: loanAccount.lanId,
+        productType: loanAccount.partner?.name || loanAccount.partner?.code || loanAccount.lender || "SCF",
+        sanctionedAmount: this.toNumber(loanAccount.sanctionedAmount),
+        disbursedAmount: this.toNumber(summary.snapshot?.totalDisbursed ?? loanAccount.disbursedAmount),
+        outstandingAmount: this.toNumber(summary.snapshot?.totalOutstanding),
+        status: loanAccount.status,
+        demands: summary.demands,
+        disbursements: summary.disbursements,
+      };
     }
 
-    // Fallback to local DB
     const loan = await this.loanRepository.findOne({
       where: { id: loanId, customerId },
       relations: ["schedules", "drawdowns"],
@@ -1471,32 +1576,28 @@ async setPassword(
   }
 
   /**
-   * Get loan schedule - FROM LMS
+   * Get loan schedule from internal demands or legacy local loan schedules.
    */
   async getLoanSchedule(customerId: number, loanId: number): Promise<any[]> {
-    try {
-      // Verify loan belongs to customer
-      const loan = await this.getLoanById(loanId);
+    const loanAccount = await this.loanAccountRepository.findOne({
+      where: { id: loanId, customerId },
+    });
 
-      if (loan && loan.customer_id === customerId) {
-        const schedule = await this.getLoanScheduleByLoanId(loanId);
-        return schedule.map((s: any) => ({
-          installmentNumber: s.installment_number,
-          dueDate: s.due_date,
-          principalAmount: s.principal_amount,
-          interestAmount: s.interest_amount,
-          totalAmount: s.total_amount,
-          outstandingPrincipal: s.outstanding_principal,
-          status: s.status,
-          paidDate: s.paid_date,
-          isLmsData: true,
-        }));
-      }
-    } catch (error) {
-      console.error("Error fetching loan schedule from LMS", error);
+    if (loanAccount) {
+      const schedule = await loanManagementService.getDemandSchedule(loanAccount.lanId);
+      return (schedule.data || []).map((s: any, index: number) => ({
+        installmentNumber: index + 1,
+        dueDate: s.dueDate,
+        principalAmount: s.principalDue,
+        interestAmount: s.interestDue,
+        totalAmount: s.totalDue,
+        outstandingPrincipal: s.outstandingAmount,
+        status: s.status,
+        paidDate: null,
+        invoiceNumber: s.invoiceNumber,
+      }));
     }
 
-    // Fallback to local DB
     const loan = await this.loanRepository.findOne({
       where: { id: loanId, customerId },
     });
@@ -1510,7 +1611,7 @@ async setPassword(
   }
 
   /**
-   * Get loan statement - FROM LMS
+   * Get loan statement from internal loan management or legacy local transactions.
    */
   async getLoanStatement(
     customerId: number,
@@ -1525,58 +1626,37 @@ async setPassword(
     const page = options.page || 1;
     const limit = options.limit || 10;
 
-    try {
-      // Verify loan belongs to customer
-      const loan = await this.getLoanById(loanId);
+    const loanAccount = await this.loanAccountRepository.findOne({
+      where: { id: loanId, customerId },
+    });
 
-      if (loan && loan.customer_id === customerId) {
-        const transactions = await this.getTransactionsByLoanId(
-          loanId,
-          1,
-          1000,
-        );
+    if (loanAccount) {
+      const statement = await loanManagementService.getStatement(loanAccount.lanId, {
+        startDate: options.startDate,
+        endDate: options.endDate,
+      });
+      const rows = statement.data || [];
+      const skip = (page - 1) * limit;
+      const paginatedRows = rows.slice(skip, skip + limit);
 
-        // Filter by date if provided
-        let filteredTransactions = transactions;
-        if (options.startDate || options.endDate) {
-          filteredTransactions = transactions.filter((t: any) => {
-            const txDate = new Date(t.transaction_date);
-            if (options.startDate && txDate < new Date(options.startDate))
-              return false;
-            if (options.endDate && txDate > new Date(options.endDate))
-              return false;
-            return true;
-          });
-        }
-
-        // Paginate
-        const skip = (page - 1) * limit;
-        const paginatedTransactions = filteredTransactions.slice(
-          skip,
-          skip + limit,
-        );
-
-        return {
-          data: paginatedTransactions.map((t: any) => ({
-            id: t.id,
-            transactionDate: t.transaction_date,
-            transactionType: t.transaction_type,
-            amount: t.amount,
-            description: t.description,
-            referenceNumber: t.reference_number,
-            runningBalance: t.running_balance,
-            isLmsData: true,
-          })),
-          total: filteredTransactions.length,
-          page,
-          limit,
-        };
-      }
-    } catch (error) {
-      console.error("Error fetching loan statement from LMS", error);
+      return {
+        data: paginatedRows.map((t: any) => ({
+          id: t.id,
+          transactionDate: t.transactionDate || t.valueDate,
+          transactionType: t.entryType,
+          amount: this.toNumber(t.debit) || this.toNumber(t.credit),
+          description: t.narration || t.remarks,
+          referenceNumber: t.referenceId,
+          runningBalance: t.runningBalance,
+          debit: t.debit,
+          credit: t.credit,
+        })),
+        total: rows.length,
+        page,
+        limit,
+      };
     }
 
-    // Fallback to local DB
     const loan = await this.loanRepository.findOne({
       where: { id: loanId, customerId },
     });
@@ -1598,43 +1678,18 @@ async setPassword(
   }
 
   /**
-   * Get foreclosure preview - FROM LMS
+   * Get foreclosure preview from internal loan management.
    */
   async getForeclosurePreview(lan: string) {
     try {
-      const [summary] = await LMSDataSource.query(
-        `
-      SELECT 
-        IFNULL(SUM(remaining_principal),0) principal,
-        IFNULL(SUM(remaining_interest),0) interest,
-        IFNULL(SUM(remaining_penal_interest),0) penal
-      FROM supply_chain_daily_demand
-      WHERE lan = ?
-      `,
-        [lan],
-      );
-
-      const total =
-        Number(summary.principal) +
-        Number(summary.interest) +
-        Number(summary.penal);
-
-      return {
-        success: true,
-        data: {
-          principal: Number(summary.principal),
-          interest: Number(summary.interest),
-          penal: Number(summary.penal),
-          totalForeclosureAmount: total,
-        },
-      };
+      return await loanManagementService.getForeclosurePreview(lan);
     } catch (error: any) {
       return { success: false, message: error.message };
     }
   }
 
   /**
-   * Get transactions by LAN - from supply_chain_repayments table
+   * Get transactions by LAN from internal repayments.
    * Returns collection_date, collection_amount, collection_utr, status (default SUCCESS)
    * Ordered by collection_date DESC
    */
@@ -1653,32 +1708,9 @@ async setPassword(
           data: [],
         };
       }
-      console.info("[CustomerTransactions] Fetching transactions by LAN", { lan });
-      const results = await LMSDataSource.query(
-        `
-        SELECT 
-          r.lan,
-          r.collection_date,
-          r.collection_amount,
-          r.collection_utr
-        FROM supply_chain_repayments r
-        WHERE r.lan = ?
-        ORDER BY r.collection_date DESC
-        `,
-        [lan],
-      );
-
-      // Return empty list if no transactions found (as per requirements)
-      const transactions = Array.isArray(results)
-        ? results.map((row: any) => ({
-            lan: row.lan || lan,
-            collection_date: row.collection_date || null,
-            collection_amount: row.collection_amount
-              ? parseFloat(row.collection_amount)
-              : null,
-            collection_utr: row.collection_utr || null,
-          }))
-        : [];
+      console.info("[CustomerTransactions] Fetching local transactions by LAN", { lan });
+      const result = await loanManagementService.getTransactionsByLan(lan);
+      const transactions = Array.isArray(result.data) ? result.data : [];
       console.info("[CustomerTransactions] Transactions fetched by LAN", {
         lan,
         rows: Array.isArray(transactions) ? transactions.length : 0,
@@ -1697,7 +1729,7 @@ async setPassword(
   }
 
   /**
-   * Get transaction receipt - FROM LMS
+   * Get transaction receipt from local transactions.
    */
   async getTransactionReceipt(
     customerId: number,
@@ -1722,11 +1754,10 @@ async setPassword(
           bankName: transaction.bank_name,
           instrumentNumber: transaction.instrument_number,
           runningBalance: transaction.running_balance,
-          isLmsData: true,
         };
       }
     } catch (error) {
-      console.error("Error fetching transaction receipt from LMS", error);
+      console.error("Error fetching transaction receipt", error);
     }
 
     // Fallback to local DB
@@ -1740,7 +1771,7 @@ async setPassword(
   }
 
   /**
-   * Get transaction detail by LAN and UTR from supply_chain_allocation table
+   * Get transaction detail by LAN and UTR from internal allocation records.
    * Returns allocation details with invoice-wise breakdown
    */
   async getTransactionDetail(
@@ -1775,100 +1806,7 @@ async setPassword(
         };
       }
 
-
-        const originalLanResult = await LMSDataSource.query(
-      `
-      SELECT lan
-      FROM supply_chain_sanctions
-      WHERE lender = ?
-      LIMIT 1
-      `,
-      [lan],
-    );
-
-    const originalLan = originalLanResult?.[0]?.lan;
-
-    if (!originalLan) {
-      return {
-        success: false,
-        message: "LAN not found",
-      };
-    }
-      const results = await LMSDataSource.query(
-        `
-      SELECT 
-        lan,
-        collection_utr,
-        total_collected,
-        allocated_principal,
-        allocated_interest,
-        allocated_penal_interest,
-        excess_payment,
-        invoice_number
-      FROM supply_chain_allocation
-      WHERE lan = ? AND collection_utr = ?
-      `,
-        [originalLan, utr],
-      );
-
-      if (!results || results.length === 0) {
-        return {
-          success: true,
-          data: {
-            lan,
-            collection_utr: utr,
-            total_collected: 0,
-            allocation_breakup: {
-              allocated_principal: 0,
-              allocated_interest: 0,
-              allocated_penal_interest: 0,
-              excess_payment: 0,
-            },
-            invoice_wise_allocation: [],
-          },
-        };
-      }
-
-      const firstRecord = results[0];
-
-      const invoice_wise_allocation = results.map((row: any) => ({
-        invoice_number: row.invoice_number || "",
-        allocated_principal: row.allocated_principal
-          ? parseFloat(row.allocated_principal)
-          : 0,
-        allocated_interest: row.allocated_interest
-          ? parseFloat(row.allocated_interest)
-          : 0,
-        allocated_penal_interest: row.allocated_penal_interest
-          ? parseFloat(row.allocated_penal_interest)
-          : 0,
-      }));
-
-      return {
-        success: true,
-        data: {
-          lan: firstRecord.lan,
-          collection_utr: firstRecord.collection_utr,
-          total_collected: firstRecord.total_collected
-            ? parseFloat(firstRecord.total_collected)
-            : 0,
-          allocation_breakup: {
-            allocated_principal: firstRecord.allocated_principal
-              ? parseFloat(firstRecord.allocated_principal)
-              : 0,
-            allocated_interest: firstRecord.allocated_interest
-              ? parseFloat(firstRecord.allocated_interest)
-              : 0,
-            allocated_penal_interest: firstRecord.allocated_penal_interest
-              ? parseFloat(firstRecord.allocated_penal_interest)
-              : 0,
-            excess_payment: firstRecord.excess_payment
-              ? parseFloat(firstRecord.excess_payment)
-              : 0,
-          },
-          invoice_wise_allocation,
-        },
-      };
+      return await loanManagementService.getCollectionDetail(lan, utr);
     } catch (error: any) {
       console.error("Error fetching transaction detail", error);
       return {
@@ -1952,7 +1890,7 @@ async setPassword(
   }
 
   /**
-   * Get bank details - FROM LMS
+   * Get bank details from local customer.
    */
   async getBankDetails(customerId: number): Promise<any> {
     try {
@@ -1966,11 +1904,10 @@ async setPassword(
           bankIfscCode: customer.bank_ifsc_code || "",
           accountType: customer.bank_account_type || "",
           isVerified: customer.bank_verified || false,
-          isLmsData: true,
         };
       }
     } catch (error) {
-      console.error("Error fetching bank details from LMS", error);
+      console.error("Error fetching bank details", error);
     }
 
     // Fallback to local DB
@@ -1990,83 +1927,158 @@ async setPassword(
   }
 
   // =====================================================
-  // 🔹 LMS DATABASE METHODS (Inline from LMSService)
+  // 🔹 LOCAL CUSTOMER APK COMPATIBILITY METHODS
   // =====================================================
 
   /**
    * Find customer by partner_loan_id
    */
   async findCustomerByPartnerLoanId(partnerLoanId: string): Promise<any> {
-    const result = await LMSDataSource.query(
-      `SELECT * FROM customers WHERE partner_loan_id = ? LIMIT 1`,
-      [partnerLoanId],
-    );
-    return result[0] || null;
+    return await this.findCustomerById(partnerLoanId);
   }
 
   /**
-   * Find customer by mobile number from LMS supply_chain_loans table
+   * Find customer by mobile number from the local customers table.
    */
   async findCustomerByMobile(mobile: string): Promise<any> {
-    const result = await LMSDataSource.query(
-      `SELECT * FROM supply_chain_loans WHERE applicant_mobile = ? LIMIT 1`,
-      [mobile],
-    );
-    return result[0] || null;
+    const customer = await this.findLocalCustomerEntityByMobile(mobile);
+    return customer ? await this.mapLocalCustomerEntityToLegacyShape(customer) : null;
   }
 
   /**
-   * Find customer by ID from LMS supply_chain_loans table
+   * Find customer by local id, customer code, system LAN, or old partner LAN.
    */
   async findCustomerById(id: any): Promise<any> {
-    const result = await LMSDataSource.query(
-      `SELECT * FROM supply_chain_loans WHERE partner_loan_id = ? LIMIT 1`,
-      [id],
-    );
-    return result[0] || null;
+    const customer = await this.findLocalCustomerEntityByIdentifier(id);
+    return customer ? await this.mapLocalCustomerEntityToLegacyShape(customer) : null;
   }
 
   /**
    * Get loan by ID
    */
   async getLoanById(loanId: number): Promise<any> {
-    const result = await LMSDataSource.query(
-      `SELECT * FROM loans WHERE id = ? LIMIT 1`,
-      [loanId],
-    );
-    return result[0] || null;
+    const loanAccount = await this.loanAccountRepository.findOne({
+      where: { id: loanId },
+      relations: ["customer", "partner"],
+    });
+
+    if (loanAccount) {
+      const snapshot = await this.safeRefreshLoanAccountSnapshot(loanAccount.id);
+      return this.mapLoanAccountToLegacyLoan(loanAccount, snapshot);
+    }
+
+    const loan = await this.loanRepository.findOne({ where: { id: loanId } });
+    if (!loan) return null;
+
+    return {
+      id: loan.id,
+      customer_id: loan.customerId,
+      loan_number: loan.loanNumber,
+      product_type: loan.loanType || "SCF",
+      sanctioned_amount: this.toNumber(loan.sanctionedAmount),
+      disbursed_amount: this.toNumber(loan.disbursedAmount),
+      outstanding_amount: this.toNumber(loan.outstandingAmount),
+      interest_rate: this.toNumber(loan.interestRate),
+      tenure: loan.tenureMonths,
+      emi_amount: null,
+      status: loan.status,
+      start_date: loan.firstDisbursementDate || loan.sanctionDate,
+      end_date: loan.maturityDate,
+      processing_fee: this.toNumber(loan.processingFee),
+      insurance_premium: null,
+      other_charges: null,
+    };
   }
 
   /**
    * Get loan by partner_loan_id
    */
   async getLoanByPartnerLoanId(partnerLoanId: string): Promise<any> {
-    const result = await LMSDataSource.query(
-      `SELECT * FROM loans WHERE partner_loan_id = ? LIMIT 1`,
-      [partnerLoanId],
-    );
-    return result[0] || null;
+    const customer = await this.findCustomerById(partnerLoanId);
+    if (!customer) return null;
+
+    const loanAccount = await this.getPrimaryLoanAccount(customer.id);
+    if (loanAccount) {
+      const snapshot = await this.safeRefreshLoanAccountSnapshot(loanAccount.id);
+      return this.mapLoanAccountToLegacyLoan(loanAccount, snapshot);
+    }
+
+    const loan = await this.loanRepository.findOne({
+      where: { customerId: customer.id },
+      order: { createdAt: "DESC" },
+    });
+
+    return loan ? await this.getLoanById(loan.id) : null;
   }
 
   /**
    * Get loan by loan number
    */
   async getLoanByNumber(loanNumber: string): Promise<any> {
-    const result = await LMSDataSource.query(
-      `SELECT * FROM loans WHERE loan_number = ? LIMIT 1`,
-      [loanNumber],
-    );
-    return result[0] || null;
+    const cleanLoanNumber = String(loanNumber || "").trim();
+    if (!cleanLoanNumber) return null;
+
+    const loanAccount = await this.loanAccountRepository.findOne({
+      where: [
+        { lanId: cleanLoanNumber },
+        { partnerLanId: cleanLoanNumber },
+      ] as any,
+      relations: ["customer", "partner"],
+    });
+
+    if (loanAccount) {
+      const snapshot = await this.safeRefreshLoanAccountSnapshot(loanAccount.id);
+      return this.mapLoanAccountToLegacyLoan(loanAccount, snapshot);
+    }
+
+    const loan = await this.loanRepository.findOne({
+      where: { loanNumber: cleanLoanNumber },
+    });
+
+    return loan ? await this.getLoanById(loan.id) : null;
   }
 
   /**
    * Get loan schedule by loan ID
    */
   async getLoanScheduleByLoanId(loanId: number): Promise<any[]> {
-    return await LMSDataSource.query(
-      `SELECT * FROM loan_schedules WHERE loan_id = ? ORDER BY installment_number ASC`,
-      [loanId],
-    );
+    const loanAccount = await this.loanAccountRepository.findOne({
+      where: { id: loanId },
+    });
+
+    if (loanAccount) {
+      const schedule = await loanManagementService.getDemandSchedule(loanAccount.lanId);
+      return (schedule.data || []).map((row: any, index: number) => ({
+        id: row.id,
+        loan_id: loanAccount.id,
+        installment_number: index + 1,
+        due_date: row.dueDate,
+        principal_amount: row.principalDue,
+        interest_amount: row.interestDue,
+        total_amount: row.totalDue,
+        outstanding_principal: row.outstandingAmount,
+        status: row.status,
+        invoice_number: row.invoiceNumber,
+      }));
+    }
+
+    const schedules = await this.loanScheduleRepository.find({
+      where: { loanId },
+      order: { installmentNumber: "ASC" },
+    });
+
+    return schedules.map((row) => ({
+      id: row.id,
+      loan_id: row.loanId,
+      installment_number: row.installmentNumber,
+      due_date: row.dueDate,
+      principal_amount: row.principalAmount,
+      interest_amount: row.interestAmount,
+      total_amount: row.totalAmount,
+      outstanding_principal: this.toNumber(row.totalAmount) - this.toNumber(row.paidAmount),
+      status: row.status,
+      paid_date: row.paidDate,
+    }));
   }
 
   /**
@@ -2078,10 +2090,22 @@ async setPassword(
     limit: number = 10,
   ): Promise<any[]> {
     const offset = (page - 1) * limit;
-    return await LMSDataSource.query(
-      `SELECT * FROM loan_transactions WHERE partner_loan_id = ? ORDER BY transaction_date DESC LIMIT ? OFFSET ?`,
-      [partnerLoanId, limit, offset],
-    );
+    const customer = await this.findCustomerById(partnerLoanId);
+    if (!customer) return [];
+
+    const loanAccounts = await this.getCustomerLoanAccounts(customer.id);
+    const loanAccountIds = loanAccounts.map((loanAccount) => loanAccount.id);
+    if (!loanAccountIds.length) return [];
+
+    const repayments = await AppDataSource.getRepository(Repayment).find({
+      where: { loanAccountId: In(loanAccountIds) },
+      relations: ["loanAccount"],
+      order: { repaymentDate: "DESC", id: "DESC" },
+      skip: offset,
+      take: limit,
+    });
+
+    return repayments.map((repayment) => this.mapRepaymentToLegacyTransaction(repayment));
   }
 
   /**
@@ -2093,32 +2117,97 @@ async setPassword(
     limit: number = 10,
   ): Promise<any[]> {
     const offset = (page - 1) * limit;
-    return await LMSDataSource.query(
-      `SELECT * FROM loan_transactions WHERE loan_id = ? ORDER BY transaction_date DESC LIMIT ? OFFSET ?`,
-      [loanId, limit, offset],
-    );
+    const loanAccount = await this.loanAccountRepository.findOne({
+      where: { id: loanId },
+    });
+
+    if (loanAccount) {
+      const repayments = await AppDataSource.getRepository(Repayment).find({
+        where: { loanAccountId: loanId },
+        relations: ["loanAccount"],
+        order: { repaymentDate: "DESC", id: "DESC" },
+        skip: offset,
+        take: limit,
+      });
+      return repayments.map((repayment) => this.mapRepaymentToLegacyTransaction(repayment));
+    }
+
+    const transactions = await this.loanTransactionRepository.find({
+      where: { loanId },
+      order: { transactionDate: "DESC", id: "DESC" },
+      skip: offset,
+      take: limit,
+    });
+
+    return transactions.map((transaction) => ({
+      id: transaction.id,
+      customer_id: transaction.customerId,
+      loan_id: transaction.loanId,
+      loan_number: null,
+      transaction_date: transaction.transactionDate,
+      transaction_type: transaction.type,
+      amount: this.toNumber(transaction.amount),
+      description: transaction.description,
+      reference_number: transaction.referenceNumber || transaction.utrNumber,
+      payment_mode: transaction.mode,
+      running_balance: null,
+      status: transaction.status,
+    }));
   }
 
   /**
    * Get transaction by ID
    */
   async getTransactionById(transactionId: number): Promise<any> {
-    const result = await LMSDataSource.query(
-      `SELECT * FROM loan_transactions WHERE id = ? LIMIT 1`,
-      [transactionId],
-    );
-    return result[0] || null;
+    const repayment = await AppDataSource.getRepository(Repayment).findOne({
+      where: { id: transactionId },
+      relations: ["loanAccount"],
+    });
+
+    if (repayment) {
+      return this.mapRepaymentToLegacyTransaction(repayment);
+    }
+
+    const transaction = await this.loanTransactionRepository.findOne({
+      where: { id: transactionId },
+      relations: ["loan", "loan.customer"],
+    });
+
+    if (!transaction) return null;
+
+    return {
+      id: transaction.id,
+      customer_id: transaction.customerId,
+      loan_id: transaction.loanId,
+      loan_number: transaction.loan?.loanNumber || null,
+      customer_name: transaction.loan?.customer?.name || "",
+      transaction_date: transaction.transactionDate,
+      transaction_type: transaction.type,
+      amount: this.toNumber(transaction.amount),
+      description: transaction.description,
+      reference_number: transaction.referenceNumber || transaction.utrNumber,
+      payment_mode: transaction.mode,
+      bank_name: null,
+      instrument_number: null,
+      running_balance: null,
+      receipt_number: transaction.transactionNumber,
+    };
   }
 
   /**
    * Count customer transactions
    */
   async countCustomerTransactions(partnerLoanId: string): Promise<number> {
-    const result = await LMSDataSource.query(
-      `SELECT COUNT(*) as count FROM loan_transactions WHERE partner_loan_id = ?`,
-      [partnerLoanId],
-    );
-    return result[0]?.count || 0;
+    const customer = await this.findCustomerById(partnerLoanId);
+    if (!customer) return 0;
+
+    const loanAccounts = await this.getCustomerLoanAccounts(customer.id);
+    const loanAccountIds = loanAccounts.map((loanAccount) => loanAccount.id);
+    if (!loanAccountIds.length) return 0;
+
+    return await AppDataSource.getRepository(Repayment).count({
+      where: { loanAccountId: In(loanAccountIds) },
+    });
   }
 
   /**
@@ -2130,32 +2219,40 @@ async setPassword(
     limit: number = 10,
   ): Promise<any[]> {
     const offset = (page - 1) * limit;
-    return await LMSDataSource.query(
-      `SELECT * FROM drawdowns WHERE partner_loan_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?`,
-      [partnerLoanId, limit, offset],
-    );
+    const customer = await this.findCustomerById(partnerLoanId);
+    if (!customer) return [];
+
+    const drawdowns = await this.drawdownRepository.find({
+      where: { customerId: customer.id },
+      order: { createdAt: "DESC", id: "DESC" },
+      skip: offset,
+      take: limit,
+    });
+
+    return drawdowns.map((drawdown) => this.mapDrawdownToLegacyShape(drawdown));
   }
 
   /**
    * Get drawdown by ID
    */
   async getDrawdownById(drawdownId: number): Promise<any> {
-    const result = await LMSDataSource.query(
-      `SELECT * FROM drawdowns WHERE id = ? LIMIT 1`,
-      [drawdownId],
-    );
-    return result[0] || null;
+    const drawdown = await this.drawdownRepository.findOne({
+      where: { id: drawdownId },
+    });
+
+    return drawdown ? this.mapDrawdownToLegacyShape(drawdown) : null;
   }
 
   /**
    * Count customer drawdowns
    */
   async countCustomerDrawdowns(partnerLoanId: string): Promise<number> {
-    const result = await LMSDataSource.query(
-      `SELECT COUNT(*) as count FROM drawdowns WHERE partner_loan_id = ?`,
-      [partnerLoanId],
-    );
-    return result[0]?.count || 0;
+    const customer = await this.findCustomerById(partnerLoanId);
+    if (!customer) return 0;
+
+    return await this.drawdownRepository.count({
+      where: { customerId: customer.id },
+    });
   }
 
   /**
@@ -2163,57 +2260,34 @@ async setPassword(
    */
   async getCustomerDashboard(partnerLoanId: string): Promise<any> {
     try {
-      console.info("[CustomerDashboard] Fetching LMS dashboard", { partnerLoanId });
+      console.info("[CustomerDashboard] Fetching local dashboard", { partnerLoanId });
+      const customer = await this.findCustomerById(partnerLoanId);
+      if (!customer) throw new Error("Customer not found");
+
+      const dashboard = await loanManagementService.getCustomerDashboard(customer.id);
+      if (!dashboard.success) throw new Error(dashboard.message || "Dashboard failed");
+      const dashboardData = dashboard.data || {};
 
       // 1️⃣ Sanction Summary
-      const [sanction] = await LMSDataSource.query(
-        `
-      SELECT 
-        IFNULL(SUM(sanction_amount),0) totalSanctioned,
-        IFNULL(SUM(utilized_sanction_limit),0) totalUtilized,
-        IFNULL(SUM(unutilization_sanction_limit),0) totalAvailable
-      FROM supply_chain_sanctions
-      WHERE partner_loan_id = ?
-      `,
-        [partnerLoanId],
-      );
+      const sanction = {
+        totalSanctioned: dashboardData.totalSanctioned || 0,
+        totalUtilized: dashboardData.totalUtilized || 0,
+        totalAvailable: dashboardData.totalAvailable || 0,
+      };
 
       // 2️⃣ Loan Summary
-      const [loanSummary] = await LMSDataSource.query(
-        `
-      SELECT 
-        COUNT(*) totalLoans,
-        IFNULL(SUM(disbursement_amount),0) totalDisbursed,
-        IFNULL(SUM(remaining_disbursement_amount),0) totalOutstanding
-      FROM supply_chain_daily_demand
-      WHERE partner_loan_id = ?
-      `,
-        [partnerLoanId],
-      );
+      const loanSummary = {
+        totalDisbursed: dashboardData.totalDisbursed || 0,
+        totalOutstanding: dashboardData.totalOutstanding || 0,
+      };
 
       // 3️⃣ Active Loans
-      const [active] = await LMSDataSource.query(
-        `
-      SELECT COUNT(*) activeLoans
-      FROM supply_chain_sanctions
-      WHERE partner_loan_id = ?
-      `,
-        [partnerLoanId],
-      );
+      const active = {
+        activeLoans: dashboardData.activeLoans || dashboardData.totalLoans || 0,
+      };
 
       // 4️⃣ Recent Repayments
-      const repayments = await LMSDataSource.query(
-        `
-      SELECT id, lan, collection_date, collection_amount
-      FROM supply_chain_repayments
-      WHERE lan IN (
-        SELECT lan FROM supply_chain_sanctions WHERE partner_loan_id = ?
-      )
-      ORDER BY created_at DESC
-      LIMIT 5
-      `,
-        [partnerLoanId],
-      );
+      const repayments = dashboardData.recentRepayments || [];
 
       return {
         success: true,
@@ -2237,36 +2311,12 @@ async setPassword(
   }
 
   // =====================================================
-  // 🔹 SCF LOAN SCHEDULE (Using supply_chain_daily_demand)
+  // 🔹 SCF LOAN SCHEDULE
   // =====================================================
 
   async getLoanScheduleByLan(lan: string): Promise<any> {
     try {
-      const schedule = await LMSDataSource.query(
-        `
-      SELECT 
-        invoice_number,
-        invoice_due_date,
-        disbursement_date,
-        total_amount_demand,
-        remaining_disbursement_amount,
-        cumulate_interest_demand,
-        cumelate_penal_interest_demand,
-        cumulate_interest_demand,
-        overdue_amount_demand,
-        status
-      FROM supply_chain_daily_demand
-      WHERE lan = ?
-        AND daily_date = CURDATE()
-      ORDER BY invoice_due_date ASC
-      `,
-        [lan],
-      );
-
-      return {
-        success: true,
-        data: schedule,
-      };
+      return await loanManagementService.getDemandSchedule(lan);
     } catch (error: any) {
       return {
         success: false,
@@ -2280,15 +2330,34 @@ async setPassword(
    */
   async getLoansPaginated(partnerLoanId: string, page: number, limit: number) {
     const offset = (page - 1) * limit;
-    const data = await LMSDataSource.query(
-      `SELECT * FROM loans WHERE partner_loan_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?`,
-      [partnerLoanId, limit, offset],
+    const customer = await this.findCustomerById(partnerLoanId);
+    if (!customer) return { data: [], total: 0, page, limit };
+
+    const [loanAccounts, total] = await this.loanAccountRepository.findAndCount({
+      where: { customerId: customer.id },
+      relations: ["partner"],
+      order: { createdAt: "DESC" },
+      skip: offset,
+      take: limit,
+    });
+
+    const data = await Promise.all(
+      loanAccounts.map(async (loanAccount) => {
+        const snapshot = await this.safeRefreshLoanAccountSnapshot(loanAccount.id);
+        return {
+          ...this.mapLoanAccountToLegacyLoan(loanAccount, snapshot),
+          partner_loan_id: this.getTokenPartnerLoanId(customer.id),
+          sanction_amount: this.toNumber(loanAccount.sanctionedAmount),
+          utilized_sanction_limit: this.toNumber(snapshot?.utilizedLimit ?? loanAccount.utilizedLimit),
+          unutilization_sanction_limit: this.toNumber(snapshot?.unutilizedLimit ?? loanAccount.unutilizedLimit),
+          interest_rate: null,
+          penal_rate: null,
+          tenure_months: null,
+          created_at: loanAccount.createdAt,
+        };
+      }),
     );
-    const countResult = await LMSDataSource.query(
-      `SELECT COUNT(*) as total FROM loans WHERE partner_loan_id = ?`,
-      [partnerLoanId],
-    );
-    const total = countResult[0]?.total || 0;
+
     return { data, total, page, limit };
   }
 
@@ -2300,16 +2369,8 @@ async setPassword(
     page: number,
     limit: number,
   ) {
-    const offset = (page - 1) * limit;
-    const data = await LMSDataSource.query(
-      `SELECT * FROM loan_transactions WHERE partner_loan_id = ? ORDER BY transaction_date DESC LIMIT ? OFFSET ?`,
-      [partnerLoanId, limit, offset],
-    );
-    const countResult = await LMSDataSource.query(
-      `SELECT COUNT(*) as total FROM loan_transactions WHERE partner_loan_id = ?`,
-      [partnerLoanId],
-    );
-    const total = countResult[0]?.total || 0;
+    const data = await this.getTransactionsByPartnerLoanId(partnerLoanId, page, limit);
+    const total = await this.countCustomerTransactions(partnerLoanId);
     return { data, total, page, limit };
   }
 
@@ -2321,101 +2382,84 @@ async setPassword(
     page: number,
     limit: number,
   ) {
-    const offset = (page - 1) * limit;
-    const data = await LMSDataSource.query(
-      `SELECT * FROM drawdowns WHERE partner_loan_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?`,
-      [partnerLoanId, limit, offset],
-    );
-    const countResult = await LMSDataSource.query(
-      `SELECT COUNT(*) as total FROM drawdowns WHERE partner_loan_id = ?`,
-      [partnerLoanId],
-    );
-    const total = countResult[0]?.total || 0;
+    const data = await this.getDrawdownsByPartnerLoanId(partnerLoanId, page, limit);
+    const total = await this.countCustomerDrawdowns(partnerLoanId);
     return { data, total, page, limit };
   }
 
   // =====================================================
-  // 🔹 LAN RETRIEVAL FROM LMS DATABASE
+  // 🔹 LAN RETRIEVAL FROM LOCAL LOAN ACCOUNTS
   // =====================================================
 
   /**
-   * Get LAN from LMS database by customer ID
+   * Get LAN from local loan accounts by customer ID.
    */
   async getLanByCustomerId(
     customerId: number,
   ): Promise<{ lan: string | null; customerId: number }> {
-    const result = await LMSDataSource.query(
-      `SELECT lan_id FROM customers WHERE id = ? LIMIT 1`,
-      [customerId],
-    );
+    const loanAccount = await this.getPrimaryLoanAccount(customerId);
     return {
-      lan: result[0]?.lan_id || null,
+      lan: loanAccount?.lanId || null,
       customerId,
     };
   }
 
   /**
-   * Get LAN from LMS database by mobile number
+   * Get LAN from local loan accounts by mobile number.
    */
   async getLanByMobile(
     mobile: string,
   ): Promise<{ lan: string | null; mobile: string }> {
-    const result = await LMSDataSource.query(
-      `SELECT lan_id FROM customers WHERE mobile = ? LIMIT 1`,
-      [mobile],
-    );
+    const customer = await this.findCustomerByMobile(mobile);
+    const loanAccount = customer ? await this.getPrimaryLoanAccount(customer.id) : null;
     return {
-      lan: result[0]?.lan_id || null,
+      lan: loanAccount?.lanId || null,
       mobile,
     };
   }
 
   /**
-   * Get LAN from LMS database by partner loan ID
+   * Get LAN from local loan accounts by local customer id/code.
    */
   async getLanByPartnerLoanId(
     partnerLoanId: string,
   ): Promise<{ lan: string | null; partnerLoanId: string }> {
-    const result = await LMSDataSource.query(
-      `SELECT lan_id FROM customers WHERE partner_loan_id = ? LIMIT 1`,
-      [partnerLoanId],
-    );
+    const customer = await this.findCustomerById(partnerLoanId);
+    const loanAccount = customer ? await this.getPrimaryLoanAccount(customer.id) : null;
     return {
-      lan: result[0]?.lan_id || null,
+      lan: loanAccount?.lanId || null,
       partnerLoanId,
     };
   }
 
   /**
-   * Get LAN from LMS database by loan number
+   * Get LAN from local loan accounts by loan number.
    */
   async getLanByLoanNumber(
     loanNumber: string,
   ): Promise<{ lan: string | null; loanNumber: string }> {
-    const result = await LMSDataSource.query(
-      `SELECT c.lan_id FROM customers c 
-       INNER JOIN loans l ON c.id = l.customer_id 
-       WHERE l.loan_number = ? LIMIT 1`,
-      [loanNumber],
-    );
+    const loan = await this.getLoanByNumber(loanNumber);
     return {
-      lan: result[0]?.lan_id || null,
+      lan: loan?.lan || loan?.loan_number || null,
       loanNumber,
     };
   }
 
   /**
-   * Get all LANs from LMS database with optional filters
+   * Get all lender labels from local loan accounts for a customer.
    */
   async getAllLans(partnerId: any) {
-    const query = `
-     SELECT DISTINCT lender
-     FROM supply_chain_sanctions
-     WHERE partner_loan_id = ?
-   `;
+    const customer = await this.findCustomerById(partnerId);
+    if (!customer) return [];
 
-    const results = await LMSDataSource.query(query, [partnerId]);
-    return results.map((row: any) => row.lender);
+    const loanAccounts = await this.getCustomerLoanAccounts(customer.id);
+    return Array.from(
+      new Set(
+        loanAccounts
+          .map((row) => row.lender || row.partner?.code || row.partner?.name || row.lanId)
+          .filter(Boolean),
+      ),
+    );
   }
 
   /**
@@ -2427,16 +2471,31 @@ async setPassword(
     partnerLoanId: string,
     lender: string,
   ): Promise<{ lan: string | null; lender: string; partnerLoanId: string }> {
-    const result = await LMSDataSource.query(
-      `SELECT lan FROM supply_chain_sanctions 
-      WHERE partner_loan_id = ? AND lender = ? 
-      LIMIT 1`,
-      [partnerLoanId, lender],
-    );
+    const customer = await this.findCustomerById(partnerLoanId);
+    if (!customer) {
+      return { lan: null, lender, partnerLoanId };
+    }
+
+    const cleanLender = String(lender || "").trim().toLowerCase();
+    const loanAccount = await this.loanAccountRepository
+      .createQueryBuilder("loanAccount")
+      .leftJoinAndSelect("loanAccount.partner", "partner")
+      .where("loanAccount.customerId = :customerId", { customerId: customer.id })
+      .andWhere(
+        `(LOWER(loanAccount.lender) = :lender
+          OR LOWER(partner.code) = :lender
+          OR LOWER(partner.name) = :lender
+          OR LOWER(loanAccount.lanId) = :lender
+          OR LOWER(loanAccount.partnerLanId) = :lender)`,
+        { lender: cleanLender },
+      )
+      .orderBy("loanAccount.createdAt", "DESC")
+      .getOne();
+
     return {
-      lan: result[0]?.lan || null,
+      lan: loanAccount?.lanId || null,
       lender,
-      partnerLoanId,
+      partnerLoanId: this.getTokenPartnerLoanId(customer.id),
     };
   }
 
@@ -2445,12 +2504,15 @@ async setPassword(
    * @param partnerLoanId - Partner loan ID
    */
   async getLansByPartnerLoanId(partnerLoanId: string): Promise<any[]> {
-    const result = await LMSDataSource.query(
-      `SELECT DISTINCT lan, lender FROM supply_chain_sanctions 
-      WHERE partner_loan_id = ?`,
-      [partnerLoanId],
-    );
-    return result;
+    const customer = await this.findCustomerById(partnerLoanId);
+    if (!customer) return [];
+
+    const loanAccounts = await this.getCustomerLoanAccounts(customer.id);
+    return loanAccounts.map((loanAccount) => ({
+      lan: loanAccount.lanId,
+      lender: loanAccount.lender || loanAccount.partner?.code || loanAccount.partner?.name || "",
+      partnerLanId: loanAccount.partnerLanId,
+    }));
   }
 
   /**
@@ -2462,12 +2524,95 @@ async setPassword(
     lan: string,
     partnerLoanId: string,
   ): Promise<any[]> {
-    const result = await LMSDataSource.query(
-      `SELECT * FROM invoice_disbursements 
-      WHERE lan = ? AND partner_loan_id = ?`,
-      [lan, partnerLoanId],
-    );
-    return result;
+    const customer = await this.findCustomerById(partnerLoanId);
+    if (!customer) return [];
+
+    const loanAccount = await this.loanAccountRepository.findOne({
+      where: { lanId: lan, customerId: customer.id },
+      relations: ["partner"],
+    });
+    if (!loanAccount) return [];
+
+    const invoices = await AppDataSource.getRepository(Invoice).find({
+      where: { customerId: customer.id, loanAccountId: loanAccount.id },
+      relations: ["supplier", "loanAccount"],
+      order: { createdAt: "DESC" },
+    });
+
+    return invoices.map((invoice) => ({
+      id: invoice.id,
+      invoice_number: invoice.invoiceNumber,
+      supplier_name: invoice.supplier?.supplierName || "",
+      invoice_amount: this.toNumber(invoice.invoiceAmount),
+      invoice_due_date: invoice.invoiceDueDate || invoice.dueDate,
+      status: invoice.status,
+    }));
+  }
+
+  /**
+   * Get the full details of a single invoice owned by the authenticated customer.
+   * @param partnerLoanId - Partner loan ID (authenticated customer)
+   * @param invoiceId - Invoice ID
+   */
+  async getInvoiceFullDetailsById(
+    partnerLoanId: string,
+    invoiceId: number,
+  ): Promise<any> {
+    const customer = await this.findCustomerById(partnerLoanId);
+    if (!customer) {
+      throw new Error("Customer not found");
+    }
+
+    const invoice = await AppDataSource.getRepository(Invoice).findOne({
+      where: { id: invoiceId, customerId: customer.id },
+      relations: ["supplier", "loanAccount", "loanAccount.partner"],
+    });
+
+    if (!invoice) {
+      throw new Error("Invoice not found");
+    }
+
+    return {
+      id: invoice.id,
+      partner_loan_id: this.getTokenPartnerLoanId(customer.id),
+      lan: invoice.loanAccount?.lanId || null,
+      lender:
+        invoice.loanAccount?.lender ||
+        invoice.loanAccount?.partner?.code ||
+        invoice.loanAccount?.partner?.name ||
+        "",
+      invoice_number: invoice.invoiceNumber,
+      invoice_date: invoice.invoiceDate,
+      invoice_amount: this.toNumber(invoice.invoiceAmount),
+      sanction_amount: this.toNumber(invoice.sanctionAmount),
+      service_fee: this.toNumber(invoice.serviceFee),
+      disbursement_amount: this.toNumber(invoice.disbursementAmount ?? invoice.disbursedAmount),
+      disbursement_utr: invoice.disbursementUtr || null,
+      disbursement_date: invoice.disbursementDate || invoice.disbursedDate || null,
+      invoice_due_date: invoice.invoiceDueDate || invoice.dueDate || null,
+      due_date: invoice.dueDate || null,
+      invoice_file_path: invoice.invoiceFilePath || null,
+      roi_percentage: this.toNumber(invoice.roiPercentage),
+      roi_amount: this.toNumber(invoice.roiAmount),
+      emi_amount: this.toNumber(invoice.emiAmount),
+      penal_charges: this.toNumber(invoice.penalCharges),
+      utilized_limit: this.toNumber(invoice.utilizedLimit),
+      unutilized_limit: this.toNumber(invoice.unutilizedLimit),
+      status: invoice.status,
+      approved_via: invoice.approvedVia || null,
+      rejection_reason: invoice.rejectionReason || null,
+      supplier: invoice.supplier
+        ? {
+            id: invoice.supplier.id,
+            supplier_name: invoice.supplier.supplierName,
+            supplier_code: invoice.supplier.supplierCode,
+            email: invoice.supplier.email,
+            contact_number: invoice.supplier.contactNumber,
+          }
+        : null,
+      created_at: invoice.createdAt,
+      updated_at: invoice.updatedAt,
+    };
   }
 
   /**

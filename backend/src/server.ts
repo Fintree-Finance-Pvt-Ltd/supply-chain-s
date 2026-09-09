@@ -5,19 +5,11 @@ import * as dotenv from 'dotenv';
 dotenv.config();
 
 const PORT = process.env.PORT || 3000;
-const initializeLMSDatabase = async (): Promise<void> => undefined;
 
 // Initialize database connection
 AppDataSource.initialize()
   .then(async () => {
     console.log('✅ SCF Database connected successfully');
-
-    // Initialize LMS database connection
-    try {
-      await initializeLMSDatabase();
-    } catch (lmsError) {
-      console.warn('⚠️ LMS Database connection failed - LMS features may not work:', lmsError);
-    }
 
     // Start server
     app.listen(PORT, () => {

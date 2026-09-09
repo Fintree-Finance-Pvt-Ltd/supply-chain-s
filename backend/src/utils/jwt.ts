@@ -151,9 +151,9 @@ export const refreshAccessToken = async (refreshToken: string): Promise<TokenPai
   // Generate new token pair
   const customerId = storedToken.customerId;
   
-  // For refresh, we need to get partner_loan_id from LMS or use empty string
-  // The partner_loan_id should have been stored when token was originally generated
-  const partnerLoanId = '';
+  // Customer APK now uses the local customer id as the token's partnerLoanId
+  // compatibility field.
+  const partnerLoanId = String(customerId);
   
   // Deactivate old refresh token
   storedToken.isActive = false;

@@ -31,7 +31,7 @@ router.use('/roles', roleRoutes);
 // Customer routes - split into RM and Customer APK (all under /api/customers)
 // IMPORTANT: Route order matters! More specific routes should come first
 router.use('/customers', customersRoutes);    // Public + RM routes (authMiddleware)
-router.use('/lms-customers', customerAPKRoutes);  // Customer APK routes (customerAuthMiddleware)
+router.use('/lms-customers', customerAPKRoutes);  // Customer APK routes (authMiddleware)
 
 router.use('/kyc', kycRoutes);
 router.use('/credit', creditRoutes);

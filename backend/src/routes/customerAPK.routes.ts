@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { CustomerController } from '../controllers/customer.controller';
-import { customerAuthMiddleware } from '../middlewares/customerAuth';
+import { authMiddleware } from '../middlewares/auth.middleware';
 import { validateBody, sanitizeQueryParams } from '../middlewares/validation.middleware';
 import { InvoiceDiscountingService } from '../services/invoice-discounting.service';
 
@@ -10,10 +10,9 @@ const invoiceDiscountingService = new InvoiceDiscountingService();
 
 // =====================================================
 // 🔹 CUSTOMER APK ROUTES
-// All routes use customerAuthMiddleware (Customer JWT token)
+// Protected routes use authMiddleware
 // =====================================================
 
-// Apply customerAuthMiddleware to all routes in this router
 // =====================================================
 // 🔹 PUBLIC CUSTOMER AUTH ROUTES (no authentication required)
 // =====================================================
@@ -77,7 +76,7 @@ router.get('/invoices/email-approve', async (req: Request, res: Response) => {
   }
 });
 
-router.use(customerAuthMiddleware);
+router.use(authMiddleware);
 router.post('/auth/logout', (req: Request, res: Response) => customerController.logout(req, res));
 router.get('/dashboard', (req: Request, res: Response) => customerController.getDashboard(req, res));
 router.get('/basic', customerController.getAllCustomersBasic);
@@ -91,7 +90,8 @@ router.get('/loans/statement', (req: Request, res: Response) => customerControll
 router.get('/loans/foreclosure-preview', (req: Request, res: Response) => customerController.getForeclosurePreview(req, res));
 
 router.get('/lan', customerController.getLan);
-router.get('/invoice-details', customerController.getInvoiceDetailsByLender);
+router.get('/invoice-list', customerController.getInvoiceDetailsByLender);
+router.get('/invoice/:invoiceId', customerController.getInvoiceFullDetails);
 
 router.get('/transactions/getRepayments', (req: Request, res: Response) => customerController.getTransactionsByLan(req, res));
 router.get('/transaction-detail', (req: Request, res: Response) => customerController.getTransactionDetail(req, res));
@@ -142,14 +142,13 @@ router.post('/invoices/:invoiceId/send-approval-email', async (req: Request, res
  */
 router.get('/invoices/pending-approval', async (req: Request, res: Response) => {
   try {
-    const customerId = req.partnerLoanId;
-    console.log(customerId)
+    const customerId = req.customerId;
     if (!customerId) {
       res.status(401).json({ success: false, message: 'Customer authentication required' });
       return;
     }
     
-    const invoices = await invoiceDiscountingService.getCustomerPendingInvoices(Number(customerId));
+    const invoices = await invoiceDiscountingService.getCustomerPendingInvoices(customerId);
     res.json({ success: true, data: invoices });
   } catch (error: any) {
     res.status(400).json({ success: false, message: error.message });
@@ -158,36 +157,10 @@ router.get('/invoices/pending-approval', async (req: Request, res: Response) => 
 
 /**
  * GET /api/customer-apk/invoices/:invoiceId
- * Get invoice details for customer approval
+ * Get invoice details for customer approval (curated response, ownership checked)
  * Requires customer authentication
  */
-router.get('/invoices/:invoiceId', async (req: Request, res: Response) => {
-  try {
-    const { invoiceId } = req.params;
-    const customerId = req.partnerLoanId;
-    console.log(customerId, invoiceId)
-    if (!customerId) {
-      res.status(401).json({ success: false, message: 'Customer authentication required' });
-      return;
-    }
-    
-    const invoice = await invoiceDiscountingService.getInvoiceById(parseInt(invoiceId));
-    if (!invoice) {
-      res.status(404).json({ success: false, message: 'Invoice not found' });
-      return;
-    }
-    
-    // Verify the invoice belongs to this customer
-    if (invoice.customerId !== Number(customerId)) {
-      res.status(403).json({ success: false, message: 'Access denied' });
-      return;
-    }
-    
-    res.json({ success: true, data: invoice });
-  } catch (error: any) {
-    res.status(400).json({ success: false, message: error.message });
-  }
-});
+router.get('/invoices/:invoiceId', customerController.getInvoiceFullDetails);
 
 /**
  * POST /api/customer-apk/invoices/:invoiceId/approve

@@ -1,7 +1,9 @@
 import { Request, Response, NextFunction } from 'express';
-import { verifyToken, JWTPayload } from '../utils/jwt';
+import { verifyToken, JWTPayload, CustomerJWTPayload } from '../utils/jwt';
 import { AppDataSource } from '../config/database';
 import { User, UserRole } from '../entities';
+
+type AuthPayload = JWTPayload | CustomerJWTPayload;
 
 // Extend Express Request to include user
 declare global {
@@ -11,9 +13,15 @@ declare global {
       userId?: number;
       userRole?: string;
       userRoles?: string[]; // Array of all role names
+      customerId?: number;
+      partnerLoanId?: string;
     }
   }
 }
+
+const isCustomerPayload = (payload: AuthPayload): payload is CustomerJWTPayload => {
+  return payload.role === 'CUSTOMER';
+};
 
 export const authMiddleware = async (
   req: Request,
@@ -32,7 +40,17 @@ export const authMiddleware = async (
     const token = authHeader.substring(7); // Remove 'Bearer ' prefix
 
     // Verify token
-    const decoded = verifyToken(token) as JWTPayload;
+    const decoded = verifyToken(token) as AuthPayload;
+
+    if (isCustomerPayload(decoded)) {
+      req.customerId = decoded.id;
+      req.partnerLoanId = decoded.partnerLoanId;
+      req.userRole = decoded.role;
+      req.userRoles = [decoded.role];
+
+      next();
+      return;
+    }
 
     // Get user from database
     const userRepository = AppDataSource.getRepository(User);

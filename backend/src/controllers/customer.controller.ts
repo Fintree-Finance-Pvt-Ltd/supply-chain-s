@@ -1,7 +1,6 @@
 import { Request, Response } from 'express';
 import { CustomerService } from '../services/customer.service';
 import { TaskDistributionService } from '../services/task-distribution.service';
-import { LMSDataSource } from '../config/lmsDatabase';
 import { loanManagementService } from '../services/loan-management.service';
 
 export class CustomerController {
@@ -234,8 +233,8 @@ export class CustomerController {
    */
   getCustomerBasicById = async (req: Request, res: Response): Promise<void> => {
     try {
-      const partnerLoanId = req.partnerLoanId;
-      const customer = await this.customerService.getCustomerBasicInfo(partnerLoanId as any);
+      const customerId = req.customerId || Number(req.params.id);
+      const customer = await this.customerService.getCustomerBasicInfo(customerId as any);
 
       if (!customer) {
         res.status(404).json({
@@ -351,7 +350,7 @@ export class CustomerController {
         res.status(401).json(result);
         return;
       }
-
+      console.log('token', result.token)
       res.json({
         success: true,
         token: result.token,
@@ -476,7 +475,7 @@ export class CustomerController {
    */
   getCustomerDetails = async (req: Request, res: Response): Promise<void> => {
     try {
-      const customerId = (req as any).partnerLoanId;
+      const customerId = req.customerId;
 
       if (!customerId) {
         res.status(401).json({
@@ -507,9 +506,9 @@ export class CustomerController {
    */
   getDashboard = async (req: Request, res: Response): Promise<void> => {
     try {
-      const partnerLoanId = (req as any).partnerLoanId;
-      console.info('[CustomerDashboard] Fetching dashboard', { partnerLoanId });
-      if (!partnerLoanId) {
+      const customerId = req.customerId;
+      console.info('[CustomerDashboard] Fetching dashboard', { customerId });
+      if (!customerId) {
         res.status(401).json({
           success: false,
           message: 'Authentication required',
@@ -517,7 +516,7 @@ export class CustomerController {
         return;
       }
 
-      const dashboard = await loanManagementService.getCustomerDashboard(Number(partnerLoanId));
+      const dashboard = await loanManagementService.getCustomerDashboard(customerId);
 
       res.json({
         success: true,
@@ -533,13 +532,13 @@ export class CustomerController {
 
   /**
  * GET /api/loans
- * Get loan list (SCF - supply_chain_sanctions)
+ * Get loan list from local loan accounts
  */
 getLoanList = async (req: Request, res: Response): Promise<void> => {
   try {
-    const partnerLoanId = (req as any).partnerLoanId;
+    const customerId = req.customerId;
 
-    if (!partnerLoanId) {
+    if (!customerId) {
       res.status(401).json({
         success: false,
         message: 'Authentication required',
@@ -547,7 +546,7 @@ getLoanList = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    const result = await loanManagementService.getCustomerLoanSummary(Number(partnerLoanId));
+    const result = await loanManagementService.getCustomerLoanSummary(customerId);
 
     if (!result.success) {
       res.status(500).json(result);
@@ -570,15 +569,15 @@ getLoanList = async (req: Request, res: Response): Promise<void> => {
    */
   getDrawdownList = async (req: Request, res: Response): Promise<void> => {
     try {
-      const partnerLoanId = (req as any).partnerLoanId;
+      const customerId = req.customerId;
       const { page, limit, status, startDate, endDate } = req.query;
 
-      if (!partnerLoanId) {
+      if (!customerId) {
         res.status(401).json({ success: false, message: 'Authentication required' });
         return;
       }
 
-      const result = await this.customerService.getDrawdownList(partnerLoanId, {
+      const result = await this.customerService.getDrawdownList(String(customerId), {
         page: page ? parseInt(page as string, 10) : undefined,
         limit: limit ? parseInt(limit as string, 10) : undefined,
         status: status as string,
@@ -681,7 +680,7 @@ async getLoanSchedule(req: Request, res: Response) {
       });
     }
 
-    const result = await loanManagementService.getDemandSchedule(String(lan));
+    const result = await loanManagementService.getCustomerLoanSchedule(String(lan));
 
     return res.json(result);
 
@@ -763,24 +762,37 @@ async getLoanSchedule(req: Request, res: Response) {
   };
 
   /**
-   * GET /api/customer/transactions?lan={LAN}
-   * Get transactions by LAN from supply_chain_repayments table
+   * GET /api/lms-customers/transactions/getRepayments?lender={LENDER}
+   * Get repayment transactions for the authenticated customer, scoped to a lender.
+   * (Legacy: also accepts ?lan={LAN} for a single loan account.)
    * Returns collection_date, collection_amount, collection_utr, status (default SUCCESS)
    * Ordered by collection_date DESC
    */
   getTransactionsByLan = async (req: Request, res: Response): Promise<void> => {
     try {
+      const lender = req.query.lender as string;
       const lan = req.query.lan as string;
+      const customerId = req.customerId;
 
-      // Basic validation: lan is required
-      if (!lan) {
+      // Either lender or lan is required
+      if (!lender && !lan) {
         res.status(400).json({
           success: false,
-          message:  'LAN is required'
+          message: 'lender query parameter is required'
         });
         return;
       }
-      const result = await loanManagementService.getTransactionsByLan(lan);
+
+      let result;
+      if (lender) {
+        if (!customerId) {
+          res.status(401).json({ success: false, message: 'Authentication required' });
+          return;
+        }
+        result = await loanManagementService.getTransactionsByLender(customerId, lender);
+      } else {
+        result = await loanManagementService.getTransactionsByLan(lan);
+      }
 
       if (!result) {
         res.status(500).json({
@@ -800,33 +812,31 @@ async getLoanSchedule(req: Request, res: Response) {
   };
 
   /**
-   * GET /api/customer/transaction-detail?lan={lan}&utr={utr}
-   * Get transaction detail by LAN and UTR from supply_chain_allocation table
+   * GET /api/lms-customers/transaction-detail?id={transactionId}
+   * Get transaction detail by repayment id from local allocation records.
+   * (Legacy: also accepts ?lan={lan}&utr={utr}.)
    * Returns allocation details with invoice-wise breakdown
    */
   getTransactionDetail = async (req: Request, res: Response): Promise<void> => {
     try {
+      const id = req.query.id as string;
       const lan = req.query.lan as string;
       const utr = req.query.utr as string;
 
-      // Validate both lan and utr are required
-      if (!lan) {
-        res.status(400).json({
-          success: false,
-          message: 'LAN is required'
-        });
+      let result;
+      if (id) {
+        const transactionId = parseInt(id, 10);
+        if (Number.isNaN(transactionId)) {
+          res.status(400).json({ success: false, message: 'id must be a number' });
+          return;
+        }
+        result = await loanManagementService.getCollectionDetailById(transactionId);
+      } else if (lan && utr) {
+        result = await loanManagementService.getCollectionDetail(lan, utr);
+      } else {
+        res.status(400).json({ success: false, message: 'id query parameter is required' });
         return;
       }
-
-      if (!utr) {
-        res.status(400).json({
-          success: false,
-          message: 'UTR is required'
-        });
-        return;
-      }
-
-      const result = await loanManagementService.getCollectionDetail(lan, utr);
 
       res.json(result);
     } catch (error: any) {
@@ -913,28 +923,28 @@ async getLoanSchedule(req: Request, res: Response) {
   };
 
   // =====================================================
-  // 🔹 LAN RETRIEVAL FROM LMS DATABASE
+  // 🔹 LAN RETRIEVAL FROM LOCAL LOAN ACCOUNTS
   // =====================================================
 
   /**
    * GET /api/customers/lan
-   * Get LAN from LMS database by various identifiers
+   * Get LAN from local loan accounts by authenticated customer
    * Query params: customerId, mobile, partnerLoanId, loanNumber
    * Or get all LANs with optional filters
    */
 getLan = async (req: Request, res: Response): Promise<void> => {
   try {
-    const partnerLoanId  = req.partnerLoanId; // or req.params / req.body
+    const customerId = req.customerId;
 
-    if (!partnerLoanId) {
+    if (!customerId) {
       res.status(400).json({
         success: false,
-        message: 'partnerLoanId is required',
+        message: 'Customer authentication is required',
       });
       return;
     }
 
-    const result = await this.customerService.getAllLans(partnerLoanId);
+    const result = await this.customerService.getAllLans(String(customerId));
 
     res.status(200).json({
       success: true,
@@ -943,7 +953,7 @@ getLan = async (req: Request, res: Response): Promise<void> => {
   } catch (error: any) {
     res.status(500).json({
       success: false,
-      message: error.message || 'Failed to fetch lenders from LMS',
+      message: error.message || 'Failed to fetch lenders',
     });
   }
 };
@@ -957,13 +967,13 @@ getLan = async (req: Request, res: Response): Promise<void> => {
  */
 getInvoiceDetailsByLender = async (req: Request, res: Response): Promise<void> => {
   try {
-    const partnerLoanId = req.partnerLoanId;
+    const customerId = req.customerId;
     const lender = req.query.lender as string;
 
-    if (!partnerLoanId) {
+    if (!customerId) {
       res.status(400).json({
         success: false,
-        message: 'partnerLoanId is required',
+        message: 'Customer authentication is required',
       });
       return;
     }
@@ -976,7 +986,7 @@ getInvoiceDetailsByLender = async (req: Request, res: Response): Promise<void> =
       return;
     }
 
-    const result = await this.customerService.getInvoiceDetailsByLender(partnerLoanId, lender);
+    const result = await this.customerService.getInvoiceDetailsByLender(String(customerId), lender);
 
     res.status(200).json({
       success: true,
@@ -985,7 +995,47 @@ getInvoiceDetailsByLender = async (req: Request, res: Response): Promise<void> =
   } catch (error: any) {
     res.status(500).json({
       success: false,
-      message: error.message || 'Failed to fetch invoice details from LMS',
+      message: error.message || 'Failed to fetch invoice details',
+    });
+  }
+};
+
+/**
+ * GET /api/lms-customers/invoice/:invoiceId
+ * Get the full details of a single invoice for the authenticated customer
+ */
+getInvoiceFullDetails = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const customerId = req.customerId;
+    const invoiceId = parseInt(req.params.invoiceId, 10);
+
+    if (!customerId) {
+      res.status(401).json({
+        success: false,
+        message: 'Customer authentication is required',
+      });
+      return;
+    }
+
+    if (!Number.isInteger(invoiceId) || invoiceId <= 0) {
+      res.status(400).json({
+        success: false,
+        message: 'Valid invoice ID is required',
+      });
+      return;
+    }
+
+    const result = await this.customerService.getInvoiceFullDetailsById(String(customerId), invoiceId);
+
+    res.status(200).json({
+      success: true,
+      data: result,
+    });
+  } catch (error: any) {
+    const statusCode = error.message === 'Invoice not found' ? 404 : 500;
+    res.status(statusCode).json({
+      success: false,
+      message: error.message || 'Failed to fetch invoice details',
     });
   }
 };

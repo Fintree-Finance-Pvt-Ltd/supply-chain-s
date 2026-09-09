@@ -54,6 +54,9 @@ export class Customer {
   @Column({ type: 'varchar', length: 255, nullable: true })
   email: string;
 
+  @Column({ type: 'varchar', length: 255, nullable: true, select: false })
+  password: string | null;
+
   @Column({ type: 'varchar', length: 20, nullable: true })
   pan: string;
 

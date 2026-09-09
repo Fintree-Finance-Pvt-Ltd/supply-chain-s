@@ -1396,8 +1396,6 @@ private calculateAccruedCharges(
           collection_utr: repayment.utr,
           status: repayment.status,
         })),
-        isLmsData: false,
-        source: 'INTERNAL_LMS',
       },
     };
   }
@@ -1461,6 +1459,208 @@ private calculateAccruedCharges(
         outstandingAmount: this.toNumber(demand.outstandingAmount),
         status: demand.status,
       })),
+    };
+  }
+
+  /**
+   * Customer APK loan schedule.
+   * Returns LAN-level details (including interest rate) and the demand
+   * schedule grouped per invoice ("EMI Schedule - Till Today").
+   * Each invoice summary also carries legacy snake_case aliases
+   * (total_amount_demand, total_principal_demand, ...) for the mobile app.
+   */
+  async getCustomerLoanSchedule(lan: string): Promise<any> {
+    const cleanLan = String(lan || '').trim();
+    if (!cleanLan) {
+      return { success: false, message: 'LAN is required', data: null };
+    }
+
+    const loanAccount = await this.loanAccountRepository.findOne({
+      where: { lanId: cleanLan },
+      relations: ['partner'],
+    });
+    if (!loanAccount) {
+      return { success: false, message: `LAN ${cleanLan} not found`, data: null };
+    }
+
+    await this.refreshAccruedInterestForOpenDemands(AppDataSource.manager, loanAccount.id);
+
+    const [snapshot, disbursements, demands] = await Promise.all([
+      this.refreshSnapshot(loanAccount.id),
+      this.disbursementRepository.find({
+        where: { loanAccountId: loanAccount.id },
+        relations: ['invoice'],
+        order: { disbursementDate: 'ASC', id: 'ASC' },
+      }),
+      this.demandRepository.find({
+        where: { lan: cleanLan },
+        relations: ['invoice', 'disbursement'],
+        order: { dueDate: 'ASC', id: 'ASC' },
+      }),
+    ]);
+
+    const today = this.toDateOnly(new Date());
+    const latestDisbursement = disbursements[disbursements.length - 1] || null;
+
+    // LAN-level interest rate: single distinct rate across disbursements,
+    // otherwise fall back to the latest disbursement / invoice ROI.
+    const distinctRates = Array.from(
+      new Set(disbursements.map(d => this.toNumber(d.interestRate)).filter(r => r > 0)),
+    );
+    const lanInterestRate = distinctRates.length === 1
+      ? distinctRates[0]
+      : this.toNumber(latestDisbursement?.interestRate)
+        || this.toNumber(latestDisbursement?.invoice?.roiPercentage)
+        || 0;
+    const distinctPenalRates = Array.from(
+      new Set(disbursements.map(d => this.toNumber(d.penalRate)).filter(r => r > 0)),
+    );
+    const lanPenalRate = distinctPenalRates.length === 1
+      ? distinctPenalRates[0]
+      : this.toNumber(latestDisbursement?.penalRate) || 0;
+
+    // Group demands (till today) by invoice.
+    const groups = new Map<string, { disbursement: LoanDisbursement | null; invoice: Invoice | null; rows: LoanDemand[] }>();
+    for (const disbursement of disbursements) {
+      const key = disbursement.invoiceId != null ? `inv-${disbursement.invoiceId}` : `dis-${disbursement.id}`;
+      groups.set(key, { disbursement, invoice: disbursement.invoice, rows: [] });
+    }
+    for (const demand of demands) {
+      if (this.toDateOnly(demand.demandDate).getTime() > today.getTime()) continue;
+      const key = demand.invoiceId != null
+        ? `inv-${demand.invoiceId}`
+        : (demand.loanDisbursementId != null ? `dis-${demand.loanDisbursementId}` : 'unlinked');
+      let group = groups.get(key);
+      if (!group) {
+        group = { disbursement: demand.disbursement || null, invoice: demand.invoice || null, rows: [] };
+        groups.set(key, group);
+      }
+      group.rows.push(demand);
+    }
+
+    const mapRow = (demand: LoanDemand) => {
+      const principalDue = this.toNumber(demand.principalDue);
+      const interestDue = this.toNumber(demand.interestDue);
+      const penalDue = this.toNumber(demand.penalDue);
+      const feeDue = this.toNumber(demand.feeDue);
+      const totalDue = this.toNumber(demand.totalDue);
+      const outstandingAmount = this.toNumber(demand.outstandingAmount);
+      const isOverdue = demand.status !== DEMAND_STATUS.PAID
+        && this.toDateOnly(demand.dueDate).getTime() < today.getTime();
+      return {
+        id: demand.id,
+        demandDate: demand.demandDate,
+        dueDate: demand.dueDate,
+        interestRate: this.toNumber(demand.disbursement?.interestRate) || lanInterestRate,
+        penalRate: this.toNumber(demand.disbursement?.penalRate) || lanPenalRate,
+        principalDue,
+        interestDue,
+        penalDue,
+        feeDue,
+        totalDue,
+        principalPaid: this.toNumber(demand.principalPaid),
+        interestPaid: this.toNumber(demand.interestPaid),
+        penalPaid: this.toNumber(demand.penalPaid),
+        totalPaid: this.toNumber(demand.totalPaid),
+        outstandingAmount,
+        overdueAmount: isOverdue ? outstandingAmount : 0,
+        status: demand.status,
+      };
+    };
+
+    const invoices = Array.from(groups.values())
+      .filter(group => group.rows.length > 0 || group.disbursement)
+      .map(group => {
+        const schedule = group.rows.map(mapRow);
+        const sum = (pick: (row: ReturnType<typeof mapRow>) => number) =>
+          this.roundMoney(schedule.reduce((acc, row) => acc + pick(row), 0));
+
+        const totalPrincipalDemand = sum(row => row.principalDue);
+        const totalInterestDemand = sum(row => row.interestDue);
+        const totalPenalInterestDemand = sum(row => row.penalDue);
+        const totalFeeDemand = sum(row => row.feeDue);
+        const totalAmountDemand = sum(row => row.totalDue);
+        const totalPaid = sum(row => row.totalPaid);
+        const overdueAmountDemand = sum(row => row.overdueAmount);
+        const outstandingAmount = sum(row => row.outstandingAmount);
+
+        const disbursement = group.disbursement;
+        const invoice = group.invoice || disbursement?.invoice || group.rows[0]?.invoice || null;
+        const disbursementDate = disbursement?.disbursementDate
+          || invoice?.disbursementDate
+          || group.rows[0]?.disbursement?.disbursementDate
+          || group.rows[0]?.demandDate
+          || null;
+        const invoiceDueDate = invoice?.invoiceDueDate
+          || disbursement?.dueDate
+          || group.rows[group.rows.length - 1]?.dueDate
+          || null;
+        const tenureDays = this.toNumber(disbursement?.tenureDays)
+          || (disbursementDate && invoiceDueDate
+            ? Math.max(this.daysBetween(this.toDateOnly(disbursementDate), this.toDateOnly(invoiceDueDate)), 0)
+            : 0);
+        const anyOpen = schedule.some(row => row.status !== DEMAND_STATUS.PAID);
+        const anyPaid = schedule.some(row => this.toNumber(row.totalPaid) > 0);
+        const invoiceStatus = schedule.length === 0
+          ? DEMAND_STATUS.PENDING
+          : (!anyOpen ? DEMAND_STATUS.PAID : (anyPaid ? DEMAND_STATUS.PARTIAL : DEMAND_STATUS.PENDING));
+
+        return {
+          invoiceId: invoice?.id ?? null,
+          invoiceNumber: invoice?.invoiceNumber ?? null,
+          invoiceAmount: this.toNumber(invoice?.invoiceAmount),
+          disbursementId: disbursement?.id ?? null,
+          disbursementAmount: this.toNumber(disbursement?.disbursementAmount ?? invoice?.disbursementAmount),
+          disbursementDate,
+          invoiceDueDate,
+          tenureDays,
+          tenureMonths: tenureDays ? this.roundMoney(tenureDays / 30) : 0,
+          interestRate: this.toNumber(disbursement?.interestRate) || this.toNumber(invoice?.roiPercentage) || lanInterestRate,
+          penalRate: this.toNumber(disbursement?.penalRate) || lanPenalRate,
+          status: invoiceStatus,
+          summary: {
+            totalAmountDemand,
+            totalPrincipalDemand,
+            totalInterestDemand,
+            totalPenalInterestDemand,
+            totalFeeDemand,
+            totalPaid,
+            overdueAmountDemand,
+            outstandingAmount,
+            // legacy snake_case aliases (mobile app)
+            total_amount_demand: totalAmountDemand,
+            total_principal_demand: totalPrincipalDemand,
+            total_interest_demand: totalInterestDemand,
+            total_penal_interest_demand: totalPenalInterestDemand,
+            overdue_amount_demand: overdueAmountDemand,
+            invoice_due_date: invoiceDueDate,
+            disbursement_date: disbursementDate,
+          },
+          schedule,
+        };
+      })
+      .sort((a, b) => {
+        const at = a.disbursementDate ? this.toDateOnly(a.disbursementDate).getTime() : 0;
+        const bt = b.disbursementDate ? this.toDateOnly(b.disbursementDate).getTime() : 0;
+        return at - bt || (a.invoiceId ?? 0) - (b.invoiceId ?? 0);
+      });
+
+    return {
+      success: true,
+      data: {
+        lan: loanAccount.lanId,
+        partnerName: loanAccount.partner?.name || loanAccount.lender || null,
+        sanctionedAmount: this.toNumber(loanAccount.sanctionedAmount),
+        interestRate: lanInterestRate,
+        penalRate: lanPenalRate,
+        totalDisbursed: this.toNumber(snapshot.totalDisbursed),
+        totalOutstanding: this.toNumber(snapshot.totalOutstanding),
+        overdueAmount: this.toNumber(snapshot.overdueAmount),
+        dpd: this.toNumber(snapshot.dpd),
+        nextDueDate: snapshot.nextDueDate || null,
+        invoiceCount: invoices.length,
+        invoices,
+      },
     };
   }
 
@@ -1626,6 +1826,7 @@ private calculateAccruedCharges(
     return {
       success: true,
       data: repayments.map(repayment => ({
+        id: repayment.id,
         lan: repayment.lan,
         collection_date: repayment.repaymentDate,
         collection_amount: this.toNumber(repayment.amount),
@@ -1635,6 +1836,80 @@ private calculateAccruedCharges(
         status: repayment.status,
       })),
     };
+  }
+
+  async getTransactionsByLender(customerId: number, lender: string): Promise<any> {
+    const cleanLender = String(lender || '').trim().toLowerCase();
+    if (!cleanLender) {
+      return { success: true, data: [] };
+    }
+
+    const loanAccounts = await this.loanAccountRepository
+      .createQueryBuilder('loanAccount')
+      .leftJoin('loanAccount.partner', 'partner')
+      .where('loanAccount.customerId = :customerId', { customerId })
+      .andWhere(
+        `(LOWER(loanAccount.lender) = :lender
+          OR LOWER(partner.code) = :lender
+          OR LOWER(partner.name) = :lender
+          OR LOWER(loanAccount.lanId) = :lender
+          OR LOWER(loanAccount.partnerLanId) = :lender)`,
+        { lender: cleanLender },
+      )
+      .getMany();
+
+    const lans = Array.from(new Set(loanAccounts.map(account => account.lanId).filter(Boolean)));
+    if (!lans.length) {
+      return { success: true, data: [] };
+    }
+
+    const repayments = await this.repaymentRepository.find({
+      where: { lan: In(lans), status: Not(In([REPAYMENT_STATUS.REVERSED])) },
+      order: { repaymentDate: 'DESC', id: 'DESC' },
+    });
+
+    return {
+      success: true,
+      data: repayments.map(repayment => ({
+        id: repayment.id,
+        lan: repayment.lan,
+        collection_date: repayment.repaymentDate,
+        collection_amount: this.toNumber(repayment.amount),
+        collection_utr: repayment.utr,
+        allocated_amount: this.toNumber(repayment.allocatedAmount),
+        unapplied_amount: this.toNumber(repayment.unappliedAmount),
+        status: repayment.status,
+      })),
+    };
+  }
+
+  async getCollectionDetailById(transactionId: number): Promise<any> {
+    const repayment = await this.repaymentRepository.findOne({
+      where: { id: transactionId },
+      relations: ['allocations', 'allocations.demand', 'allocations.invoice'],
+    });
+
+    if (!repayment) {
+      return {
+        success: true,
+        data: {
+          id: transactionId,
+          lan: null,
+          collection_utr: null,
+          total_collected: 0,
+          allocation_breakup: {
+            allocated_principal: 0,
+            allocated_interest: 0,
+            allocated_penal_interest: 0,
+            allocated_fee: 0,
+            excess_payment: 0,
+          },
+          invoice_wise_allocation: [],
+        },
+      };
+    }
+
+    return this.formatCollectionDetail(repayment);
   }
 
   async getCollectionDetail(lan: string, utr: string): Promise<any> {
@@ -1662,6 +1937,10 @@ private calculateAccruedCharges(
       };
     }
 
+    return this.formatCollectionDetail(repayment);
+  }
+
+  private formatCollectionDetail(repayment: Repayment): any {
     const allocations = repayment.allocations || [];
     const principal = this.roundMoney(allocations.reduce((sum, item) => sum + this.toNumber(item.principalAmount), 0));
     const interest = this.roundMoney(allocations.reduce((sum, item) => sum + this.toNumber(item.interestAmount), 0));
@@ -1671,8 +1950,9 @@ private calculateAccruedCharges(
     return {
       success: true,
       data: {
-        lan,
-        collection_utr: utr,
+        id: repayment.id,
+        lan: repayment.lan,
+        collection_utr: repayment.utr,
         total_collected: this.toNumber(repayment.amount),
         allocation_breakup: {
           allocated_principal: principal,
