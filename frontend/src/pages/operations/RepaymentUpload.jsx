@@ -341,8 +341,6 @@ const RepaymentUpload = () => {
         })
         setSelectedCompany(null)
         setSelectedLan(null)
-        setActiveTab('history')
-        loadHistory()
       } else {
         // Show error details
         const errors = response.data?.filter(r => r.status === 'FAILED') || []
