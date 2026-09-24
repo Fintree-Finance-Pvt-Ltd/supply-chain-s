@@ -2277,37 +2277,105 @@ private calculateAccruedCharges(
     demand: LoanDemand,
     allocation: RepaymentAllocation,
     collectionDate: Date,
-  ): { interestDays: number; interest: number; chargesDays: number; charges: number } {
+  ): {
+    interestDays: number;
+    interest: number;
+    normalInterestDays: number;
+    normalInterest: number;
+    overdueInterestDays: number;
+    overdueInterest: number;
+    chargesDays: number;
+    charges: number;
+  } {
     const loanAccount = demand.loanAccount;
     const disbursement = demand.disbursement || null;
+    const disbursementDate = disbursement?.disbursementDate || demand.demandDate;
     const rules = this.getAccrualRules(loanAccount);
     const currentCharges = this.calculateAccruedCharges(demand, disbursement, demand.invoice, collectionDate, rules);
     const previousAllocation = this.getPreviousDemandAllocation(demand, allocation);
+    const previousCharges = previousAllocation
+      ? this.calculateAccruedCharges(
+          demand,
+          disbursement,
+          demand.invoice,
+          this.toDateOnly(previousAllocation.allocationDate),
+          rules,
+        )
+      : null;
+    const previousDayCount = previousCharges?.dayCount || 0;
+    const normalInterestDayLimit = Math.max(rules.penalStartDay - 1, 0);
+    const normalInterestDays = Math.max(
+      0,
+      Math.min(currentCharges.dayCount, normalInterestDayLimit) -
+        Math.min(previousDayCount, normalInterestDayLimit),
+    );
+    const overdueInterestDays = Math.max(
+      0,
+      Math.max(currentCharges.dayCount - normalInterestDayLimit, 0) -
+        Math.max(previousDayCount - normalInterestDayLimit, 0),
+    );
+    const getInterestAtDay = (dayCount: number): number => {
+      if (dayCount <= 0) return 0;
+      const accrualDate = this.getAccrualDate(
+        disbursementDate,
+        dayCount,
+        rules,
+      );
+      const charges = this.calculateAccruedCharges(
+        demand,
+        disbursement,
+        demand.invoice,
+        accrualDate,
+        rules,
+      );
+      return this.toNumber(charges.interestDue);
+    };
+    const currentNormalInterest = getInterestAtDay(
+      Math.min(currentCharges.dayCount, normalInterestDayLimit),
+    );
+    const previousNormalInterest = getInterestAtDay(
+      Math.min(previousDayCount, normalInterestDayLimit),
+    );
+    const totalInterest = previousCharges
+      ? this.roundMoney(Math.max(currentCharges.interestDue - previousCharges.interestDue, 0))
+      : this.roundMoney(currentCharges.interestDue);
+    const normalInterest = this.roundMoney(
+      Math.max(currentNormalInterest - previousNormalInterest, 0),
+    );
+    const overdueInterest = this.roundMoney(
+      Math.max(totalInterest - normalInterest, 0),
+    );
 
     if (!previousAllocation) {
       return {
         interestDays: currentCharges.dayCount,
-        interest: this.roundMoney(currentCharges.interestDue),
+        interest: totalInterest,
+        normalInterestDays,
+        normalInterest,
+        overdueInterestDays,
+        overdueInterest,
         chargesDays: Math.max(0, currentCharges.dayCount - rules.penalStartDay + 1),
         charges: this.roundMoney(currentCharges.penalDue),
       };
     }
 
-    const previousCharges = this.calculateAccruedCharges(
-      demand,
-      disbursement,
-      demand.invoice,
-      this.toDateOnly(previousAllocation.allocationDate),
-      rules,
-    );
+    const priorCharges = previousCharges;
+    if (!priorCharges) {
+      throw new Error('Previous charges are required for SOA interest window');
+    }
+
     const currentChargesDays = Math.max(0, currentCharges.dayCount - rules.penalStartDay + 1);
-    const previousChargesDays = Math.max(0, previousCharges.dayCount - rules.penalStartDay + 1);
+    const previousChargesDays = Math.max(0, priorCharges.dayCount - rules.penalStartDay + 1);
 
     return {
-      interestDays: Math.max(0, currentCharges.dayCount - previousCharges.dayCount),
-      interest: this.roundMoney(Math.max(currentCharges.interestDue - previousCharges.interestDue, 0)),
+      interestDays: Math.max(0, currentCharges.dayCount - priorCharges.dayCount),
+      interest: totalInterest,
+      normalInterestDays,
+      normalInterest,
+      overdueInterestDays,
+      overdueInterest,
       chargesDays: Math.max(0, currentChargesDays - previousChargesDays),
-      charges: this.roundMoney(Math.max(currentCharges.penalDue - previousCharges.penalDue, 0)),
+      charges: this.roundMoney(Math.max(currentCharges.penalDue - priorCharges.penalDue, 0)),
     };
   }
 
@@ -2704,6 +2772,18 @@ private async getScfCollectionRows(filters?: ScfReportFilters,): Promise<any[]> 
         soaInterestDays:
           soaChargeWindow.interestDays,
 
+        soaNormalInterestDays:
+          soaChargeWindow.normalInterestDays,
+
+        soaNormalInterest:
+          soaChargeWindow.normalInterest,
+
+        soaOverdueInterestDays:
+          soaChargeWindow.overdueInterestDays,
+
+        soaOverdueInterest:
+          soaChargeWindow.overdueInterest,
+
         soaInterest:
           soaChargeWindow.interest,
 
@@ -3061,8 +3141,12 @@ private async getScfCollectionRows(filters?: ScfReportFilters,): Promise<any[]> 
           'Interest To Date',
           'Principal Base',
           'Principal Settled',
-          'Interest Days',
-          'Interest Accrued',
+          'Total Interest Days',
+          'Interest Days Up to 90',
+          'Interest Up to 90 Days',
+          'Interest Days After 90',
+          'Interest After 90 Days',
+          'Total Interest Accrued',
           'Interest Settled',
           'Charges Days',
           'Charges Accrued',
@@ -3082,6 +3166,10 @@ private async getScfCollectionRows(filters?: ScfReportFilters,): Promise<any[]> 
           row.soaPrincipal,
           row.principalSettled,
           row.soaInterestDays,
+          row.soaNormalInterestDays,
+          row.soaNormalInterest,
+          row.soaOverdueInterestDays,
+          row.soaOverdueInterest,
           row.soaInterest,
           row.soaInterestSettled,
           row.soaChargesDays,
