@@ -2619,6 +2619,12 @@ private async getScfCollectionRows(filters?: ScfReportFilters,): Promise<any[]> 
         repayment?.repaymentDate ||
         allocation.allocationDate;
 
+      const previousAllocation =
+        this.getPreviousDemandAllocation(
+          demand,
+          allocation,
+        );
+
       const state =
         this.buildScfDemandState(
           demand,
@@ -2677,6 +2683,13 @@ private async getScfCollectionRows(filters?: ScfReportFilters,): Promise<any[]> 
           state.lastPaymentDate ||
           collectionDate,
 
+        interestFromDate:
+          previousAllocation?.allocationDate ||
+          state.disbursementDate,
+
+        interestToDate:
+          collectionDate,
+
         principal:
           this.toNumber(
             allocation.principalAmount
@@ -2695,7 +2708,9 @@ private async getScfCollectionRows(filters?: ScfReportFilters,): Promise<any[]> 
           soaChargeWindow.interest,
 
         soaInterestSettled:
-          soaChargeWindow.interest,
+          this.toNumber(
+            allocation.interestAmount
+          ),
 
         soaChargesDays:
           soaChargeWindow.chargesDays,
@@ -2704,7 +2719,9 @@ private async getScfCollectionRows(filters?: ScfReportFilters,): Promise<any[]> 
           soaChargeWindow.charges,
 
         soaChargesSettled:
-          soaChargeWindow.charges,
+          this.toNumber(
+            allocation.penalAmount
+          ),
 
         tenureUpdated:
           state.interestDays,
@@ -3040,14 +3057,15 @@ private async getScfCollectionRows(filters?: ScfReportFilters,): Promise<any[]> 
           'Used in This Txn',
           'Invoice',
           'Disbursement Date',
-          'Last Payment Date',
-          'Principal',
+          'Interest From Date',
+          'Interest To Date',
+          'Principal Base',
           'Principal Settled',
           'Interest Days',
-          'Interest',
+          'Interest Accrued',
           'Interest Settled',
           'Charges Days',
-          'Charges',
+          'Charges Accrued',
           'Charges Settled',
         ],
 
@@ -3059,7 +3077,8 @@ private async getScfCollectionRows(filters?: ScfReportFilters,): Promise<any[]> 
           row.amountUsed,
           row.invoiceNumber,
           row.disbursementDate,
-          row.lastPaymentDate,
+          row.interestFromDate,
+          row.interestToDate,
           row.soaPrincipal,
           row.principalSettled,
           row.soaInterestDays,
