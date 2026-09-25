@@ -656,7 +656,7 @@ const OpsLoanSearch = () => {
             ))}
           </div>
 
-          {/* <div className="flex flex-wrap justify-start gap-2 lg:justify-end">
+          <div className="flex flex-wrap justify-start gap-2 lg:justify-end">
             <button
               type="button"
               onClick={deleteCollectionsForLan}
@@ -678,7 +678,7 @@ const OpsLoanSearch = () => {
               <FiTrash2 className={deletingInvoices ? "animate-pulse" : ""} />
               {deletingInvoices ? "Deleting..." : "Delete Invoices"}
             </button>
-          </div> */}
+          </div>
         </div>
       </section>
 
