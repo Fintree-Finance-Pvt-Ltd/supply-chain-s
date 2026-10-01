@@ -2432,6 +2432,17 @@ private calculateAccruedCharges(
     const totalOutstanding = isPaidClosedDemand
       ? 0
       : this.roundMoney(principalOutstanding + interestOutstanding + chargesOutstanding);
+    // Interest/charges accrued up to the last payment that are still unpaid
+    // (carried forward), as opposed to amounts already settled.
+    const chargesTillLastPayment = !isPaidClosedDemand && allocations.lastPaymentDate
+      ? this.calculateAccruedCharges(demand, disbursement, demand.invoice, allocations.lastPaymentDate, rules)
+      : null;
+    const previousInterestDue = chargesTillLastPayment
+      ? this.roundMoney(Math.max(this.toNumber(chargesTillLastPayment.interestDue) - allocations.interest, 0))
+      : 0;
+    const previousChargesDue = chargesTillLastPayment
+      ? this.roundMoney(Math.max(this.toNumber(chargesTillLastPayment.penalDue) - allocations.penal, 0))
+      : 0;
 
     return {
       customerCode: this.getCustomerCode(loanAccount),
@@ -2459,6 +2470,8 @@ private calculateAccruedCharges(
       chargesDays,
       charges: chargesOutstanding,
       previousCharges: allocations.penal,
+      previousInterestDue,
+      previousChargesDue,
       principalSettled: allocations.principal,
       interestSettled: allocations.interest,
       delayedInterestSettled,
@@ -2963,9 +2976,7 @@ private async getScfCollectionRows(filters?: ScfReportFilters,): Promise<any[]> 
           const regularInterestSettled = this.roundMoney(
             Math.max(interestSettled - delayedInterestSettled, 0),
           );
-          const previousInterest = row.status === DEMAND_STATUS.PAID || this.toNumber(row.totalOutstanding) <= 0
-            ? 0
-            : row.previousInterest;
+          const isClosed = row.status === DEMAND_STATUS.PAID || this.toNumber(row.totalOutstanding) <= 0;
           return [
           row.lan,
           row.invoiceId,
@@ -2985,10 +2996,10 @@ private async getScfCollectionRows(filters?: ScfReportFilters,): Promise<any[]> 
           row.remainingInterestDays,
           row.remainingInterest,
           row.interest,
-          previousInterest,
+          isClosed ? 0 : row.previousInterestDue,
           row.chargesDays,
           row.charges,
-          chargesSettled > 0 ? 0 : row.previousCharges,
+          isClosed ? 0 : row.previousChargesDue,
           row.principalSettled,
           regularInterestSettled,
           delayedInterestSettled,
