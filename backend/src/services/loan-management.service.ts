@@ -2963,6 +2963,9 @@ private async getScfCollectionRows(filters?: ScfReportFilters,): Promise<any[]> 
           const regularInterestSettled = this.roundMoney(
             Math.max(interestSettled - delayedInterestSettled, 0),
           );
+          const previousInterest = row.status === DEMAND_STATUS.PAID || this.toNumber(row.totalOutstanding) <= 0
+            ? 0
+            : row.previousInterest;
           return [
           row.lan,
           row.invoiceId,
@@ -2982,7 +2985,7 @@ private async getScfCollectionRows(filters?: ScfReportFilters,): Promise<any[]> 
           row.remainingInterestDays,
           row.remainingInterest,
           row.interest,
-          row.previousInterest,
+          previousInterest,
           row.chargesDays,
           row.charges,
           chargesSettled > 0 ? 0 : row.previousCharges,
