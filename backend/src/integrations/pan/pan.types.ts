@@ -1,4 +1,4 @@
-export type PanProvider = 'FINANALYZ' | 'ZOOP' | 'NONE';
+export type PanProvider = 'ZOOP' | 'PERFIOS' | 'NONE';
 
 export interface PanValidationResult {
   success: boolean;
