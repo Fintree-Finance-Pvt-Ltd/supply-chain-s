@@ -33,7 +33,7 @@ import { loanServicingService } from '../../services/loanServicingService'
 import { ROLE_LABELS } from '../../constants/roles'
 import { formatCurrency, formatDate } from '../../utils/format'
 
-const chartColors = ['#2563eb', '#059669', '#d97706', '#dc2626', '#7c3aed', '#0f766e']
+const chartColors = ['#2563eb','#d97706', '#dc2626',  '#059669','#7c3aed', '#0f766e']
 const PAGE_SIZES = [10, 25, 50]
 const RECENT_CASES_LIMIT = 5
 const CASHFLOW_POINTS = 14
