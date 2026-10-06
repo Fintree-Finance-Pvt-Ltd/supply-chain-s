@@ -68,6 +68,21 @@ router.get('/dashboard', roleMiddleware([ROLES.SUPERADMIN]), async (req: Request
 });
 
 /**
+ * GET /api/superadmin/analytics/partners?page=1&limit=10
+ * Partner-wise sanction book, paginated
+ */
+router.get('/analytics/partners', roleMiddleware([ROLES.SUPERADMIN]), async (req: Request, res: Response) => {
+  try {
+    const page = parsePositiveInt(req.query.page, 1);
+    const limit = parsePositiveInt(req.query.limit, 10);
+    const result = await superAdminAnalyticsService.getPartnerSanctionPage(page, limit);
+    res.json({ success: true, data: result });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+/**
  * GET /api/superadmin/overview
  * Get dashboard overview stats
  */

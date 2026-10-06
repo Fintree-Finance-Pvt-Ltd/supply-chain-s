@@ -2278,7 +2278,6 @@ export class OperationsService {
       const invoiceRepo = manager.getRepository(Invoice);
       const workflowRepo = manager.getRepository(CaseWorkflow);
       const historyRepo = manager.getRepository(CaseStatusHistory);
-      const loanAccountRepo = manager.getRepository(LoanAccount);
 
       const invoice = await invoiceRepo.findOne({ where: { id: invoiceId } });
       if (!invoice) throw new Error('Invoice not found after internal LMS booking');
@@ -2288,17 +2287,10 @@ export class OperationsService {
       invoice.disbursedDate = invoice.disbursementDate;
       await invoiceRepo.save(invoice);
 
+      // bookInvoiceDisbursement already posted this disbursement; re-derive the account totals from
+      // the postings instead of adding the amount a second time.
       if (invoice.loanAccountId) {
-        const loanAccount = await loanAccountRepo.findOne({ where: { id: invoice.loanAccountId } });
-        if (loanAccount) {
-          const disbursementAmount = Number(invoice.disbursementAmount || 0);
-          const existingDisbursed = Number(loanAccount.disbursedAmount || 0);
-          const existingUtilized = Number(loanAccount.utilizedLimit || 0);
-          loanAccount.disbursedAmount = existingDisbursed + disbursementAmount;
-          loanAccount.utilizedLimit = existingUtilized + disbursementAmount;
-          loanAccount.unutilizedLimit = Math.max(Number(loanAccount.sanctionedAmount || 0) - Number(loanAccount.utilizedLimit || 0), 0);
-          await loanAccountRepo.save(loanAccount);
-        }
+        await loanManagementService.refreshSnapshot(manager, invoice.loanAccountId);
       }
 
       const workflow = await workflowRepo.findOne({

@@ -3,19 +3,45 @@ import { toast } from 'react-toastify'
 import {
   FiActivity,
   FiAward,
-  FiBarChart2,
   FiCheckCircle,
+  FiClock,
   FiDollarSign,
+  FiDownload,
   FiFileText,
-  FiLayers,
-  FiPieChart,
   FiRefreshCw,
   FiTrendingDown,
   FiTrendingUp,
   FiTruck,
   FiUsers,
 } from 'react-icons/fi'
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  ComposedChart,
+  Legend,
+  Line,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts'
+import LoadingSpinner from '../../components/LoadingSpinner'
+import TablePagination from '../../components/TablePagination'
 import api from '../../services/api'
+import { ROLE_LABELS } from '../../constants/roles'
+import { formatDate } from '../../utils/format'
+
+const PARTNER_PAGE_SIZE = 8
+const PARTNER_EXPORT_LIMIT = 50
+
+const PERIOD_OPTIONS = [
+  { value: '7', label: '7D' },
+  { value: '30', label: '30D' },
+  { value: '90', label: '90D' },
+  { value: '180', label: '180D' },
+  { value: 'all', label: 'All' },
+]
 
 const toNumber = (value) => {
   const parsed = Number(value ?? 0)
@@ -34,15 +60,15 @@ const formatCurrency = (value, compact = true) =>
 
 const formatMinutes = (minutes) => {
   const value = toNumber(minutes)
-  if (!value) return 'N/A'
-  if (value >= 1440) return `${Math.round(value / 1440)}d`
-  if (value >= 60) return `${Math.round(value / 60)}h`
+  if (!value) return '—'
+  if (value >= 1440) return `${(value / 1440).toFixed(1)}d`
+  if (value >= 60) return `${(value / 60).toFixed(1)}h`
   return `${Math.round(value)}m`
 }
 
 const formatLabel = (value) =>
   value
-    ? value
+    ? String(value)
         .toLowerCase()
         .split('_')
         .filter(Boolean)
@@ -50,203 +76,192 @@ const formatLabel = (value) =>
         .join(' ')
     : 'Unknown'
 
-const clampPercent = (value) => Math.min(100, Math.max(0, Math.round(toNumber(value))))
+const percentOf = (part, total) => (toNumber(total) > 0 ? (toNumber(part) / toNumber(total)) * 100 : 0)
+
+const formatPercent = (value) => `${Math.round(toNumber(value))}%`
+
+const clampPercent = (value) => Math.min(100, Math.max(0, toNumber(value)))
 
 const getPeriodParams = (timeRange) => (timeRange === 'all' ? { period: 'all' } : { days: timeRange })
 
+const downloadCsv = (filename, sections) => {
+  const escape = (value) => {
+    const text = value == null ? '' : String(value)
+    return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text
+  }
+  const lines = sections.flatMap(({ title, headers, rows }) => [
+    escape(title),
+    headers.map(escape).join(','),
+    ...rows.map((row) => row.map(escape).join(',')),
+    '',
+  ])
+  const blob = new Blob([`﻿${lines.join('\n')}`], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  link.click()
+  URL.revokeObjectURL(url)
+}
+
+/* ---------- Building blocks ---------- */
+
 const toneClasses = {
-  blue: {
-    icon: 'bg-blue-50 text-blue-700 ring-blue-100',
-    value: 'text-blue-700',
-    bar: 'bg-blue-600',
-  },
-  emerald: {
-    icon: 'bg-emerald-50 text-emerald-700 ring-emerald-100',
-    value: 'text-emerald-700',
-    bar: 'bg-emerald-600',
-  },
-  amber: {
-    icon: 'bg-amber-50 text-amber-700 ring-amber-100',
-    value: 'text-amber-700',
-    bar: 'bg-amber-500',
-  },
-  rose: {
-    icon: 'bg-rose-50 text-rose-700 ring-rose-100',
-    value: 'text-rose-700',
-    bar: 'bg-rose-600',
-  },
-  indigo: {
-    icon: 'bg-indigo-50 text-indigo-700 ring-indigo-100',
-    value: 'text-indigo-700',
-    bar: 'bg-indigo-600',
-  },
-  slate: {
-    icon: 'bg-slate-100 text-slate-700 ring-slate-200',
-    value: 'text-slate-900',
-    bar: 'bg-slate-700',
-  },
+  blue: { icon: 'bg-blue-50 text-blue-700', bar: 'bg-blue-600' },
+  emerald: { icon: 'bg-emerald-50 text-emerald-700', bar: 'bg-emerald-600' },
+  amber: { icon: 'bg-amber-50 text-amber-700', bar: 'bg-amber-500' },
+  rose: { icon: 'bg-rose-50 text-rose-700', bar: 'bg-rose-600' },
+  indigo: { icon: 'bg-indigo-50 text-indigo-700', bar: 'bg-indigo-600' },
+  slate: { icon: 'bg-slate-100 text-slate-700', bar: 'bg-slate-600' },
 }
 
-const MetricCard = ({ title, value, caption, icon: Icon, tone = 'slate' }) => {
-  const classes = toneClasses[tone] || toneClasses.slate
+const Card = ({ className = '', children }) => (
+  <section className={`rounded-xl border border-slate-200 bg-white shadow-sm ${className}`}>{children}</section>
+)
 
-  return (
-    <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-      <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0">
-          <p className="text-sm font-medium text-slate-500">{title}</p>
-          <p className={`mt-2 break-words text-2xl font-bold ${classes.value}`}>{value}</p>
-          <p className="mt-2 text-sm text-slate-500">{caption}</p>
-        </div>
-        <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-lg ring-1 ${classes.icon}`}>
-          <Icon className="h-5 w-5" />
-        </div>
+const CardHeader = ({ title, subtitle, scope, right }) => (
+  <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-5 py-4">
+    <div className="min-w-0">
+      <div className="flex items-center gap-2">
+        <h2 className="text-base font-semibold text-slate-900">{title}</h2>
+        {scope && (
+          <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+            {scope}
+          </span>
+        )}
       </div>
+      {subtitle && <p className="mt-0.5 text-xs text-slate-500">{subtitle}</p>}
     </div>
-  )
-}
-
-const ProgressBar = ({ value, tone = 'blue' }) => {
-  const classes = toneClasses[tone] || toneClasses.blue
-  return (
-    <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100">
-      <div className={`h-full rounded-full ${classes.bar}`} style={{ width: `${clampPercent(value)}%` }} />
-    </div>
-  )
-}
-
-const EmptyState = ({ label }) => (
-  <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">
-    {label}
+    {right}
   </div>
 )
 
-const StatusPanel = ({ title, icon: Icon, items = [], tone = 'blue', showAmount = false }) => {
+const SectionTitle = ({ children, hint }) => (
+  <div className="flex items-baseline justify-between gap-3">
+    <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">{children}</h2>
+    {hint && <span className="text-xs text-slate-400">{hint}</span>}
+  </div>
+)
+
+const MetricCard = ({ title, value, caption, icon: Icon, tone = 'slate' }) => (
+  <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+    <div className="flex items-center justify-between gap-3">
+      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{title}</p>
+      <span className={`flex h-8 w-8 items-center justify-center rounded-lg ${toneClasses[tone].icon}`}>
+        <Icon className="h-4 w-4" />
+      </span>
+    </div>
+    <p className="mt-3 text-2xl font-bold tabular-nums text-slate-900">{value}</p>
+    <p className="mt-1 truncate text-xs text-slate-500">{caption}</p>
+  </div>
+)
+
+const ProgressBar = ({ value, tone = 'blue', className = 'h-2' }) => (
+  <div className={`w-full overflow-hidden rounded-full bg-slate-100 ${className}`}>
+    <div className={`h-full rounded-full ${toneClasses[tone].bar}`} style={{ width: `${clampPercent(value)}%` }} />
+  </div>
+)
+
+const Stat = ({ label, value, accent }) => (
+  <div className={`border-l-2 pl-3 ${accent}`}>
+    <p className="text-xs text-slate-500">{label}</p>
+    <p className="mt-0.5 text-sm font-semibold tabular-nums text-slate-900">{value}</p>
+  </div>
+)
+
+const EmptyState = ({ label }) => (
+  <div className="flex min-h-[120px] items-center justify-center px-5 py-6 text-center text-sm text-slate-400">{label}</div>
+)
+
+const StatusPanel = ({ title, icon: Icon, items = [], tone, showAmount = false }) => {
   const total = items.reduce((sum, item) => sum + toNumber(item.count), 0)
 
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <div>
-          <h2 className="text-lg font-bold text-slate-950">{title}</h2>
-          <p className="text-sm text-slate-500">{formatNumber(total)} total records</p>
-        </div>
-        <Icon className={`h-5 w-5 ${toneClasses[tone]?.value || 'text-slate-700'}`} />
-      </div>
-
+    <Card>
+      <CardHeader
+        title={title}
+        subtitle={`${formatNumber(total)} records`}
+        right={<Icon className="h-5 w-5 text-slate-400" />}
+      />
       {items.length > 0 ? (
-        <div className="space-y-4">
-          {items.slice(0, 6).map((item) => {
-            const percent = total > 0 ? (item.count / total) * 100 : 0
-            return (
-              <div key={item.status}>
-                <div className="mb-2 flex items-center justify-between gap-3 text-sm">
-                  <span className="truncate font-semibold text-slate-800">{item.label || formatLabel(item.status)}</span>
-                  <span className="shrink-0 font-bold text-slate-950">
-                    {showAmount && item.amount ? formatCurrency(item.amount) : formatNumber(item.count)}
+        <ul className="space-y-3 p-5">
+          {items.map((item) => (
+            <li key={item.status}>
+              <div className="mb-1.5 flex items-center justify-between gap-3 text-sm">
+                <span className="truncate text-slate-700">{item.label || formatLabel(item.status)}</span>
+                <span className="shrink-0 tabular-nums">
+                  <span className="font-semibold text-slate-900">{formatNumber(item.count)}</span>
+                  {showAmount && toNumber(item.amount) > 0 && (
+                    <span className="ml-2 text-xs text-slate-500">{formatCurrency(item.amount)}</span>
+                  )}
+                  <span className="ml-2 inline-block w-10 text-right text-xs text-slate-400">
+                    {formatPercent(percentOf(item.count, total))}
                   </span>
-                </div>
-                <ProgressBar value={percent} tone={tone} />
+                </span>
               </div>
-            )
-          })}
-        </div>
+              <ProgressBar value={percentOf(item.count, total)} tone={tone} className="h-1.5" />
+            </li>
+          ))}
+        </ul>
       ) : (
         <EmptyState label="No status data available." />
       )}
-    </div>
+    </Card>
   )
 }
 
-const RankingPanel = ({ title, icon: Icon, items = [], metric, tone = 'blue', emptyLabel }) => (
-  <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-    <div className="mb-4 flex items-center justify-between gap-3">
-      <div>
-        <h2 className="text-lg font-bold text-slate-950">{title}</h2>
-        <p className="text-sm text-slate-500">Top {Math.min(items.length, 5)} users</p>
-      </div>
-      <Icon className={`h-5 w-5 ${toneClasses[tone]?.value || 'text-slate-700'}`} />
-    </div>
-
+const RankingPanel = ({ title, subtitle, icon: Icon, iconClass, items = [], metric, emptyLabel, countLabel = 'tasks closed' }) => (
+  <Card>
+    <CardHeader title={title} subtitle={subtitle} scope="All time" right={<Icon className={`h-5 w-5 ${iconClass}`} />} />
     {items.length > 0 ? (
-      <div className="space-y-3">
+      <ol className="divide-y divide-slate-100">
         {items.slice(0, 5).map((item, index) => (
-          <div key={`${item.userId}-${index}`} className="flex items-center justify-between gap-3 border-b border-slate-100 pb-3 last:border-0 last:pb-0">
+          <li key={`${item.userId}-${index}`} className="flex items-center justify-between gap-3 px-5 py-2.5">
             <div className="flex min-w-0 items-center gap-3">
-              <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-bold ${toneClasses[tone]?.icon || toneClasses.slate.icon}`}>
-                {item.rank || index + 1}
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-bold text-slate-600">
+                {index + 1}
               </span>
               <div className="min-w-0">
-                <p className="truncate text-sm font-semibold text-slate-900">{item.userName}</p>
-                <p className="text-xs text-slate-500">{formatNumber(item.tasksCompleted)} tasks</p>
+                <p className="truncate text-sm font-medium text-slate-900">{item.userName}</p>
+                <p className="text-xs text-slate-500">{formatNumber(item.tasksCompleted)} {countLabel}</p>
               </div>
             </div>
-            <span className="shrink-0 text-sm font-bold text-slate-950">{metric(item)}</span>
-          </div>
+            <span className="shrink-0 text-sm font-semibold tabular-nums text-slate-900">{metric(item)}</span>
+          </li>
         ))}
-      </div>
+      </ol>
     ) : (
-      <EmptyState label={emptyLabel || 'No ranking data available.'} />
+      <EmptyState label={emptyLabel} />
     )}
-  </div>
+  </Card>
 )
 
-const MonthlyTrend = ({ data = [] }) => {
-  const maxAmount = Math.max(...data.map((item) => toNumber(item.invoiceAmount)), 1)
-  const maxCount = Math.max(...data.map((item) => toNumber(item.customers) + toNumber(item.suppliers) + toNumber(item.invoices)), 1)
-
+const TrendTooltip = ({ active, payload, label }) => {
+  if (!active || !payload?.length) return null
+  const row = payload[0].payload
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm xl:col-span-2">
-      <div className="mb-5 flex items-center justify-between gap-3">
-        <div>
-          <h2 className="text-lg font-bold text-slate-950">Monthly Origination Trend</h2>
-          <p className="text-sm text-slate-500">New customers, suppliers, invoices, and booked invoice value.</p>
-        </div>
-        <FiBarChart2 className="h-5 w-5 text-blue-700" />
-      </div>
-
-      {data.length > 0 ? (
-        <div className="flex h-64 items-end gap-3 overflow-x-auto pb-2">
-          {data.map((item) => {
-            const amountHeight = Math.max(6, (toNumber(item.invoiceAmount) / maxAmount) * 100)
-            const count = toNumber(item.customers) + toNumber(item.suppliers) + toNumber(item.invoices)
-            const countHeight = Math.max(6, (count / maxCount) * 100)
-
-            return (
-              <div key={item.period} className="flex min-w-[72px] flex-1 flex-col items-center gap-2">
-                <div className="flex h-44 w-full items-end justify-center gap-2 rounded-lg bg-slate-50 px-2 py-2">
-                  <div className="w-4 rounded-t-md bg-blue-600" style={{ height: `${amountHeight}%` }} title={formatCurrency(item.invoiceAmount, false)} />
-                  <div className="w-4 rounded-t-md bg-emerald-500" style={{ height: `${countHeight}%` }} title={`${formatNumber(count)} records`} />
-                </div>
-                <p className="text-xs font-semibold text-slate-700">{item.label}</p>
-                <p className="text-center text-xs text-slate-500">{formatCurrency(item.invoiceAmount)}</p>
-              </div>
-            )
-          })}
-        </div>
-      ) : (
-        <EmptyState label="No monthly trend data available." />
-      )}
-
-      <div className="mt-4 flex flex-wrap gap-4 text-xs font-medium text-slate-500">
-        <span className="inline-flex items-center gap-2">
-          <span className="h-2.5 w-2.5 rounded-full bg-blue-600" />
-          Invoice value
-        </span>
-        <span className="inline-flex items-center gap-2">
-          <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
-          Record count
-        </span>
-      </div>
+    <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs shadow-md">
+      <p className="mb-1 font-semibold text-slate-900">{label}</p>
+      <p className="text-slate-600">Invoice value: <span className="font-semibold text-slate-900">{formatCurrency(row.invoiceAmount, false)}</span></p>
+      <p className="text-slate-600">Invoices: <span className="font-semibold text-slate-900">{formatNumber(row.invoices)}</span></p>
+      <p className="text-slate-600">New customers: <span className="font-semibold text-slate-900">{formatNumber(row.customers)}</span></p>
+      <p className="text-slate-600">New suppliers: <span className="font-semibold text-slate-900">{formatNumber(row.suppliers)}</span></p>
     </div>
   )
 }
+
+/* ---------- Page ---------- */
 
 const Analytics = () => {
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [analytics, setAnalytics] = useState(null)
   const [timeRange, setTimeRange] = useState('30')
+  const [lastUpdated, setLastUpdated] = useState(null)
+  const [partnerPage, setPartnerPage] = useState(1)
+  const [partnerData, setPartnerData] = useState({ rows: [], totals: {}, pagination: null })
+  const [partnerLoading, setPartnerLoading] = useState(true)
+  const [partnerReloadKey, setPartnerReloadKey] = useState(0)
 
   const fetchAnalytics = async ({ silent = false } = {}) => {
     try {
@@ -256,10 +271,11 @@ const Analytics = () => {
       const response = await api.get('/superadmin/dashboard', { params: getPeriodParams(timeRange) })
       if (response.data.success) {
         setAnalytics(response.data.data)
+        setLastUpdated(new Date())
       }
     } catch (error) {
       console.error('Error fetching analytics:', error)
-      toast.error('Failed to fetch analytics data')
+      toast.error(error.response?.data?.message || 'Failed to fetch analytics data')
     } finally {
       setLoading(false)
       setRefreshing(false)
@@ -267,8 +283,34 @@ const Analytics = () => {
   }
 
   useEffect(() => {
-    fetchAnalytics()
+    fetchAnalytics({ silent: analytics !== null })
   }, [timeRange])
+
+  useEffect(() => {
+    let cancelled = false
+    setPartnerLoading(true)
+    api
+      .get('/superadmin/analytics/partners', { params: { page: partnerPage, limit: PARTNER_PAGE_SIZE } })
+      .then((response) => {
+        if (!cancelled && response.data.success) setPartnerData(response.data.data)
+      })
+      .catch((error) => {
+        if (cancelled) return
+        console.error('Error fetching partner sanction mix:', error)
+        toast.error(error.response?.data?.message || 'Failed to fetch partner sanction mix')
+      })
+      .finally(() => {
+        if (!cancelled) setPartnerLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [partnerPage, partnerReloadKey])
+
+  const refreshAll = () => {
+    fetchAnalytics({ silent: true })
+    setPartnerReloadKey((key) => key + 1)
+  }
 
   const overview = analytics?.overview || {}
   const business = analytics?.businessOverview || {}
@@ -276,78 +318,139 @@ const Analytics = () => {
   const period = analytics?.periodActivity || {}
   const statusBreakdowns = analytics?.statusBreakdowns || {}
   const monthlyTrend = analytics?.monthlyTrend || []
-  const roleDistribution = analytics?.roleDistribution || []
+  const workflowPipeline = analytics?.workflowPipeline || []
   const bucketStats = analytics?.bucketStats || []
   const l1l2 = analytics?.l1L2Comparison || {}
-  const partnerSanctions = analytics?.partnerSanctionStats || []
+  const partnerSanctions = partnerData.rows || []
+  const partnerPagination = partnerData.pagination
+  const fastestClosers = analytics?.fastestClosers || []
+  const productivityRanking = analytics?.productivityRanking || []
 
-  const roleTotal = useMemo(
-    () => roleDistribution.reduce((sum, role) => sum + toNumber(role.userCount), 0),
-    [roleDistribution]
-  )
-  const taskClosureRate = useMemo(() => {
-    const completed = toNumber(overview.completedTasks)
-    const active = toNumber(overview.activeTasks)
-    const pending = toNumber(overview.pendingTasks)
-    const total = completed + active + pending
-    return total > 0 ? Math.round((completed / total) * 100) : 0
-  }, [overview])
+  // With few users the fastest and slowest lists overlap; only flag people who aren't already top performers.
+  const slowestClosers = useMemo(() => {
+    const fastestIds = new Set(fastestClosers.slice(0, 5).map((item) => item.userId))
+    return (analytics?.slowestClosers || []).filter((item) => !fastestIds.has(item.userId))
+  }, [analytics, fastestClosers])
+
+  const periodLabel = period.label || (timeRange === 'all' ? 'All time' : `Last ${timeRange} days`)
+
+  const decidedWorkflows = toNumber(period.completedWorkflows) + toNumber(period.rejectedWorkflows)
+  const approvalRate = percentOf(period.completedWorkflows, decidedWorkflows)
+
+  // activeTasks / pendingTasks are open cases (in team queues / with others); overdueTasks are the stuck ones.
+  const openCases = toNumber(overview.activeTasks) + toNumber(overview.pendingTasks)
+  const movingRate = percentOf(openCases - toNumber(overview.overdueTasks), openCases)
+  const bucketStepTotal = bucketStats.reduce((sum, bucket) => sum + toNumber(bucket.completedTasks), 0)
   const stageMaxTime = Math.max(toNumber(l1l2.l1Stats?.avgTime), toNumber(l1l2.l2Stats?.avgTime), 1)
-  const partnerSanctionTotal = useMemo(
-    () => partnerSanctions.reduce((sum, partner) => sum + toNumber(partner.sanctionCount), 0),
-    [partnerSanctions]
-  )
-  const activePartnerAccounts = useMemo(
-    () => partnerSanctions.reduce((sum, partner) => sum + toNumber(partner.activeAccounts), 0),
-    [partnerSanctions]
-  )
-  const topPartnerSanctionAmount = useMemo(
-    () => Math.max(...partnerSanctions.map((partner) => toNumber(partner.sanctionedAmount)), 1),
-    [partnerSanctions]
-  )
-  const periodLabel = period.label || (timeRange === 'all' ? 'All time' : `Last ${period.days || timeRange} days`)
+
+  const sanctionedBook = toNumber(financial.sanctionedBook)
+  // Share of book is measured against the same loan-account total the partner rows are built from.
+  const partnerBookTotal = toNumber(partnerData.totals?.sanctionedAmount) || sanctionedBook
+
+  // All three steps are invoice value so the percentages compare like with like.
+  const invoiceFunnel = [
+    { label: 'Total invoiced', value: financial.totalInvoiceAmount, tone: 'slate' },
+    { label: 'In pipeline', value: financial.outstandingInvoiceAmount, tone: 'amber' },
+    { label: 'Financed', value: financial.financedInvoiceAmount, tone: 'emerald' },
+  ]
+
+  const pipelineChart = workflowPipeline.map((item) => ({
+    name: item.label || formatLabel(item.workflowType),
+    Active: toNumber(item.active),
+    Completed: toNumber(item.completed),
+    Rejected: toNumber(item.rejected),
+  }))
+
+  const exportReport = async () => {
+    let allPartners = partnerSanctions
+    try {
+      const response = await api.get('/superadmin/analytics/partners', { params: { page: 1, limit: PARTNER_EXPORT_LIMIT } })
+      allPartners = response.data?.data?.rows || partnerSanctions
+    } catch (error) {
+      console.error('Error fetching partners for export:', error)
+    }
+
+    downloadCsv(`supply-chain-analytics-${formatDate(new Date(), 'yyyy-MM-dd')}.csv`, [
+      {
+        title: `Period activity (${periodLabel})`,
+        headers: ['Metric', 'Value'],
+        rows: [
+          ['New customers', toNumber(period.newCustomers)],
+          ['New suppliers', toNumber(period.newSuppliers)],
+          ['New invoices', toNumber(period.newInvoices)],
+          ['Invoice value', toNumber(period.invoiceAmount)],
+          ['Disbursed amount', toNumber(period.disbursedAmount)],
+          ['Workflows approved', toNumber(period.completedWorkflows)],
+          ['Workflows rejected', toNumber(period.rejectedWorkflows)],
+        ],
+      },
+      {
+        title: 'Credit book (all time)',
+        headers: ['Metric', 'Value'],
+        rows: [
+          ['Sanctioned book', sanctionedBook],
+          ['Disbursed book', toNumber(financial.disbursedBook)],
+          ['Utilized limit', toNumber(financial.utilizedLimit)],
+          ['Unutilized limit', toNumber(financial.unutilizedLimit)],
+          ['Utilization %', toNumber(financial.utilizationRate)],
+          ['Loan accounts', toNumber(financial.loanAccounts)],
+          ['Total invoiced', toNumber(financial.totalInvoiceAmount)],
+          ['Invoices in pipeline', toNumber(financial.outstandingInvoiceAmount)],
+          ['Invoices financed (invoice value)', toNumber(financial.financedInvoiceAmount)],
+          ['Amount disbursed', toNumber(financial.disbursedInvoiceAmount)],
+        ],
+      },
+      {
+        title: 'Monthly origination',
+        headers: ['Month', 'Customers', 'Suppliers', 'Invoices', 'Invoice value'],
+        rows: monthlyTrend.map((m) => [m.label, m.customers, m.suppliers, m.invoices, m.invoiceAmount]),
+      },
+      {
+        title: 'Partner sanction mix',
+        headers: ['Partner', 'Code', 'Loan accounts', 'Active', 'Sanctioned', 'Disbursed', 'Utilization %'],
+        rows: allPartners.map((p) => [
+          p.partnerName, p.partnerCode, p.sanctionCount, p.activeAccounts, p.sanctionedAmount, p.disbursedAmount, p.utilizationRate,
+        ]),
+      },
+      {
+        title: 'Bucket performance',
+        headers: ['Bucket', 'Roles', 'Team', 'Steps closed', 'In queue', 'Avg handling (min)'],
+        rows: bucketStats.map((b) => [
+          b.bucketName, (b.roles || []).join(' / '), b.userCount, b.completedTasks, b.pendingTasks, Math.round(toNumber(b.avgCompletionTime)),
+        ]),
+      },
+    ])
+  }
 
   if (loading) {
     return (
-      <div className="flex min-h-[70vh] items-center justify-center bg-[#f6f8fb]">
-        <div className="rounded-lg border border-slate-200 bg-white px-8 py-7 text-center shadow-sm">
-          <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-blue-100 border-t-blue-600" />
-          <p className="mt-4 text-sm font-medium text-slate-600">Loading analytics</p>
-        </div>
+      <div className="flex min-h-[70vh] items-center justify-center">
+        <LoadingSpinner />
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-[#f6f8fb] px-2 py-2 sm:px-0">
-      <div className="mb-6 flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <div className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200">
-            <FiPieChart className="h-3.5 w-3.5 text-blue-600" />
-            Analytics
-          </div>
-          <h1 className="mt-3 text-3xl font-bold text-slate-950">Supply Chain Analytics</h1>
-          <p className="mt-2 max-w-3xl text-sm text-slate-600">
-            Compare operating flow, exposure, status mix, and user performance across the finance lifecycle.
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900">Supply Chain Analytics</h1>
+          <p className="mt-1 text-sm text-slate-500">
+            Origination, credit book, pipeline and team efficiency
+            {lastUpdated && <span className="text-slate-400"> · Updated {formatDate(lastUpdated, 'dd MMM, hh:mm a')}</span>}
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <div className="inline-flex rounded-lg border border-slate-200 bg-white p-1 shadow-sm">
-            {[
-              { value: '7', label: '7D' },
-              { value: '30', label: '30D' },
-              { value: '90', label: '90D' },
-              { value: 'all', label: 'All' },
-            ].map((option) => (
+          <div className="inline-flex rounded-lg bg-slate-100 p-1">
+            {PERIOD_OPTIONS.map((option) => (
               <button
                 key={option.value}
                 type="button"
                 onClick={() => setTimeRange(option.value)}
-                className={`rounded-md px-3 py-1.5 text-sm font-semibold transition ${
-                  timeRange === option.value
-                    ? 'bg-blue-600 text-white'
-                    : 'text-slate-600 hover:bg-slate-50'
+                className={`rounded-md px-3 py-1.5 text-sm font-medium transition ${
+                  timeRange === option.value ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'
                 }`}
               >
                 {option.label}
@@ -356,9 +459,17 @@ const Analytics = () => {
           </div>
           <button
             type="button"
-            onClick={() => fetchAnalytics({ silent: true })}
+            onClick={exportReport}
+            className="inline-flex h-[38px] items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
+            <FiDownload className="h-4 w-4" />
+            Export
+          </button>
+          <button
+            type="button"
+            onClick={refreshAll}
             disabled={refreshing}
-            className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+            className="inline-flex h-[38px] items-center gap-2 rounded-lg bg-slate-900 px-3 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60"
           >
             <FiRefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
             Refresh
@@ -366,314 +477,365 @@ const Analytics = () => {
         </div>
       </div>
 
-      <section className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <MetricCard
-          title={`New Customers (${periodLabel})`}
-          value={formatNumber(period.newCustomers)}
-          caption={`${formatNumber(business.totalCustomers)} customers all time`}
-          icon={FiUsers}
-          tone="blue"
-        />
-        <MetricCard
-          title={`New Suppliers (${periodLabel})`}
-          value={formatNumber(period.newSuppliers)}
-          caption={`${formatNumber(business.activeSuppliers)} active supplier cases`}
-          icon={FiTruck}
-          tone="emerald"
-        />
-        <MetricCard
-          title={`Invoice Value (${periodLabel})`}
-          value={formatCurrency(period.invoiceAmount)}
-          caption={`${formatNumber(period.newInvoices)} new invoices`}
-          icon={FiFileText}
-          tone="indigo"
-        />
-        <MetricCard
-          title="Utilization"
-          value={`${clampPercent(financial.utilizationRate)}%`}
-          caption={`${formatCurrency(financial.utilizedLimit)} of ${formatCurrency(financial.sanctionedBook)}`}
-          icon={FiDollarSign}
-          tone="amber"
-        />
-      </section>
-
-      <section className="mb-6 grid grid-cols-1 gap-4 xl:grid-cols-5">
-        <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm xl:col-span-2">
-          <div className="mb-5 flex items-center justify-between gap-3">
-            <div>
-              <h2 className="text-lg font-bold text-slate-950">Sanction Book Analytics</h2>
-              <p className="text-sm text-slate-500">Approved sanctions, loan accounts, and available exposure.</p>
-            </div>
-            <FiDollarSign className="h-5 w-5 text-amber-700" />
-          </div>
-
-          <div className="space-y-5">
-            <div>
-              <div className="mb-2 flex items-center justify-between gap-3 text-sm">
-                <span className="font-medium text-slate-600">Limit utilization</span>
-                <span className="font-bold text-slate-950">{clampPercent(financial.utilizationRate)}%</span>
-              </div>
-              <ProgressBar value={financial.utilizationRate} tone="amber" />
-            </div>
-
-            <div className="grid grid-cols-2 gap-3 text-sm">
-              <div className="border-l-2 border-amber-500 pl-3">
-                <p className="text-slate-500">Sanctioned book</p>
-                <p className="mt-1 font-bold text-slate-950">{formatCurrency(financial.sanctionedBook)}</p>
-              </div>
-              <div className="border-l-2 border-emerald-500 pl-3">
-                <p className="text-slate-500">Utilized limit</p>
-                <p className="mt-1 font-bold text-slate-950">{formatCurrency(financial.utilizedLimit)}</p>
-              </div>
-              <div className="border-l-2 border-blue-500 pl-3">
-                <p className="text-slate-500">Loan account sanctions</p>
-                <p className="mt-1 font-bold text-slate-950">{formatNumber(partnerSanctionTotal || financial.loanAccounts)}</p>
-              </div>
-              <div className="border-l-2 border-rose-500 pl-3">
-                <p className="text-slate-500">Unutilized limit</p>
-                <p className="mt-1 font-bold text-slate-950">{formatCurrency(financial.unutilizedLimit)}</p>
-              </div>
-            </div>
-
-            <div className="rounded-lg bg-slate-50 p-4">
-              <div className="grid grid-cols-3 gap-3 text-center">
-                <div>
-                  <p className="text-xs font-semibold uppercase text-slate-500">Approved</p>
-                  <p className="mt-1 text-lg font-bold text-slate-950">{formatNumber(financial.approvedSanctionCount)}</p>
-                </div>
-                <div>
-                  <p className="text-xs font-semibold uppercase text-slate-500">Partners</p>
-                  <p className="mt-1 text-lg font-bold text-slate-950">{formatNumber(partnerSanctions.length)}</p>
-                </div>
-                <div>
-                  <p className="text-xs font-semibold uppercase text-slate-500">Active LANs</p>
-                  <p className="mt-1 text-lg font-bold text-slate-950">{formatNumber(activePartnerAccounts)}</p>
-                </div>
-              </div>
-            </div>
-          </div>
+      {/* Period activity — the only section driven by the period selector */}
+      <div className="space-y-3">
+        <SectionTitle hint="Changes with the period selector">Activity · {periodLabel}</SectionTitle>
+        <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-5">
+          <MetricCard
+            title="New Customers"
+            value={formatNumber(period.newCustomers)}
+            caption={`${formatNumber(business.totalCustomers)} total customers`}
+            icon={FiUsers}
+            tone="blue"
+          />
+          <MetricCard
+            title="New Suppliers"
+            value={formatNumber(period.newSuppliers)}
+            caption={`${formatNumber(business.totalSuppliers)} total suppliers`}
+            icon={FiTruck}
+            tone="emerald"
+          />
+          <MetricCard
+            title="Invoices Raised"
+            value={formatCurrency(period.invoiceAmount)}
+            caption={`${formatNumber(period.newInvoices)} invoices`}
+            icon={FiFileText}
+            tone="indigo"
+          />
+          <MetricCard
+            title="Disbursed"
+            value={formatCurrency(period.disbursedAmount)}
+            caption={`${formatCurrency(financial.disbursedBook)} disbursed all time`}
+            icon={FiDollarSign}
+            tone="amber"
+          />
+          <MetricCard
+            title="Approval Rate"
+            value={decidedWorkflows > 0 ? formatPercent(approvalRate) : '—'}
+            caption={`${formatNumber(period.completedWorkflows)} approved · ${formatNumber(period.rejectedWorkflows)} rejected`}
+            icon={FiCheckCircle}
+            tone={approvalRate >= 70 || decidedWorkflows === 0 ? 'emerald' : 'rose'}
+          />
         </div>
+      </div>
 
-        <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm xl:col-span-3">
-          <div className="mb-5 flex items-center justify-between gap-3">
+      {/* Credit book */}
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+        <Card>
+          <CardHeader title="Sanction Book" subtitle="Limits sanctioned vs utilized" scope="All time" />
+          <div className="space-y-5 p-5">
             <div>
-              <h2 className="text-lg font-bold text-slate-950">Partner Sanction Mix</h2>
-              <p className="text-sm text-slate-500">Sanctions created in loan accounts by partner.</p>
+              <div className="mb-2 flex items-baseline justify-between">
+                <span className="text-sm text-slate-600">Limit utilization</span>
+                <span className="text-xl font-bold tabular-nums text-slate-900">{formatPercent(financial.utilizationRate)}</span>
+              </div>
+              <ProgressBar value={financial.utilizationRate} tone="amber" className="h-2.5" />
             </div>
-            <FiBarChart2 className="h-5 w-5 text-blue-700" />
+            <div className="grid grid-cols-2 gap-4">
+              <Stat label="Sanctioned" value={formatCurrency(sanctionedBook)} accent="border-blue-500" />
+              <Stat label="Disbursed" value={formatCurrency(financial.disbursedBook)} accent="border-emerald-500" />
+              <Stat label="Utilized limit" value={formatCurrency(financial.utilizedLimit)} accent="border-amber-500" />
+              <Stat label="Available limit" value={formatCurrency(financial.unutilizedLimit)} accent="border-slate-400" />
+            </div>
+            <div className="grid grid-cols-3 gap-2 rounded-lg bg-slate-50 p-3 text-center">
+              <div>
+                <p className="text-[11px] font-semibold uppercase text-slate-500">Loan A/Cs</p>
+                <p className="mt-0.5 text-base font-bold tabular-nums text-slate-900">{formatNumber(financial.loanAccounts)}</p>
+              </div>
+              <div>
+                <p className="text-[11px] font-semibold uppercase text-slate-500">Approved</p>
+                <p className="mt-0.5 text-base font-bold tabular-nums text-slate-900">{formatNumber(financial.approvedSanctionCount)}</p>
+              </div>
+              <div>
+                <p className="text-[11px] font-semibold uppercase text-slate-500">Avg ROI</p>
+                <p className="mt-0.5 text-base font-bold tabular-nums text-slate-900">
+                  {toNumber(financial.averageInterestRate) ? `${toNumber(financial.averageInterestRate).toFixed(1)}%` : '—'}
+                </p>
+              </div>
+            </div>
           </div>
+        </Card>
 
-          {partnerSanctions.length > 0 ? (
-            <div className="space-y-4">
-              {partnerSanctions.slice(0, 8).map((partner, index) => {
-                const share = (toNumber(partner.sanctionedAmount) / topPartnerSanctionAmount) * 100
-                return (
-                  <div key={`${partner.partnerCode}-${index}`}>
-                    <div className="mb-2 flex items-center justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold text-slate-900">{partner.partnerName}</p>
-                        <p className="text-xs text-slate-500">
-                          {formatNumber(partner.sanctionCount)} sanctions, {formatNumber(partner.activeAccounts)} active accounts
-                        </p>
-                      </div>
-                      <div className="shrink-0 text-right">
-                        <p className="text-sm font-bold text-slate-950">{formatCurrency(partner.sanctionedAmount)}</p>
-                        <p className="text-xs text-slate-500">{clampPercent(partner.utilizationRate)}% utilized</p>
-                      </div>
-                    </div>
-                    <ProgressBar value={share} tone={index % 2 === 0 ? 'blue' : 'amber'} />
-                  </div>
-                )
-              })}
-            </div>
-          ) : (
-            <EmptyState label="No partner sanction analytics available." />
-          )}
-        </div>
-      </section>
-
-      <section className="mb-6 grid grid-cols-1 gap-4 xl:grid-cols-3">
-        <MonthlyTrend data={monthlyTrend} />
-
-        <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="mb-5 flex items-center justify-between gap-3">
-            <div>
-              <h2 className="text-lg font-bold text-slate-950">Operating Rhythm</h2>
-              <p className="text-sm text-slate-500">Task velocity and exception load.</p>
-            </div>
-            <FiActivity className="h-5 w-5 text-emerald-700" />
-          </div>
-
-          <div className="space-y-5">
-            <div>
-              <div className="mb-2 flex items-center justify-between text-sm">
-                <span className="font-medium text-slate-600">Task closure ratio</span>
-                <span className="font-bold text-slate-950">{taskClosureRate}%</span>
-              </div>
-              <ProgressBar value={taskClosureRate} tone="emerald" />
-            </div>
-
-            <div className="grid grid-cols-2 gap-3 text-sm">
-              <div className="border-l-2 border-blue-500 pl-3">
-                <p className="text-slate-500">Active tasks</p>
-                <p className="mt-1 font-bold text-slate-950">{formatNumber(overview.activeTasks)}</p>
-              </div>
-              <div className="border-l-2 border-amber-500 pl-3">
-                <p className="text-slate-500">Pending tasks</p>
-                <p className="mt-1 font-bold text-slate-950">{formatNumber(overview.pendingTasks)}</p>
-              </div>
-              <div className="border-l-2 border-emerald-500 pl-3">
-                <p className="text-slate-500">Completed</p>
-                <p className="mt-1 font-bold text-slate-950">{formatNumber(overview.completedTasks)}</p>
-              </div>
-              <div className="border-l-2 border-rose-500 pl-3">
-                <p className="text-slate-500">Overdue</p>
-                <p className="mt-1 font-bold text-slate-950">{formatNumber(overview.overdueTasks)}</p>
-              </div>
-            </div>
-
-            <div className="rounded-lg bg-slate-50 p-4">
-              <p className="text-sm font-semibold text-slate-800">L1 vs L2 average time</p>
-              <div className="mt-4 space-y-4">
-                <div>
-                  <div className="mb-2 flex items-center justify-between text-sm">
-                    <span className="text-slate-600">L1 Processing</span>
-                    <span className="font-bold text-slate-950">{formatMinutes(l1l2.l1Stats?.avgTime)}</span>
-                  </div>
-                  <ProgressBar value={(toNumber(l1l2.l1Stats?.avgTime) / stageMaxTime) * 100} tone="blue" />
+        <Card>
+          <CardHeader title="Invoice Funnel" subtitle="How much invoice value gets financed" scope="All time" />
+          <div className="space-y-4 p-5">
+            {invoiceFunnel.map((step) => (
+              <div key={step.label}>
+                <div className="mb-1.5 flex items-baseline justify-between gap-3">
+                  <span className="text-sm text-slate-600">{step.label}</span>
+                  <span className="tabular-nums">
+                    <span className="text-sm font-semibold text-slate-900">{formatCurrency(step.value)}</span>
+                    <span className="ml-2 text-xs text-slate-400">
+                      {formatPercent(percentOf(step.value, financial.totalInvoiceAmount))}
+                    </span>
+                  </span>
                 </div>
-                <div>
-                  <div className="mb-2 flex items-center justify-between text-sm">
-                    <span className="text-slate-600">L2 Processing</span>
-                    <span className="font-bold text-slate-950">{formatMinutes(l1l2.l2Stats?.avgTime)}</span>
-                  </div>
-                  <ProgressBar value={(toNumber(l1l2.l2Stats?.avgTime) / stageMaxTime) * 100} tone="indigo" />
-                </div>
+                <ProgressBar value={percentOf(step.value, financial.totalInvoiceAmount)} tone={step.tone} className="h-2.5" />
               </div>
+            ))}
+            <div className="grid grid-cols-2 gap-4 border-t border-slate-100 pt-4">
+              <Stat label="Avg invoice size" value={formatCurrency(financial.averageInvoiceAmount)} accent="border-indigo-500" />
+              <Stat
+                label="Invoices financed"
+                value={`${formatNumber(business.disbursedInvoices)} / ${formatNumber(business.totalInvoices)}`}
+                accent="border-emerald-500"
+              />
             </div>
           </div>
-        </div>
-      </section>
+        </Card>
 
-      <section className="mb-6 grid grid-cols-1 gap-4 xl:grid-cols-3">
-        <StatusPanel
-          title="Customer Status Mix"
-          icon={FiUsers}
-          items={statusBreakdowns.customers || []}
-          tone="blue"
-        />
-        <StatusPanel
-          title="Supplier Status Mix"
-          icon={FiTruck}
-          items={statusBreakdowns.suppliers || []}
-          tone="emerald"
-        />
-        <StatusPanel
-          title="Invoice Status Mix"
-          icon={FiFileText}
-          items={statusBreakdowns.invoices || []}
-          tone="indigo"
-          showAmount
-        />
-      </section>
-
-      <section className="mb-6 grid grid-cols-1 gap-4 xl:grid-cols-2">
-        <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="mb-5 flex items-center justify-between gap-3">
+        <Card>
+          <CardHeader title="Operating Rhythm" subtitle="Where open cases wait and how fast teams move them" scope="Live" right={<FiActivity className="h-5 w-5 text-slate-400" />} />
+          <div className="space-y-5 p-5">
             <div>
-              <h2 className="text-lg font-bold text-slate-950">Role Distribution</h2>
-              <p className="text-sm text-slate-500">{formatNumber(roleTotal)} mapped active user roles.</p>
+              <div className="mb-2 flex items-baseline justify-between">
+                <span className="text-sm text-slate-600">Open cases moving</span>
+                <span className="text-xl font-bold tabular-nums text-slate-900">
+                  {openCases > 0 ? formatPercent(movingRate) : '—'}
+                </span>
+              </div>
+              <ProgressBar value={movingRate} tone="emerald" className="h-2.5" />
+              <p className="mt-1.5 text-xs text-slate-500">
+                {formatNumber(openCases)} open · avg {formatMinutes(overview.averageCompletionTime)} per step
+              </p>
             </div>
-            <FiLayers className="h-5 w-5 text-blue-700" />
-          </div>
-
-          {roleDistribution.length > 0 ? (
-            <div className="space-y-4">
-              {roleDistribution.slice(0, 8).map((role, index) => {
-                const percent = roleTotal > 0 ? (role.userCount / roleTotal) * 100 : 0
-                return (
-                  <div key={`${role.roleName}-${index}`}>
-                    <div className="mb-2 flex items-center justify-between gap-3 text-sm">
-                      <span className="truncate font-semibold text-slate-800">{formatLabel(role.roleName)}</span>
-                      <span className="shrink-0 font-bold text-slate-950">{formatNumber(role.userCount)}</span>
-                    </div>
-                    <ProgressBar value={percent} tone={index % 2 === 0 ? 'blue' : 'emerald'} />
+            <div className="grid grid-cols-2 gap-4">
+              <Stat label="In team queues" value={formatNumber(overview.activeTasks)} accent="border-blue-500" />
+              <Stat label="With RM / others" value={formatNumber(overview.pendingTasks)} accent="border-amber-500" />
+              <Stat label="Steps closed" value={formatNumber(overview.completedTasks)} accent="border-emerald-500" />
+              <Stat label="No movement 3d+" value={formatNumber(overview.overdueTasks)} accent="border-rose-500" />
+            </div>
+            <div className="space-y-3 rounded-lg bg-slate-50 p-3">
+              {[
+                { label: 'L1 avg time', stats: l1l2.l1Stats, tone: 'blue' },
+                { label: 'L2 avg time', stats: l1l2.l2Stats, tone: 'indigo' },
+              ].map(({ label, stats, tone }) => (
+                <div key={label}>
+                  <div className="mb-1 flex items-center justify-between text-xs">
+                    <span className="text-slate-600">
+                      {label} <span className="text-slate-400">· {formatNumber(stats?.taskCount)} steps</span>
+                    </span>
+                    <span className="font-semibold tabular-nums text-slate-900">{formatMinutes(stats?.avgTime)}</span>
                   </div>
-                )
-              })}
+                  <ProgressBar value={percentOf(stats?.avgTime, stageMaxTime)} tone={tone} className="h-1.5" />
+                </div>
+              ))}
             </div>
-          ) : (
-            <EmptyState label="No role distribution available." />
-          )}
-        </div>
-
-        <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="mb-5 flex items-center justify-between gap-3">
-            <div>
-              <h2 className="text-lg font-bold text-slate-950">Bucket Analytics</h2>
-              <p className="text-sm text-slate-500">Task completion, pending queue, and average closure time.</p>
-            </div>
-            <FiCheckCircle className="h-5 w-5 text-emerald-700" />
           </div>
+        </Card>
+      </div>
 
-          {bucketStats.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[520px] text-left">
-                <thead className="text-xs font-semibold uppercase text-slate-500">
+      {/* Trends */}
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+        <Card className="xl:col-span-2">
+          <CardHeader title="Monthly Origination" subtitle="Invoice value (bars) and invoice count (line)" scope="Last 6 months" />
+          <div className="h-72 px-3 py-4">
+            {monthlyTrend.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart data={monthlyTrend} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                  <XAxis dataKey="label" tickLine={false} axisLine={false} fontSize={12} />
+                  <YAxis yAxisId="amount" tickFormatter={(v) => formatCurrency(v)} tickLine={false} axisLine={false} width={64} fontSize={12} />
+                  <YAxis yAxisId="count" orientation="right" allowDecimals={false} tickLine={false} axisLine={false} width={32} fontSize={12} />
+                  <Tooltip content={<TrendTooltip />} cursor={{ fill: '#f8fafc' }} />
+                  <Legend iconType="square" iconSize={10} wrapperStyle={{ fontSize: 12 }} />
+                  <Bar yAxisId="amount" dataKey="invoiceAmount" name="Invoice value" fill="#2563eb" radius={[6, 6, 0, 0]} maxBarSize={40} />
+                  <Line yAxisId="count" type="monotone" dataKey="invoices" name="Invoices" stroke="#059669" strokeWidth={2} dot={{ r: 3 }} />
+                </ComposedChart>
+              </ResponsiveContainer>
+            ) : (
+              <EmptyState label="No origination data in the last 6 months." />
+            )}
+          </div>
+        </Card>
+
+        <Card>
+          <CardHeader title="Workflow Pipeline" subtitle="Cases by workflow type and outcome" scope="All time" />
+          <div className="h-72 px-3 py-4">
+            {pipelineChart.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={pipelineChart} layout="vertical" margin={{ top: 4, right: 8, left: 8, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e2e8f0" />
+                  <XAxis type="number" allowDecimals={false} tickLine={false} axisLine={false} fontSize={12} />
+                  <YAxis type="category" dataKey="name" tickLine={false} axisLine={false} width={80} fontSize={12} />
+                  <Tooltip cursor={{ fill: '#f8fafc' }} />
+                  <Legend iconType="square" iconSize={10} wrapperStyle={{ fontSize: 12 }} />
+                  <Bar dataKey="Active" stackId="a" fill="#2563eb" maxBarSize={22} />
+                  <Bar dataKey="Completed" stackId="a" fill="#059669" maxBarSize={22} />
+                  <Bar dataKey="Rejected" stackId="a" fill="#dc2626" radius={[0, 4, 4, 0]} maxBarSize={22} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <EmptyState label="No workflow data." />
+            )}
+          </div>
+        </Card>
+      </div>
+
+      {/* Partner mix */}
+      <Card>
+        <CardHeader
+          title="Partner Sanction Mix"
+          subtitle={`${formatNumber(partnerPagination?.total)} partners, largest sanctioned limit first`}
+          scope="All time"
+        />
+        {partnerSanctions.length === 0 && partnerLoading ? (
+          <div className="flex min-h-[120px] items-center justify-center">
+            <LoadingSpinner />
+          </div>
+        ) : partnerSanctions.length > 0 ? (
+          <>
+            <div className={`overflow-x-auto transition-opacity ${partnerLoading ? 'opacity-50' : ''}`}>
+              <table className="min-w-full text-sm">
+                <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
                   <tr>
-                    <th className="pb-3">Bucket</th>
-                    <th className="pb-3 text-right">Total</th>
-                    <th className="pb-3 text-right">Pending</th>
-                    <th className="pb-3 text-right">Avg Time</th>
+                    <th className="px-5 py-2.5 text-left">Partner</th>
+                    <th className="px-4 py-2.5 text-right">Loan A/Cs</th>
+                    <th className="px-4 py-2.5 text-right">Sanctioned</th>
+                    <th className="px-4 py-2.5 text-right">Disbursed</th>
+                    <th className="w-48 px-4 py-2.5 text-left">Utilization</th>
+                    <th className="px-5 py-2.5 text-right">Share of book</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {bucketStats.slice(0, 7).map((bucket) => (
-                    <tr key={bucket.bucketName}>
-                      <td className="py-3">
-                        <p className="font-semibold text-slate-900">{formatLabel(bucket.bucketName)}</p>
-                        <p className="text-xs text-slate-500">{formatNumber(bucket.completedTasks)} completed</p>
+                  {partnerSanctions.map((partner, index) => (
+                    <tr key={`${partner.partnerCode}-${index}`} className="hover:bg-slate-50/70">
+                      <td className="px-5 py-3">
+                        <p className="font-medium text-slate-900">{partner.partnerName}</p>
+                        <p className="text-xs text-slate-500">{partner.partnerCode}</p>
                       </td>
-                      <td className="py-3 text-right text-sm font-semibold text-slate-900">{formatNumber(bucket.totalTasks)}</td>
-                      <td className="py-3 text-right text-sm text-slate-600">{formatNumber(bucket.pendingTasks)}</td>
-                      <td className="py-3 text-right text-sm text-slate-600">{formatMinutes(bucket.avgCompletionTime)}</td>
+                      <td className="px-4 py-3 text-right tabular-nums text-slate-700">
+                        {formatNumber(partner.sanctionCount)}
+                        <span className="block text-xs text-slate-400">{formatNumber(partner.activeAccounts)} active</span>
+                      </td>
+                      <td className="px-4 py-3 text-right font-medium tabular-nums text-slate-900">{formatCurrency(partner.sanctionedAmount)}</td>
+                      <td className="px-4 py-3 text-right tabular-nums text-slate-700">{formatCurrency(partner.disbursedAmount)}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <ProgressBar
+                            value={partner.utilizationRate}
+                            tone={toNumber(partner.utilizationRate) >= 90 ? 'rose' : 'amber'}
+                            className="h-1.5"
+                          />
+                          <span className="w-10 shrink-0 text-right text-xs tabular-nums text-slate-600">
+                            {formatPercent(partner.utilizationRate)}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-5 py-3 text-right tabular-nums text-slate-700">
+                        {formatPercent(percentOf(partner.sanctionedAmount, partnerBookTotal))}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-          ) : (
-            <EmptyState label="No bucket analytics available." />
-          )}
-        </div>
-      </section>
+            <TablePagination pagination={partnerPagination} onPageChange={setPartnerPage} disabled={partnerLoading} />
+          </>
+        ) : (
+          <EmptyState label="No partner sanction data available." />
+        )}
+      </Card>
 
-      <section className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-        <RankingPanel
-          title="Fastest Closers"
-          icon={FiTrendingUp}
-          items={analytics?.fastestClosers || []}
-          metric={(item) => formatMinutes(item.avgCompletionTime)}
-          tone="emerald"
-          emptyLabel="No completion-time ranking available."
-        />
-        <RankingPanel
-          title="Productivity Ranking"
-          icon={FiAward}
-          items={analytics?.productivityRanking || []}
-          metric={(item) => `${formatNumber(item.totalPoints)} pts${toNumber(item.rmPoints) ? `, ${formatNumber(item.rmPoints)} RM` : ''}`}
-          tone="blue"
-          emptyLabel="No productivity ranking available."
-        />
-        <RankingPanel
-          title="Needs Coaching"
-          icon={FiTrendingDown}
-          items={analytics?.slowestClosers || []}
-          metric={(item) => formatMinutes(item.avgCompletionTime)}
-          tone="rose"
-          emptyLabel="No slow-closure ranking available."
-        />
-      </section>
+      {/* Status mix */}
+      <div className="space-y-3">
+        <SectionTitle hint="All time">Status Mix</SectionTitle>
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+          <StatusPanel title="Customers" icon={FiUsers} items={statusBreakdowns.customers || []} tone="blue" />
+          <StatusPanel title="Suppliers" icon={FiTruck} items={statusBreakdowns.suppliers || []} tone="emerald" />
+          <StatusPanel title="Invoices" icon={FiFileText} items={statusBreakdowns.invoices || []} tone="indigo" showAmount />
+        </div>
+      </div>
+
+      {/* Team efficiency */}
+      <div className="space-y-3">
+        <SectionTitle hint="All time">Team Efficiency</SectionTitle>
+
+        <Card>
+          <CardHeader
+            title="Bucket Performance"
+            subtitle="Case steps closed, cases waiting and average time a case sits with each work bucket"
+            right={<FiClock className="h-5 w-5 text-slate-400" />}
+          />
+          {bucketStats.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  <tr>
+                    <th className="px-5 py-2.5 text-left">Bucket</th>
+                    <th className="px-4 py-2.5 text-right">Team</th>
+                    <th className="px-4 py-2.5 text-right">Steps Closed</th>
+                    <th className="px-4 py-2.5 text-right">In Queue</th>
+                    <th className="w-48 px-4 py-2.5 text-left">Share of Steps</th>
+                    <th className="px-5 py-2.5 text-right">Avg Handling</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {bucketStats.map((bucket) => {
+                    const share = percentOf(bucket.completedTasks, bucketStepTotal)
+                    return (
+                      <tr key={bucket.bucketName} className="hover:bg-slate-50/70">
+                        <td className="px-5 py-3">
+                          <p className="font-medium text-slate-900">{bucket.bucketName}</p>
+                          <p className="text-xs text-slate-500">
+                            {(bucket.roles || []).map((role) => ROLE_LABELS[role] || formatLabel(role)).join(', ') || '—'}
+                          </p>
+                        </td>
+                        <td className="px-4 py-3 text-right tabular-nums text-slate-700">{formatNumber(bucket.userCount)}</td>
+                        <td className="px-4 py-3 text-right tabular-nums text-slate-700">{formatNumber(bucket.completedTasks)}</td>
+                        <td className={`px-4 py-3 text-right tabular-nums ${toNumber(bucket.pendingTasks) > 0 ? 'font-semibold text-amber-700' : 'text-slate-500'}`}>
+                          {formatNumber(bucket.pendingTasks)}
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            <ProgressBar value={share} tone="emerald" className="h-1.5" />
+                            <span className="w-10 shrink-0 text-right text-xs tabular-nums text-slate-600">{formatPercent(share)}</span>
+                          </div>
+                        </td>
+                        <td className="px-5 py-3 text-right tabular-nums text-slate-700">{formatMinutes(bucket.avgCompletionTime)}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <EmptyState label="No bucket data available." />
+          )}
+        </Card>
+
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+          <RankingPanel
+            title="Most Productive"
+            subtitle="By points earned"
+            icon={FiAward}
+            iconClass="text-amber-500"
+            items={productivityRanking}
+            metric={(item) => `${formatNumber(item.totalPoints)} pts`}
+            emptyLabel="No productivity data yet."
+          />
+          <RankingPanel
+            title="Fastest Closers"
+            subtitle="Shortest average time a case waits with them"
+            icon={FiTrendingUp}
+            iconClass="text-emerald-600"
+            items={fastestClosers}
+            metric={(item) => formatMinutes(item.avgCompletionTime)}
+            countLabel="steps handled"
+            emptyLabel="No closure-time data yet."
+          />
+          <RankingPanel
+            title="Slowest Closers"
+            subtitle="Longest average time a case waits with them"
+            icon={FiTrendingDown}
+            iconClass="text-rose-600"
+            items={slowestClosers}
+            metric={(item) => formatMinutes(item.avgCompletionTime)}
+            countLabel="steps handled"
+            emptyLabel="No slow closers outside the fastest list."
+          />
+        </div>
+      </div>
     </div>
   )
 }

@@ -20,7 +20,14 @@ const getReportFilters = (req: Request): ReportFilters => ({
   allCases: isTruthyQueryValue(req.query.allCases),
 });
 
-const getLoanSpecificReportFilters = (req: Request): ReportFilters => {
+const getReportPageQuery = (req: Request) => ({
+  page: Number(req.query.page) || undefined,
+  limit: Number(req.query.limit) || undefined,
+  search: req.query.search ? String(req.query.search).trim() : undefined,
+  summaryOnly: isTruthyQueryValue(req.query.summaryOnly),
+});
+
+const getLoanSpecificReportFilters =(req: Request): ReportFilters => {
   const filters = getReportFilters(req);
   if (!filters.lan && !filters.allCases) {
     throw new Error('LAN is required for SCF report export');
@@ -149,36 +156,42 @@ export class LoanManagementController {
     }
   };
 
-  getPortfolioReport = async (_req: Request, res: Response): Promise<void> => {
+  getPortfolioReport = async (req: Request, res: Response): Promise<void> => {
     try {
-      const result = await loanManagementService.getPortfolioReport();
+      const result = await loanManagementService.getPortfolioReport({
+        ...getReportPageQuery(req),
+        view: req.query.view === 'pos' ? 'pos' : 'all',
+        refresh: isTruthyQueryValue(req.query.refresh),
+      });
       res.json(result);
     } catch (error: any) {
-      res.status(500).json({ success: false, message: error.message || 'Failed to fetch portfolio report' });
+      sendReportError(res, error, 'Failed to fetch portfolio report');
     }
   };
 
   getDisbursementReport = async (req: Request, res: Response): Promise<void> => {
     try {
       const result = await loanManagementService.getDisbursementReport({
+        ...getReportPageQuery(req),
         startDate: req.query.startDate as string | undefined,
         endDate: req.query.endDate as string | undefined,
       });
       res.json(result);
     } catch (error: any) {
-      res.status(500).json({ success: false, message: error.message || 'Failed to fetch disbursement report' });
+      sendReportError(res, error, 'Failed to fetch disbursement report');
     }
   };
 
   getCollectionReport = async (req: Request, res: Response): Promise<void> => {
     try {
       const result = await loanManagementService.getCollectionReport({
+        ...getReportPageQuery(req),
         startDate: req.query.startDate as string | undefined,
         endDate: req.query.endDate as string | undefined,
       });
       res.json(result);
     } catch (error: any) {
-      res.status(500).json({ success: false, message: error.message || 'Failed to fetch collection report' });
+      sendReportError(res, error, 'Failed to fetch collection report');
     }
   };
 

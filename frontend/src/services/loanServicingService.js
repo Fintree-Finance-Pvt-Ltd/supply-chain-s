@@ -43,18 +43,20 @@ const SCF_REPORT_ENDPOINTS = {
 }
 
 export const loanServicingService = {
-  getPortfolioReport: async () => {
-    const response = await api.get(API_ENDPOINTS.LOAN_SERVICING_PORTFOLIO_REPORT)
+  // Report params: page, limit, search, summaryOnly; portfolio also takes view ('all' | 'pos') and refresh,
+  // disbursements/collections take startDate and endDate.
+  getPortfolioReport: async (params = {}) => {
+    const response = await api.get(API_ENDPOINTS.LOAN_SERVICING_PORTFOLIO_REPORT, { params })
     return response.data
   },
 
-  getDisbursementReport: async (filters = {}) => {
-    const response = await api.get(`${API_ENDPOINTS.LOAN_SERVICING_DISBURSEMENT_REPORT}${buildQuery(filters)}`)
+  getDisbursementReport: async (params = {}) => {
+    const response = await api.get(API_ENDPOINTS.LOAN_SERVICING_DISBURSEMENT_REPORT, { params })
     return response.data
   },
 
-  getCollectionReport: async (filters = {}) => {
-    const response = await api.get(`${API_ENDPOINTS.LOAN_SERVICING_COLLECTION_REPORT}${buildQuery(filters)}`)
+  getCollectionReport: async (params = {}) => {
+    const response = await api.get(API_ENDPOINTS.LOAN_SERVICING_COLLECTION_REPORT, { params })
     return response.data
   },
 

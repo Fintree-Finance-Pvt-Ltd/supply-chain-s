@@ -1791,6 +1791,22 @@ const correctWorkloadMap =
       derivedTrackingRewardTaskMap[currentUserId] = (derivedTrackingRewardTaskMap[currentUserId] || 0) + 1;
     });
 
+    // Credit L1/L2 approvals were never written to reward_points, so credit users showed 0 points.
+    // Score each approval from status history (time since the case reached them), skipping any that
+    // already have a stored reward under the same task id.
+    if (!stage) {
+      const creditApprovalRows = await this.getCreditApprovalSteps(userIds, startDate, endDate);
+      creditApprovalRows.forEach(row => {
+        const currentUserId = toNumber(row.userId);
+        const taskId = `approval_${row.customerId}_${String(row.status).toLowerCase()}`;
+        if (!currentUserId || rewardedTaskKeys.has(`${currentUserId}:${taskId}`)) return;
+
+        const points = this.getReportPointsForCompletionTime(toNumber(row.minutes) || null);
+        derivedTrackingRewardMap[currentUserId] = (derivedTrackingRewardMap[currentUserId] || 0) + points;
+        derivedTrackingRewardTaskMap[currentUserId] = (derivedTrackingRewardTaskMap[currentUserId] || 0) + 1;
+      });
+    }
+
     // Get user roles
     // let rolesMap: Record<number, string[]> = {};
     // const userRoles = await this.userRoleRepository
@@ -2782,6 +2798,52 @@ let rewardMap: Record<string, number> = {};
     }
 
     return Math.max(1, Math.round((end.getTime() - start.getTime()) / 60000));
+  }
+
+  /** Credit L1/L2 approval steps by the given users, with minutes since the previous status change. */
+  private async getCreditApprovalSteps(
+    userIds: number[],
+    startDate?: Date,
+    endDate?: Date,
+  ): Promise<Array<{ userId: number; customerId: number; status: string; minutes: number }>> {
+    if (userIds.length === 0) return [];
+
+    const params: any[] = [userIds];
+    let dateFilter = '';
+    if (startDate) {
+      dateFilter += ' AND step.createdAt >= ?';
+      params.push(startDate);
+    }
+    if (endDate) {
+      dateFilter += ' AND step.createdAt <= ?';
+      params.push(endDate);
+    }
+
+    return AppDataSource.query(
+      `
+      SELECT step.changedBy AS userId,
+             step.customerId,
+             step.status,
+             TIMESTAMPDIFF(MINUTE, step.previousAt, step.createdAt) AS minutes
+      FROM (
+        SELECT history.changedBy,
+               history.customerId,
+               history.status,
+               history.previousStatus,
+               history.createdAt,
+               LAG(history.createdAt) OVER (PARTITION BY history.caseWorkflowId ORDER BY history.createdAt, history.id) AS previousAt,
+               LAG(history.status) OVER (PARTITION BY history.caseWorkflowId ORDER BY history.createdAt, history.id) AS lastStatus
+        FROM case_status_history history
+        WHERE history.caseWorkflowId IS NOT NULL
+      ) step
+      WHERE step.changedBy IN (?)
+        AND LOWER(step.status) IN ('credit_l1_approved', 'credit_l2_approved')
+        AND step.previousAt IS NOT NULL
+        AND (step.lastStatus IS NULL OR step.lastStatus <> step.status)
+        ${dateFilter}
+      `,
+      params,
+    );
   }
 
   private getReportPointsForCompletionTime(durationMinutes: number | null): number {

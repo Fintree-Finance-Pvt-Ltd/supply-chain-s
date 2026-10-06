@@ -99,6 +99,29 @@ type InterestTenureBreakup = {
   remainingInterest: number;
 };
 
+type ReportPageOptions = {
+  page?: number;
+  limit?: number;
+  search?: string;
+  // Skip the row query when the caller only needs totals/charts.
+  summaryOnly?: boolean;
+};
+
+type CashReportFilters = ReportPageOptions & {
+  startDate?: string;
+  endDate?: string;
+};
+
+type PortfolioReportOptions = ReportPageOptions & {
+  view?: 'all' | 'pos';
+  refresh?: boolean;
+};
+
+const REPORT_DEFAULT_PAGE_SIZE = 10;
+const REPORT_MAX_PAGE_SIZE = 100;
+const REPORT_DAILY_POINTS = 14;
+const SNAPSHOT_REFRESH_BATCH_SIZE = 10;
+
 export class LoanManagementService {
   private loanAccountRepository = AppDataSource.getRepository(LoanAccount);
   private invoiceRepository = AppDataSource.getRepository(Invoice);
@@ -110,6 +133,9 @@ export class LoanManagementService {
   private snapshotRepository = AppDataSource.getRepository(LoanAccountSnapshot);
   private crc32Table: number[] | null = null;
   private customerRepository = AppDataSource.getRepository(Customer);
+  // Snapshots are kept current by every posting; a full re-derive is only needed once a day for accrual/DPD.
+  private snapshotsRefreshedOn: string | null = null;
+  private snapshotRefreshInFlight: Promise<void> | null = null;
   private toNumber(value: unknown): number {
     const parsed = Number(value || 0);
     return Number.isFinite(parsed) ? parsed : 0;
@@ -3197,56 +3223,247 @@ private async getScfCollectionRows(filters?: ScfReportFilters,): Promise<any[]> 
   ]);
 }
 
-  async getPortfolioReport(): Promise<any> {
-    const loanAccounts = await this.loanAccountRepository.find();
-    await Promise.all(loanAccounts.map(loanAccount => this.refreshSnapshot(loanAccount.id)));
+  private getReportPage(options?: ReportPageOptions): { page: number; limit: number; skip: number } {
+    const page = Math.max(1, Math.floor(this.toNumber(options?.page)) || 1);
+    const requestedLimit = Math.floor(this.toNumber(options?.limit)) || REPORT_DEFAULT_PAGE_SIZE;
+    const limit = Math.min(Math.max(requestedLimit, 1), REPORT_MAX_PAGE_SIZE);
+    return { page, limit, skip: (page - 1) * limit };
+  }
 
-    const snapshots = await this.snapshotRepository.find({ relations: ['loanAccount'] });
+  private buildReportPagination(page: number, limit: number, total: number) {
+    return { page, limit, total, totalPages: Math.max(1, Math.ceil(total / limit)) };
+  }
+
+  private toReportDate(value: string | undefined, field: string): string | null {
+    if (!value) return null;
+    const date = this.toDateOnly(value);
+    if (isNaN(date.getTime())) throw new Error(`${field} must be a valid date`);
+    return this.formatDateOnly(date);
+  }
+
+  private toLikePattern(search?: string): string | null {
+    const text = String(search || '').trim();
+    return text ? `%${text.replace(/[\\%_]/g, (char) => `\\${char}`)}%` : null;
+  }
+
+  /**
+   * Re-derives every snapshot at most once per day (interest accrual and DPD move with the calendar);
+   * accounts that have never been snapshotted are always picked up so they appear in the book.
+   */
+  private async ensureSnapshotsFresh(force = false): Promise<void> {
+    const today = this.formatDateOnly(new Date());
+
+    if (force || this.snapshotsRefreshedOn !== today || this.snapshotRefreshInFlight) {
+      if (!this.snapshotRefreshInFlight) {
+        this.snapshotRefreshInFlight = (async () => {
+          const accounts = await this.loanAccountRepository.find({ select: { id: true } });
+          for (let index = 0; index < accounts.length; index += SNAPSHOT_REFRESH_BATCH_SIZE) {
+            const batch = accounts.slice(index, index + SNAPSHOT_REFRESH_BATCH_SIZE);
+            await Promise.all(batch.map(account => this.refreshSnapshot(account.id)));
+          }
+          this.snapshotsRefreshedOn = today;
+        })().finally(() => {
+          this.snapshotRefreshInFlight = null;
+        });
+      }
+      await this.snapshotRefreshInFlight;
+      return;
+    }
+
+    const missing = await this.loanAccountRepository
+      .createQueryBuilder('loan')
+      .leftJoin(LoanAccountSnapshot, 'snapshot', 'snapshot.loanAccountId = loan.id')
+      .select('loan.id', 'id')
+      .where('snapshot.id IS NULL')
+      .getRawMany();
+    for (const row of missing) {
+      await this.refreshSnapshot(this.toNumber(row.id));
+    }
+  }
+
+  async getPortfolioReport(options: PortfolioReportOptions = {}): Promise<any> {
+    await this.ensureSnapshotsFresh(Boolean(options.refresh));
+
+    // Snapshots of deleted loan accounts are left behind; only report accounts that still exist.
+    const snapshotQuery = () =>
+      this.snapshotRepository
+        .createQueryBuilder('snapshot')
+        .innerJoin('snapshot.loanAccount', 'loan');
+
+    const [totalsRaw, statusRows] = await Promise.all([
+      snapshotQuery()
+        .select('COUNT(*)', 'accounts')
+        .addSelect('SUM(CASE WHEN snapshot.totalOutstanding > 0 THEN 1 ELSE 0 END)', 'posAccounts')
+        .addSelect('SUM(snapshot.sanctionedAmount)', 'sanctionedAmount')
+        .addSelect('SUM(snapshot.totalDisbursed)', 'totalDisbursed')
+        .addSelect('SUM(snapshot.principalOutstanding)', 'principalOutstanding')
+        .addSelect('SUM(snapshot.totalOutstanding)', 'totalOutstanding')
+        .addSelect('SUM(snapshot.totalCollected)', 'totalCollected')
+        .addSelect('SUM(snapshot.overdueAmount)', 'overdueAmount')
+        .addSelect('SUM(snapshot.utilizedLimit)', 'utilizedLimit')
+        .addSelect('SUM(snapshot.unutilizedLimit)', 'unutilizedLimit')
+        .getRawOne(),
+      snapshotQuery()
+        .select('snapshot.status', 'status')
+        .addSelect('COUNT(*)', 'accounts')
+        .addSelect('SUM(snapshot.principalOutstanding)', 'principalOutstanding')
+        .addSelect('SUM(snapshot.totalOutstanding)', 'totalOutstanding')
+        .groupBy('snapshot.status')
+        .getRawMany(),
+    ]);
+
+    const { page, limit, skip } = this.getReportPage(options);
+    const rowsQuery = snapshotQuery();
+    const pattern = this.toLikePattern(options.search);
+    if (pattern) rowsQuery.andWhere('snapshot.lan LIKE :pattern', { pattern });
+    if (options.view === 'pos') {
+      rowsQuery.andWhere('snapshot.totalOutstanding > 0').orderBy('snapshot.totalOutstanding', 'DESC');
+    } else {
+      rowsQuery.orderBy('snapshot.lan', 'ASC');
+    }
+    rowsQuery.addOrderBy('snapshot.id', 'ASC');
+
+    const [rows, total]: [LoanAccountSnapshot[], number] = options.summaryOnly
+      ? [[], 0]
+      : await rowsQuery.skip(skip).take(limit).getManyAndCount();
+
     return {
       success: true,
       data: {
-        accounts: snapshots.length,
-        sanctionedAmount: this.roundMoney(snapshots.reduce((sum, row) => sum + this.toNumber(row.sanctionedAmount), 0)),
-        totalDisbursed: this.roundMoney(snapshots.reduce((sum, row) => sum + this.toNumber(row.totalDisbursed), 0)),
-        totalOutstanding: this.roundMoney(snapshots.reduce((sum, row) => sum + this.toNumber(row.totalOutstanding), 0)),
-        totalCollected: this.roundMoney(snapshots.reduce((sum, row) => sum + this.toNumber(row.totalCollected), 0)),
-        overdueAmount: this.roundMoney(snapshots.reduce((sum, row) => sum + this.toNumber(row.overdueAmount), 0)),
-        rows: snapshots,
+        accounts: this.toNumber(totalsRaw?.accounts),
+        posAccounts: this.toNumber(totalsRaw?.posAccounts),
+        sanctionedAmount: this.roundMoney(this.toNumber(totalsRaw?.sanctionedAmount)),
+        totalDisbursed: this.roundMoney(this.toNumber(totalsRaw?.totalDisbursed)),
+        principalOutstanding: this.roundMoney(this.toNumber(totalsRaw?.principalOutstanding)),
+        totalOutstanding: this.roundMoney(this.toNumber(totalsRaw?.totalOutstanding)),
+        totalCollected: this.roundMoney(this.toNumber(totalsRaw?.totalCollected)),
+        overdueAmount: this.roundMoney(this.toNumber(totalsRaw?.overdueAmount)),
+        utilizedLimit: this.roundMoney(this.toNumber(totalsRaw?.utilizedLimit)),
+        unutilizedLimit: this.roundMoney(this.toNumber(totalsRaw?.unutilizedLimit)),
+        statusBreakdown: statusRows
+          .map(row => ({
+            status: row.status || 'UNKNOWN',
+            accounts: this.toNumber(row.accounts),
+            principalOutstanding: this.roundMoney(this.toNumber(row.principalOutstanding)),
+            totalOutstanding: this.roundMoney(this.toNumber(row.totalOutstanding)),
+          }))
+          .sort((a, b) => b.principalOutstanding - a.principalOutstanding),
+        rows,
+        pagination: this.buildReportPagination(page, limit, total),
       },
     };
   }
 
-  async getDisbursementReport(filters?: { startDate?: string; endDate?: string }): Promise<any> {
-    const disbursements = await this.disbursementRepository.find({
-      where: { status: DISBURSEMENT_STATUS.POSTED },
-      relations: ['invoice', 'loanAccount', 'customer'],
-      order: { disbursementDate: 'DESC', id: 'DESC' },
-    });
-    const rows = this.filterByDateRange(disbursements, 'disbursementDate', filters);
+  async getDisbursementReport(filters: CashReportFilters = {}): Promise<any> {
+    const startDate = this.toReportDate(filters.startDate, 'startDate');
+    const endDate = this.toReportDate(filters.endDate, 'endDate');
+
+    const baseQuery = () => {
+      const query = this.disbursementRepository
+        .createQueryBuilder('disbursement')
+        .where('disbursement.status = :status', { status: DISBURSEMENT_STATUS.POSTED });
+      if (startDate) query.andWhere('disbursement.disbursementDate >= :startDate', { startDate });
+      if (endDate) query.andWhere('disbursement.disbursementDate <= :endDate', { endDate });
+      return query;
+    };
+
+    const [totalsRaw, dailyRows] = await Promise.all([
+      baseQuery()
+        .select('COUNT(*)', 'count')
+        .addSelect('SUM(disbursement.disbursementAmount)', 'totalAmount')
+        .getRawOne(),
+      baseQuery()
+        .select("DATE_FORMAT(disbursement.disbursementDate, '%Y-%m-%d')", 'valueDate')
+        .addSelect('SUM(disbursement.disbursementAmount)', 'amount')
+        .groupBy("DATE_FORMAT(disbursement.disbursementDate, '%Y-%m-%d')")
+        .orderBy('valueDate', 'DESC')
+        .limit(REPORT_DAILY_POINTS)
+        .getRawMany(),
+    ]);
+
+    const { page, limit, skip } = this.getReportPage(filters);
+    const rowsQuery = baseQuery().leftJoinAndSelect('disbursement.invoice', 'invoice');
+    const pattern = this.toLikePattern(filters.search);
+    if (pattern) rowsQuery.andWhere('disbursement.lan LIKE :pattern', { pattern });
+
+    const [rows, total]: [LoanDisbursement[], number] = filters.summaryOnly
+      ? [[], 0]
+      : await rowsQuery
+        .orderBy('disbursement.disbursementDate', 'DESC')
+        .addOrderBy('disbursement.id', 'DESC')
+        .skip(skip)
+        .take(limit)
+        .getManyAndCount();
+
     return {
       success: true,
       data: {
-        totalAmount: this.roundMoney(rows.reduce((sum, row) => sum + this.toNumber(row.disbursementAmount), 0)),
-        count: rows.length,
+        totalAmount: this.roundMoney(this.toNumber(totalsRaw?.totalAmount)),
+        count: this.toNumber(totalsRaw?.count),
+        daily: dailyRows
+          .map(row => ({ date: row.valueDate, amount: this.roundMoney(this.toNumber(row.amount)) }))
+          .reverse(),
         rows,
+        pagination: this.buildReportPagination(page, limit, total),
       },
     };
   }
 
-  async getCollectionReport(filters?: { startDate?: string; endDate?: string }): Promise<any> {
-    const repayments = await this.repaymentRepository.find({
-      where: { status: Not(In([REPAYMENT_STATUS.REVERSED])) },
-      order: { repaymentDate: 'DESC', id: 'DESC' },
-    });
-    const rows = this.filterByDateRange(repayments, 'repaymentDate', filters);
+  async getCollectionReport(filters: CashReportFilters = {}): Promise<any> {
+    const startDate = this.toReportDate(filters.startDate, 'startDate');
+    const endDate = this.toReportDate(filters.endDate, 'endDate');
+
+    const baseQuery = () => {
+      const query = this.repaymentRepository
+        .createQueryBuilder('repayment')
+        .where('repayment.status NOT IN (:...excluded)', { excluded: [REPAYMENT_STATUS.REVERSED] });
+      if (startDate) query.andWhere('repayment.repaymentDate >= :startDate', { startDate });
+      if (endDate) query.andWhere('repayment.repaymentDate <= :endDate', { endDate });
+      return query;
+    };
+
+    const [totalsRaw, dailyRows] = await Promise.all([
+      baseQuery()
+        .select('COUNT(*)', 'count')
+        .addSelect('SUM(repayment.amount)', 'totalAmount')
+        .addSelect('SUM(repayment.allocatedAmount)', 'allocatedAmount')
+        .addSelect('SUM(repayment.unappliedAmount)', 'unappliedAmount')
+        .getRawOne(),
+      baseQuery()
+        .select("DATE_FORMAT(repayment.repaymentDate, '%Y-%m-%d')", 'valueDate')
+        .addSelect('SUM(repayment.amount)', 'amount')
+        .groupBy("DATE_FORMAT(repayment.repaymentDate, '%Y-%m-%d')")
+        .orderBy('valueDate', 'DESC')
+        .limit(REPORT_DAILY_POINTS)
+        .getRawMany(),
+    ]);
+
+    const { page, limit, skip } = this.getReportPage(filters);
+    const rowsQuery = baseQuery();
+    const pattern = this.toLikePattern(filters.search);
+    if (pattern) rowsQuery.andWhere('repayment.lan LIKE :pattern', { pattern });
+
+    const [rows, total]: [Repayment[], number] = filters.summaryOnly
+      ? [[], 0]
+      : await rowsQuery
+        .orderBy('repayment.repaymentDate', 'DESC')
+        .addOrderBy('repayment.id', 'DESC')
+        .skip(skip)
+        .take(limit)
+        .getManyAndCount();
+
     return {
       success: true,
       data: {
-        totalAmount: this.roundMoney(rows.reduce((sum, row) => sum + this.toNumber(row.amount), 0)),
-        allocatedAmount: this.roundMoney(rows.reduce((sum, row) => sum + this.toNumber(row.allocatedAmount), 0)),
-        unappliedAmount: this.roundMoney(rows.reduce((sum, row) => sum + this.toNumber(row.unappliedAmount), 0)),
-        count: rows.length,
+        totalAmount: this.roundMoney(this.toNumber(totalsRaw?.totalAmount)),
+        allocatedAmount: this.roundMoney(this.toNumber(totalsRaw?.allocatedAmount)),
+        unappliedAmount: this.roundMoney(this.toNumber(totalsRaw?.unappliedAmount)),
+        count: this.toNumber(totalsRaw?.count),
+        daily: dailyRows
+          .map(row => ({ date: row.valueDate, amount: this.roundMoney(this.toNumber(row.amount)) }))
+          .reverse(),
         rows,
+        pagination: this.buildReportPagination(page, limit, total),
       },
     };
   }

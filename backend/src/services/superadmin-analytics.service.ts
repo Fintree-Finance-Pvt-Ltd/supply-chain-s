@@ -11,6 +11,7 @@ import { Invoice } from '../entities/Invoice';
 import { CreditSanction } from '../entities/CreditSanction';
 import { LoanAccount } from '../entities/LoanAccount';
 import { CaseWorkflow } from '../entities/CaseWorkflow';
+import { DISBURSEMENT_STATUS, LoanAccountSnapshot, LoanDisbursement } from '../entities/LoanManagement';
 import { ObjectLiteral, Repository } from 'typeorm';
 import { taskTimeTrackingService } from './task-time-tracking.service';
 import { userPerformanceService } from './user-performance.service';
@@ -43,7 +44,53 @@ const TOP_PERFORMER_EXCLUDED_ROLES = new Set([
   'superadmin',
 ]);
 
-const isTopPerformerUser = (roles: string[]): boolean =>
+// Booked invoices move to ACTIVE once the loan is posted; DISBURSED is the legacy status for the same state.
+const FINANCED_INVOICE_STATUSES = ['ACTIVE', 'DISBURSED'];
+const REJECTED_INVOICE_STATUSES = ['REJECTED', 'REJECTED_BY_CUSTOMER'];
+const NON_PIPELINE_INVOICE_STATUSES = ['DRAFT', ...FINANCED_INVOICE_STATUSES, ...REJECTED_INVOICE_STATUSES];
+
+const PARTNER_PAGE_MAX = 50;
+
+// Team-efficiency panels are derived from case_status_history: task_time_tracking rows are never
+// closed (completion is looked up by the assignee, but another team member usually acts on the case).
+const MIN_ACTIONS_FOR_CLOSER_RANKING = 3;
+// An open case with no status movement for this long is reported as stuck.
+const STALE_CASE_DAYS = 3;
+
+// currentApproverRoleName uses a few short aliases that differ from roles.name.
+const APPROVER_ROLE_ALIASES: Record<string, string> = {
+  ops_l1: 'operations_team_l1',
+  ops_l2: 'operations_team_l2',
+  ops_head: 'operations_head',
+  credit_l1: 'credit_team_l1',
+  credit_l2: 'credit_team_l2',
+  rm: 'relationship_manager',
+};
+
+const L1_ROLES = new Set(['credit_team_l1', 'operations_team_l1']);
+const L2_ROLES = new Set(['credit_team_l2', 'operations_team_l2']);
+
+interface ActivityUser {
+  userId: number;
+  userName: string;
+  roles: string[];
+  buckets: string[];
+  actions: number;
+  totalMinutes: number;
+}
+
+interface WorkflowActivity {
+  users: ActivityUser[];
+  bucketNames: string[];
+  bucketUserCounts: Map<string, number>;
+  bucketRoles: Map<string, string[]>;
+  openByBucket: Map<string, number>;
+  openCases: number;
+  openWithTeams: number;
+  staleCases: number;
+}
+
+const isTopPerformerUser =(roles: string[]): boolean =>
   roles.some(role => TOP_PERFORMER_ROLES.has(role)) &&
   !roles.some(role => TOP_PERFORMER_EXCLUDED_ROLES.has(role));
 
@@ -85,6 +132,20 @@ const getMonthLabel = (date: Date): string => {
   return date.toLocaleString('en-US', { month: 'short', year: '2-digit' });
 };
 
+const toDateKey = (date: Date): string => {
+  const month = `${date.getMonth() + 1}`.padStart(2, '0');
+  const day = `${date.getDate()}`.padStart(2, '0');
+  return `${date.getFullYear()}-${month}-${day}`;
+};
+
+/** Start of the window covering the last `days` calendar days, today included. */
+const getPeriodStart = (days: number): Date => {
+  const since = new Date();
+  since.setHours(0, 0, 0, 0);
+  since.setDate(since.getDate() - (days - 1));
+  return since;
+};
+
 /**
  * SUPERADMIN Analytics Dashboard Service
  * Provides comprehensive analytics for SUPERADMIN visibility
@@ -102,6 +163,7 @@ export class SuperAdminAnalyticsService {
   private creditSanctionRepository: Repository<CreditSanction>;
   private loanAccountRepository: Repository<LoanAccount>;
   private caseWorkflowRepository: Repository<CaseWorkflow>;
+  private disbursementRepository: Repository<LoanDisbursement>;
 
   constructor() {
     this.userRepository = AppDataSource.getRepository(User);
@@ -116,15 +178,14 @@ export class SuperAdminAnalyticsService {
     this.creditSanctionRepository = AppDataSource.getRepository(CreditSanction);
     this.loanAccountRepository = AppDataSource.getRepository(LoanAccount);
     this.caseWorkflowRepository = AppDataSource.getRepository(CaseWorkflow);
+    this.disbursementRepository = AppDataSource.getRepository(LoanDisbursement);
   }
 
   private getPerformancePeriodFilters(period: DashboardPeriod): PerformanceFilters {
     if (period === 'all') return {};
 
     const normalizedDays = Math.max(1, Math.min(period, 365));
-    const startDate = new Date();
-    startDate.setDate(startDate.getDate() - normalizedDays);
-    return { startDate };
+    return { startDate: getPeriodStart(normalizedDays) };
   }
 
   private async getPerformanceRanking(period: DashboardPeriod): Promise<UserPerformanceSummary[]> {
@@ -193,9 +254,123 @@ export class SuperAdminAnalyticsService {
   }
 
   /**
+   * Who handled which case steps and how long each took, plus where open cases are waiting.
+   *
+   * A step's handling time is the gap between the previous status change on the same case and the
+   * user's own change, i.e. how long the case sat with them. Re-saves of an unchanged status are ignored.
+   * Only users in a work bucket (credit / ops / finance queues) are counted as team members.
+   */
+  async getWorkflowActivity(): Promise<WorkflowActivity> {
+    const staleBefore = new Date();
+    staleBefore.setDate(staleBefore.getDate() - STALE_CASE_DAYS);
+
+    const [stepRows, memberRows, bucketMappings, openRows] = await Promise.all([
+      AppDataSource.query(`
+        SELECT step.changedBy AS userId,
+               COUNT(*) AS actions,
+               SUM(TIMESTAMPDIFF(MINUTE, step.previousAt, step.createdAt)) AS totalMinutes
+        FROM (
+          SELECT history.changedBy,
+                 history.status,
+                 history.createdAt,
+                 LAG(history.createdAt) OVER (PARTITION BY history.caseWorkflowId ORDER BY history.createdAt, history.id) AS previousAt,
+                 LAG(history.status) OVER (PARTITION BY history.caseWorkflowId ORDER BY history.createdAt, history.id) AS previousStatus
+          FROM case_status_history history
+          WHERE history.caseWorkflowId IS NOT NULL
+        ) step
+        WHERE step.previousAt IS NOT NULL
+          AND step.changedBy IS NOT NULL
+          AND step.status <> step.previousStatus
+        GROUP BY step.changedBy
+      `),
+      AppDataSource.query(`
+        SELECT member.id AS userId, member.name AS userName, LOWER(role.name) AS roleName, mapping.bucketName
+        FROM user_roles userRole
+        INNER JOIN users member ON member.id = userRole.userId
+        INNER JOIN roles role ON role.id = userRole.roleId
+        LEFT JOIN task_bucket_mapping mapping ON mapping.roleId = userRole.roleId
+        WHERE userRole.isActive = 1
+      `),
+      this.bucketMappingRepository.find({ relations: ['role'], order: { priority: 'ASC', id: 'ASC' } }),
+      AppDataSource.query(
+        `
+        SELECT LOWER(workflow.currentApproverRoleName) AS approverRole,
+               COUNT(*) AS openCases,
+               SUM(CASE WHEN COALESCE(lastMove.lastAt, workflow.updatedAt) < ? THEN 1 ELSE 0 END) AS staleCases
+        FROM case_workflows workflow
+        LEFT JOIN (
+          SELECT caseWorkflowId, MAX(createdAt) AS lastAt
+          FROM case_status_history
+          GROUP BY caseWorkflowId
+        ) lastMove ON lastMove.caseWorkflowId = workflow.id
+        WHERE workflow.isCompleted = 0 AND workflow.isRejected = 0
+        GROUP BY LOWER(workflow.currentApproverRoleName)
+        `,
+        [staleBefore]
+      ),
+    ]);
+
+    const bucketNames = Array.from(new Set(bucketMappings.map(mapping => mapping.bucketName)));
+    const bucketByRole = new Map<string, string>();
+    const bucketRoles = new Map<string, string[]>();
+    bucketMappings.forEach(mapping => {
+      const roleName = mapping.role?.name?.toLowerCase();
+      if (roleName && !bucketByRole.has(roleName)) bucketByRole.set(roleName, mapping.bucketName);
+      if (roleName) bucketRoles.set(mapping.bucketName, [...(bucketRoles.get(mapping.bucketName) || []), roleName]);
+    });
+
+    const members = new Map<number, { userName: string; roles: Set<string>; buckets: Set<string> }>();
+    memberRows.forEach((row: any) => {
+      const userId = toNumber(row.userId);
+      const member = members.get(userId) || { userName: row.userName || 'Unknown', roles: new Set(), buckets: new Set() };
+      member.roles.add(row.roleName);
+      if (row.bucketName) member.buckets.add(row.bucketName);
+      members.set(userId, member);
+    });
+
+    const bucketUserCounts = new Map<string, number>();
+    members.forEach(member => {
+      member.buckets.forEach(bucket => bucketUserCounts.set(bucket, (bucketUserCounts.get(bucket) || 0) + 1));
+    });
+
+    const users: ActivityUser[] = stepRows
+      .map((row: any) => {
+        const userId = toNumber(row.userId);
+        const member = members.get(userId);
+        return {
+          userId,
+          userName: member?.userName || 'Unknown',
+          roles: Array.from(member?.roles || []),
+          buckets: Array.from(member?.buckets || []),
+          actions: toNumber(row.actions),
+          totalMinutes: toNumber(row.totalMinutes),
+        };
+      })
+      .filter((user: ActivityUser) => user.buckets.length > 0);
+
+    const openByBucket = new Map<string, number>();
+    let openCases = 0;
+    let openWithTeams = 0;
+    let staleCases = 0;
+    openRows.forEach((row: any) => {
+      const count = toNumber(row.openCases);
+      openCases += count;
+      staleCases += toNumber(row.staleCases);
+      const approverRole = String(row.approverRole || '');
+      const bucket = bucketByRole.get(APPROVER_ROLE_ALIASES[approverRole] || approverRole);
+      if (bucket) {
+        openWithTeams += count;
+        openByBucket.set(bucket, (openByBucket.get(bucket) || 0) + count);
+      }
+    });
+
+    return { users, bucketNames, bucketUserCounts, bucketRoles, openByBucket, openCases, openWithTeams, staleCases };
+  }
+
+  /**
    * Get complete dashboard overview
    */
-  async getDashboardOverview(): Promise<{
+  async getDashboardOverview(activity?: WorkflowActivity): Promise<{
     totalUsers: number;
     activeTasks: number;
     completedTasks: number;
@@ -203,27 +378,25 @@ export class SuperAdminAnalyticsService {
     averageCompletionTime: number | null;
     overdueTasks: number;
   }> {
-    const userCount = await this.userRepository.count({
-      where: { isActive: true },
-    });
+    const [userCount, data] = await Promise.all([
+      this.userRepository.count({ where: { isActive: true } }),
+      activity ? Promise.resolve(activity) : this.getWorkflowActivity(),
+    ]);
 
-    const taskStats = await this.taskTrackingRepository
-      .createQueryBuilder('tracking')
-      .select('COUNT(*)', 'total')
-      .addSelect('SUM(CASE WHEN tracking.status = \'completed\' THEN 1 ELSE 0 END)', 'completed')
-      .addSelect('SUM(CASE WHEN tracking.status = \'pending\' THEN 1 ELSE 0 END)', 'pending')
-      .addSelect('SUM(CASE WHEN tracking.status = \'in_progress\' THEN 1 ELSE 0 END)', 'active')
-      .addSelect('SUM(CASE WHEN tracking.isOverdue = true THEN 1 ELSE 0 END)', 'overdue')
-      .addSelect('AVG(tracking.totalCompletionTimeMinutes)', 'avgTime')
-      .getRawOne();
+    const completedSteps = data.users.reduce((sum, user) => sum + user.actions, 0);
+    const totalMinutes = data.users.reduce((sum, user) => sum + user.totalMinutes, 0);
 
     return {
       totalUsers: userCount,
-      activeTasks: parseInt(taskStats?.active) || 0,
-      completedTasks: parseInt(taskStats?.completed) || 0,
-      pendingTasks: parseInt(taskStats?.pending) || 0,
-      averageCompletionTime: taskStats?.avgTime ? parseFloat(taskStats.avgTime) : null,
-      overdueTasks: parseInt(taskStats?.overdue) || 0,
+      // Open cases sitting in a credit / ops / finance queue.
+      activeTasks: data.openWithTeams,
+      // Open cases waiting on someone outside those queues (RM, MD, customer…).
+      pendingTasks: data.openCases - data.openWithTeams,
+      // Case steps closed by team members.
+      completedTasks: completedSteps,
+      averageCompletionTime: completedSteps > 0 ? totalMinutes / completedSteps : null,
+      // Open cases with no movement for STALE_CASE_DAYS.
+      overdueTasks: data.staleCases,
     };
   }
 
@@ -301,61 +474,48 @@ export class SuperAdminAnalyticsService {
   /**
    * Get bucket performance stats
    */
-  async getBucketPerformanceStats(): Promise<Array<{
+  async getBucketPerformanceStats(activity?: WorkflowActivity): Promise<Array<{
     bucketName: string;
     totalTasks: number;
     completedTasks: number;
     pendingTasks: number;
     avgCompletionTime: number | null;
     userCount: number;
+    roles: string[];
   }>> {
-    const bucketMappings = await this.bucketMappingRepository.find({
-      relations: ['role'],
+    const data = activity || (await this.getWorkflowActivity());
+
+    const closed = new Map<string, { actions: number; minutes: number }>();
+    data.users.forEach(user => {
+      // A user in several buckets is counted once, under the first bucket in priority order.
+      const bucket = data.bucketNames.find(name => user.buckets.includes(name));
+      if (!bucket) return;
+      const current = closed.get(bucket) || { actions: 0, minutes: 0 };
+      current.actions += user.actions;
+      current.minutes += user.totalMinutes;
+      closed.set(bucket, current);
     });
 
-    const results = [];
+    return data.bucketNames.map(bucketName => {
+      const completedTasks = closed.get(bucketName)?.actions || 0;
+      const pendingTasks = data.openByBucket.get(bucketName) || 0;
 
-    for (const mapping of bucketMappings) {
-      const tasks = await this.taskTrackingRepository.find({
-        where: { bucket: mapping.bucketName },
-      });
-
-      const completedTasks = tasks.filter(t => t.status === 'completed');
-      const pendingTasks = tasks.filter(t => t.status === 'pending');
-
-      const totalTimes = completedTasks
-        .map(t => t.totalCompletionTimeMinutes)
-        .filter(t => t !== null) as number[];
-
-      const avgTime = totalTimes.length > 0
-        ? totalTimes.reduce((a, b) => a + b, 0) / totalTimes.length
-        : null;
-
-      // Count users in this bucket
-      const userCount = await this.userRoleRepository
-        .createQueryBuilder('ur')
-        .select('COUNT(DISTINCT ur.userId)', 'count')
-        .where('ur.roleId = :roleId', { roleId: mapping.roleId })
-        .andWhere('ur.isActive = true')
-        .getRawOne();
-
-      results.push({
-        bucketName: mapping.bucketName,
-        totalTasks: tasks.length,
-        completedTasks: completedTasks.length,
-        pendingTasks: pendingTasks.length,
-        avgCompletionTime: avgTime,
-        userCount: parseInt(userCount?.count) || 0,
-      });
-    }
-
-    return results;
+      return {
+        bucketName,
+        totalTasks: completedTasks + pendingTasks,
+        completedTasks,
+        pendingTasks,
+        avgCompletionTime: completedTasks > 0 ? (closed.get(bucketName)?.minutes || 0) / completedTasks : null,
+        userCount: data.bucketUserCounts.get(bucketName) || 0,
+        roles: data.bucketRoles.get(bucketName) || [],
+      };
+    });
   }
 
   /**
    * Get L1 vs L2 processing comparison
    */
-  async getL1L2ProcessingComparison(): Promise<{
+  async getL1L2ProcessingComparison(activity?: WorkflowActivity): Promise<{
     l1Stats: {
       avgTime: number | null;
       taskCount: number;
@@ -365,24 +525,25 @@ export class SuperAdminAnalyticsService {
       taskCount: number;
     };
   }> {
-    const result = await this.taskTrackingRepository
-      .createQueryBuilder('tracking')
-      .select('AVG(tracking.l1ProcessingTimeMinutes)', 'avgL1Time')
-      .addSelect('COUNT(CASE WHEN tracking.l1ProcessingTimeMinutes IS NOT NULL THEN 1 END)', 'l1Tasks')
-      .addSelect('AVG(tracking.l2ProcessingTimeMinutes)', 'avgL2Time')
-      .addSelect('COUNT(CASE WHEN tracking.l2ProcessingTimeMinutes IS NOT NULL THEN 1 END)', 'l2Tasks')
-      .getRawOne();
+    const data = activity || (await this.getWorkflowActivity());
+    const totals = { l1: { actions: 0, minutes: 0 }, l2: { actions: 0, minutes: 0 } };
 
-    return {
-      l1Stats: {
-        avgTime: result.avgL1Time ? parseFloat(result.avgL1Time) : null,
-        taskCount: parseInt(result.l1Tasks) || 0,
-      },
-      l2Stats: {
-        avgTime: result.avgL2Time ? parseFloat(result.avgL2Time) : null,
-        taskCount: parseInt(result.l2Tasks) || 0,
-      },
-    };
+    data.users.forEach(user => {
+      // Anyone holding an L2 role acts as the L2 checker; otherwise an L1 role makes them L1.
+      const level = user.roles.some(role => L2_ROLES.has(role))
+        ? 'l2'
+        : user.roles.some(role => L1_ROLES.has(role)) ? 'l1' : null;
+      if (!level) return;
+      totals[level].actions += user.actions;
+      totals[level].minutes += user.totalMinutes;
+    });
+
+    const toStats = ({ actions, minutes }: { actions: number; minutes: number }) => ({
+      avgTime: actions > 0 ? minutes / actions : null,
+      taskCount: actions,
+    });
+
+    return { l1Stats: toStats(totals.l1), l2Stats: toStats(totals.l2) };
   }
 
   /**
@@ -433,41 +594,43 @@ export class SuperAdminAnalyticsService {
   /**
    * Get ranking: Fastest Closers
    */
-  async getFastestClosersRanking(limit: number = 10): Promise<Array<{
-    rank: number;
-    userId: number;
-    userName: string;
-    avgCompletionTime: number;
-    tasksCompleted: number;
-  }>> {
-    const fastest = await taskTimeTrackingService.getFastestClosers(limit);
-    return fastest.map((item, index) => ({
-      rank: index + 1,
-      userId: item.userId,
-      userName: item.userName,
-      avgCompletionTime: item.avgCompletionTime,
-      tasksCompleted: item.completedTasks,
-    }));
+  async getFastestClosersRanking(limit: number = 10, activity?: WorkflowActivity) {
+    return this.getCloserRanking('fastest', limit, activity);
   }
 
   /**
    * Get ranking: Slowest Closers
    */
-  async getSlowestClosersRanking(limit: number = 10): Promise<Array<{
+  async getSlowestClosersRanking(limit: number = 10, activity?: WorkflowActivity) {
+    return this.getCloserRanking('slowest', limit, activity);
+  }
+
+  /** Team members ranked by average handling time per case step (needs a minimum number of steps). */
+  private async getCloserRanking(
+    order: 'fastest' | 'slowest',
+    limit: number,
+    activity?: WorkflowActivity
+  ): Promise<Array<{
     rank: number;
     userId: number;
     userName: string;
     avgCompletionTime: number;
     tasksCompleted: number;
   }>> {
-    const slowest = await taskTimeTrackingService.getSlowestClosers(limit);
-    return slowest.map((item, index) => ({
-      rank: index + 1,
-      userId: item.userId,
-      userName: item.userName,
-      avgCompletionTime: item.avgCompletionTime,
-      tasksCompleted: item.completedTasks,
-    }));
+    const data = activity || (await this.getWorkflowActivity());
+    const direction = order === 'fastest' ? 1 : -1;
+
+    return data.users
+      .filter(user => user.actions >= MIN_ACTIONS_FOR_CLOSER_RANKING)
+      .map(user => ({
+        userId: user.userId,
+        userName: user.userName,
+        avgCompletionTime: user.totalMinutes / user.actions,
+        tasksCompleted: user.actions,
+      }))
+      .sort((a, b) => direction * (a.avgCompletionTime - b.avgCompletionTime) || b.tasksCompleted - a.tasksCompleted)
+      .slice(0, Math.max(1, limit))
+      .map((user, index) => ({ rank: index + 1, ...user }));
   }
 
   /**
@@ -493,7 +656,8 @@ export class SuperAdminAnalyticsService {
       rank: index + 1,
       userId: user.userId,
       userName: user.userName || 'Unknown',
-      tasksCompleted: user.completedCases,
+      // Same definition as the dashboard performer cards so the two never disagree.
+      tasksCompleted: Math.max(user.completedCases, user.rewardedTasks),
       totalPoints: user.totalRewards,
       rmPoints: user.rmPoints,
     }));
@@ -584,14 +748,12 @@ export class SuperAdminAnalyticsService {
         .createQueryBuilder('invoice')
         .select('COUNT(*)', 'count')
         .where('invoice.isActive = true')
-        .andWhere('invoice.status NOT IN (:...statuses)', {
-          statuses: ['DRAFT', 'DISBURSED', 'REJECTED', 'REJECTED_BY_CUSTOMER'],
-        })
+        .andWhere('invoice.status NOT IN (:...statuses)', { statuses: NON_PIPELINE_INVOICE_STATUSES })
         .getRawOne(),
       this.invoiceRepository
         .createQueryBuilder('invoice')
         .select('COUNT(*)', 'count')
-        .where('invoice.status = :status', { status: 'DISBURSED' })
+        .where('invoice.status IN (:...statuses)', { statuses: FINANCED_INVOICE_STATUSES })
         .getRawOne(),
       this.loanAccountRepository.count(),
       this.caseWorkflowRepository
@@ -634,38 +796,59 @@ export class SuperAdminAnalyticsService {
     unutilizedLimit: number;
     utilizationRate: number;
     totalInvoiceAmount: number;
+    financedInvoiceAmount: number;
     disbursedInvoiceAmount: number;
     outstandingInvoiceAmount: number;
     averageInvoiceAmount: number;
     averageInterestRate: number;
   }> {
-    const [sanctionRaw, loanRaw, invoiceRaw] = await Promise.all([
+    const [sanctionRaw, loanRaw, disbursedRaw, invoiceRaw] = await Promise.all([
       this.creditSanctionRepository
         .createQueryBuilder('sanction')
         .select('COUNT(*)', 'sanctionCount')
         .addSelect("SUM(CASE WHEN LOWER(sanction.status) = 'approved' THEN 1 ELSE 0 END)", 'approvedSanctionCount')
         .addSelect("SUM(CASE WHEN LOWER(sanction.status) = 'approved' THEN sanction.sanctionAmount ELSE 0 END)", 'approvedSanctionAmount')
-        .addSelect('AVG(sanction.interestRate)', 'averageInterestRate')
+        .addSelect("AVG(CASE WHEN LOWER(sanction.status) = 'approved' THEN sanction.interestRate END)", 'averageInterestRate')
         .getRawOne(),
+      // Utilization = principal still outstanding, taken from the LMS snapshot rather than the
+      // cached loan_accounts columns, which can drift from the postings.
       this.loanAccountRepository
         .createQueryBuilder('loan')
-        .select('COUNT(*)', 'loanAccounts')
+        .leftJoin(LoanAccountSnapshot, 'snapshot', 'snapshot.loanAccountId = loan.id')
+        .select('COUNT(loan.id)', 'loanAccounts')
         .addSelect('SUM(COALESCE(loan.sanctionedAmount, 0))', 'sanctionedBook')
-        .addSelect('SUM(COALESCE(loan.disbursedAmount, 0))', 'disbursedBook')
-        .addSelect('SUM(COALESCE(loan.utilizedLimit, 0))', 'utilizedLimit')
-        .addSelect('SUM(COALESCE(loan.unutilizedLimit, 0))', 'unutilizedLimit')
+        .addSelect('SUM(COALESCE(snapshot.principalOutstanding, 0))', 'utilizedLimit')
+        .addSelect(
+          'SUM(GREATEST(COALESCE(loan.sanctionedAmount, 0) - COALESCE(snapshot.principalOutstanding, 0), 0))',
+          'unutilizedLimit'
+        )
+        .getRawOne(),
+      this.disbursementRepository
+        .createQueryBuilder('disbursement')
+        .select('SUM(disbursement.disbursementAmount)', 'disbursedBook')
+        .where('disbursement.status = :status', { status: DISBURSEMENT_STATUS.POSTED })
         .getRawOne(),
       this.invoiceRepository
         .createQueryBuilder('invoice')
         .select('SUM(COALESCE(invoice.invoiceAmount, 0))', 'totalInvoiceAmount')
-        .addSelect('SUM(COALESCE(invoice.disbursedAmount, invoice.disbursementAmount, 0))', 'disbursedInvoiceAmount')
-        .addSelect("SUM(CASE WHEN invoice.status NOT IN ('DISBURSED', 'REJECTED', 'REJECTED_BY_CUSTOMER') THEN COALESCE(invoice.invoiceAmount, 0) ELSE 0 END)", 'outstandingInvoiceAmount')
+        .addSelect(
+          'SUM(CASE WHEN invoice.status IN (:...financed) THEN COALESCE(invoice.invoiceAmount, 0) ELSE 0 END)',
+          'financedInvoiceAmount'
+        )
+        .addSelect(
+          'SUM(CASE WHEN invoice.status NOT IN (:...nonPipeline) THEN COALESCE(invoice.invoiceAmount, 0) ELSE 0 END)',
+          'outstandingInvoiceAmount'
+        )
         .addSelect('AVG(invoice.invoiceAmount)', 'averageInvoiceAmount')
+        .where("invoice.status <> 'DRAFT'")
+        .setParameters({ financed: FINANCED_INVOICE_STATUSES, nonPipeline: NON_PIPELINE_INVOICE_STATUSES })
         .getRawOne(),
     ]);
 
-    const sanctionedBook = toNumber(loanRaw?.sanctionedBook) || toNumber(sanctionRaw?.approvedSanctionAmount);
-    const utilizedLimit = toNumber(loanRaw?.utilizedLimit) || toNumber(loanRaw?.disbursedBook);
+    const loanSanctionedBook = toNumber(loanRaw?.sanctionedBook);
+    const sanctionedBook = loanSanctionedBook || toNumber(sanctionRaw?.approvedSanctionAmount);
+    const utilizedLimit = toNumber(loanRaw?.utilizedLimit);
+    const disbursedBook = toNumber(disbursedRaw?.disbursedBook);
 
     return {
       sanctionCount: toNumber(sanctionRaw?.sanctionCount),
@@ -673,12 +856,13 @@ export class SuperAdminAnalyticsService {
       approvedSanctionAmount: toNumber(sanctionRaw?.approvedSanctionAmount),
       loanAccounts: toNumber(loanRaw?.loanAccounts),
       sanctionedBook,
-      disbursedBook: toNumber(loanRaw?.disbursedBook),
+      disbursedBook,
       utilizedLimit,
-      unutilizedLimit: toNumber(loanRaw?.unutilizedLimit),
+      unutilizedLimit: loanSanctionedBook ? toNumber(loanRaw?.unutilizedLimit) : Math.max(sanctionedBook - utilizedLimit, 0),
       utilizationRate: sanctionedBook > 0 ? Math.round((utilizedLimit / sanctionedBook) * 100) : 0,
       totalInvoiceAmount: toNumber(invoiceRaw?.totalInvoiceAmount),
-      disbursedInvoiceAmount: toNumber(invoiceRaw?.disbursedInvoiceAmount),
+      financedInvoiceAmount: toNumber(invoiceRaw?.financedInvoiceAmount),
+      disbursedInvoiceAmount: disbursedBook,
       outstandingInvoiceAmount: toNumber(invoiceRaw?.outstandingInvoiceAmount),
       averageInvoiceAmount: toNumber(invoiceRaw?.averageInvoiceAmount),
       averageInterestRate: toNumber(sanctionRaw?.averageInterestRate),
@@ -688,60 +872,110 @@ export class SuperAdminAnalyticsService {
   /**
    * Get partner-wise sanction book from loan accounts.
    */
-  async getPartnerSanctionStats(limit: number = 8): Promise<Array<{
-    partnerId: number | null;
-    partnerName: string;
-    partnerCode: string;
-    sanctionCount: number;
-    activeAccounts: number;
-    sanctionedAmount: number;
-    disbursedAmount: number;
-    utilizedLimit: number;
-    unutilizedLimit: number;
-    utilizationRate: number;
-    lastCreatedAt: Date | null;
-  }>> {
-    const normalizedLimit = Math.max(1, Math.min(limit, 20));
+  async getPartnerSanctionStats(limit: number = 8) {
+    const result = await this.getPartnerSanctionPage(1, limit);
+    return result.rows;
+  }
 
-    const rows = await this.loanAccountRepository
-      .createQueryBuilder('loan')
-      .leftJoin('loan.partner', 'partner')
-      .select('partner.id', 'partnerId')
-      .addSelect("COALESCE(partner.name, loan.lender, 'Unassigned Partner')", 'partnerName')
-      .addSelect("COALESCE(partner.code, loan.lender, 'NA')", 'partnerCode')
-      .addSelect('COUNT(loan.id)', 'sanctionCount')
-      .addSelect("SUM(CASE WHEN LOWER(loan.status) = 'active' THEN 1 ELSE 0 END)", 'activeAccounts')
-      .addSelect('SUM(COALESCE(loan.sanctionedAmount, 0))', 'sanctionedAmount')
-      .addSelect('SUM(COALESCE(loan.disbursedAmount, 0))', 'disbursedAmount')
-      .addSelect('SUM(COALESCE(loan.utilizedLimit, 0))', 'utilizedLimit')
-      .addSelect('SUM(COALESCE(loan.unutilizedLimit, 0))', 'unutilizedLimit')
-      .addSelect('MAX(loan.createdAt)', 'lastCreatedAt')
-      .groupBy('partner.id')
-      .addGroupBy('partner.name')
-      .addGroupBy('partner.code')
-      .addGroupBy('loan.lender')
-      .orderBy('sanctionedAmount', 'DESC')
-      .limit(normalizedLimit)
-      .getRawMany();
+  /**
+   * Partner-wise sanction book, one row per partner (or per legacy lender code when no partner is linked),
+   * largest book first.
+   */
+  async getPartnerSanctionPage(page: number = 1, limit: number = 10): Promise<{
+    rows: Array<{
+      partnerId: number | null;
+      partnerName: string;
+      partnerCode: string;
+      sanctionCount: number;
+      activeAccounts: number;
+      sanctionedAmount: number;
+      disbursedAmount: number;
+      utilizedLimit: number;
+      unutilizedLimit: number;
+      utilizationRate: number;
+      lastCreatedAt: Date | null;
+    }>;
+    totals: { sanctionedAmount: number };
+    pagination: { page: number; limit: number; total: number; totalPages: number };
+  }> {
+    const normalizedLimit = Math.max(1, Math.min(Math.floor(limit) || 10, PARTNER_PAGE_MAX));
+    const normalizedPage = Math.max(1, Math.floor(page) || 1);
+    const groupKey = "COALESCE(CONCAT('partner:', partner.id), CONCAT('lender:', loan.lender), 'unassigned')";
 
-    return rows.map(row => {
-      const sanctionedAmount = toNumber(row.sanctionedAmount);
-      const utilizedLimit = toNumber(row.utilizedLimit) || toNumber(row.disbursedAmount);
+    const baseQuery = () =>
+      this.loanAccountRepository
+        .createQueryBuilder('loan')
+        .leftJoin('loan.partner', 'partner');
 
-      return {
-        partnerId: row.partnerId ? toNumber(row.partnerId) : null,
-        partnerName: row.partnerName || 'Unassigned Partner',
-        partnerCode: row.partnerCode || 'NA',
-        sanctionCount: toNumber(row.sanctionCount),
-        activeAccounts: toNumber(row.activeAccounts),
-        sanctionedAmount,
-        disbursedAmount: toNumber(row.disbursedAmount),
-        utilizedLimit,
-        unutilizedLimit: toNumber(row.unutilizedLimit),
-        utilizationRate: sanctionedAmount > 0 ? Math.round((utilizedLimit / sanctionedAmount) * 100) : 0,
-        lastCreatedAt: row.lastCreatedAt || null,
-      };
-    });
+    const [rows, totalsRaw] = await Promise.all([
+      baseQuery()
+        .leftJoin(LoanAccountSnapshot, 'snapshot', 'snapshot.loanAccountId = loan.id')
+        .leftJoin(
+          subQuery => subQuery
+            .select('d.loanAccountId', 'loanAccountId')
+            .addSelect('SUM(d.disbursementAmount)', 'amount')
+            .from(LoanDisbursement, 'd')
+            .where('d.status = :postedStatus')
+            .groupBy('d.loanAccountId'),
+          'disbursed',
+          'disbursed.loanAccountId = loan.id'
+        )
+        .setParameter('postedStatus', DISBURSEMENT_STATUS.POSTED)
+        .select(groupKey, 'groupKey')
+        .addSelect('MAX(partner.id)', 'partnerId')
+        .addSelect("COALESCE(MAX(partner.name), MAX(loan.lender), 'Unassigned Partner')", 'partnerName')
+        .addSelect("COALESCE(MAX(partner.code), MAX(loan.lender), 'NA')", 'partnerCode')
+        .addSelect('COUNT(loan.id)', 'sanctionCount')
+        .addSelect("SUM(CASE WHEN LOWER(loan.status) = 'active' THEN 1 ELSE 0 END)", 'activeAccounts')
+        .addSelect('SUM(COALESCE(loan.sanctionedAmount, 0))', 'sanctionedAmount')
+        .addSelect('SUM(COALESCE(disbursed.amount, 0))', 'disbursedAmount')
+        .addSelect('SUM(COALESCE(snapshot.principalOutstanding, 0))', 'utilizedLimit')
+        .addSelect(
+          'SUM(GREATEST(COALESCE(loan.sanctionedAmount, 0) - COALESCE(snapshot.principalOutstanding, 0), 0))',
+          'unutilizedLimit'
+        )
+        .addSelect('MAX(loan.createdAt)', 'lastCreatedAt')
+        .groupBy(groupKey)
+        .orderBy('sanctionedAmount', 'DESC')
+        .addOrderBy('partnerName', 'ASC')
+        .offset((normalizedPage - 1) * normalizedLimit)
+        .limit(normalizedLimit)
+        .getRawMany(),
+      baseQuery()
+        .select(`COUNT(DISTINCT ${groupKey})`, 'total')
+        .addSelect('SUM(COALESCE(loan.sanctionedAmount, 0))', 'sanctionedAmount')
+        .getRawOne(),
+    ]);
+
+    const total = toNumber(totalsRaw?.total);
+
+    return {
+      rows: rows.map(row => {
+        const sanctionedAmount = toNumber(row.sanctionedAmount);
+        const utilizedLimit = toNumber(row.utilizedLimit);
+
+        return {
+          partnerId: row.partnerId ? toNumber(row.partnerId) : null,
+          partnerName: row.partnerName || 'Unassigned Partner',
+          partnerCode: row.partnerCode || 'NA',
+          sanctionCount: toNumber(row.sanctionCount),
+          activeAccounts: toNumber(row.activeAccounts),
+          sanctionedAmount,
+          disbursedAmount: toNumber(row.disbursedAmount),
+          utilizedLimit,
+          unutilizedLimit: toNumber(row.unutilizedLimit),
+          utilizationRate: sanctionedAmount > 0 ? Math.round((utilizedLimit / sanctionedAmount) * 100) : 0,
+          lastCreatedAt: row.lastCreatedAt || null,
+        };
+      }),
+      totals: { sanctionedAmount: toNumber(totalsRaw?.sanctionedAmount) },
+      pagination: {
+        page: normalizedPage,
+        limit: normalizedLimit,
+        total,
+        totalPages: Math.max(1, Math.ceil(total / normalizedLimit)),
+      },
+    };
   }
 
   /**
@@ -948,6 +1182,7 @@ export class SuperAdminAnalyticsService {
         .addSelect('COUNT(*)', 'count')
         .addSelect('SUM(COALESCE(invoice.invoiceAmount, 0))', 'amount')
         .where('invoice.createdAt >= :since', { since })
+        .andWhere("invoice.status <> 'DRAFT'")
         .groupBy("DATE_FORMAT(invoice.createdAt, '%Y-%m')")
         .getRawMany(),
     ]);
@@ -990,10 +1225,8 @@ export class SuperAdminAnalyticsService {
   }> {
     const isAllTime = period === 'all';
     const normalizedDays = isAllTime ? null : Math.max(1, Math.min(period, 365));
-    const since = normalizedDays ? new Date() : null;
-    if (since && normalizedDays) {
-      since.setDate(since.getDate() - normalizedDays);
-    }
+    const since = normalizedDays ? getPeriodStart(normalizedDays) : null;
+    const sinceDate = since ? toDateKey(since) : null;
 
     const customerQuery = this.customerRepository
       .createQueryBuilder('customer')
@@ -1007,29 +1240,51 @@ export class SuperAdminAnalyticsService {
       .createQueryBuilder('invoice')
       .select('COUNT(*)', 'count')
       .addSelect('SUM(COALESCE(invoice.invoiceAmount, 0))', 'invoiceAmount')
-      .addSelect('SUM(COALESCE(invoice.disbursedAmount, invoice.disbursementAmount, 0))', 'disbursedAmount');
+      .where("invoice.status <> 'DRAFT'");
 
+    // Money actually paid out in the window, by disbursement date — not invoices created in the window.
+    const disbursementQuery = this.disbursementRepository
+      .createQueryBuilder('disbursement')
+      .select('SUM(disbursement.disbursementAmount)', 'amount')
+      .where('disbursement.status = :status', { status: DISBURSEMENT_STATUS.POSTED });
+
+    // Outcomes are dated by when the decision happened; updatedAt moves on any later edit.
+    const completedOn = 'COALESCE(workflow.completedDate, DATE(workflow.updatedAt))';
+    const rejectedOn = 'COALESCE(workflow.rejectedDate, DATE(workflow.updatedAt))';
     const workflowQuery = this.caseWorkflowRepository
       .createQueryBuilder('workflow')
-      .select('SUM(CASE WHEN workflow.isCompleted = true THEN 1 ELSE 0 END)', 'completed')
-      .addSelect('SUM(CASE WHEN workflow.isRejected = true THEN 1 ELSE 0 END)', 'rejected');
+      .select(
+        sinceDate
+          ? `SUM(CASE WHEN workflow.isCompleted = true AND ${completedOn} >= :sinceDate THEN 1 ELSE 0 END)`
+          : 'SUM(CASE WHEN workflow.isCompleted = true THEN 1 ELSE 0 END)',
+        'completed'
+      )
+      .addSelect(
+        sinceDate
+          ? `SUM(CASE WHEN workflow.isRejected = true AND ${rejectedOn} >= :sinceDate THEN 1 ELSE 0 END)`
+          : 'SUM(CASE WHEN workflow.isRejected = true THEN 1 ELSE 0 END)',
+        'rejected'
+      );
 
-    if (since) {
+    if (since && sinceDate) {
       customerQuery.where('customer.createdAt >= :since', { since });
       supplierQuery.where('supplier.createdAt >= :since', { since });
-      invoiceQuery.where('invoice.createdAt >= :since', { since });
-      workflowQuery.where('workflow.updatedAt >= :since', { since });
+      invoiceQuery.andWhere('invoice.createdAt >= :since', { since });
+      disbursementQuery.andWhere('disbursement.disbursementDate >= :sinceDate', { sinceDate });
+      workflowQuery.setParameter('sinceDate', sinceDate);
     }
 
     const [
       newCustomersRaw,
       newSuppliersRaw,
       invoiceRaw,
+      disbursementRaw,
       workflowRaw,
     ] = await Promise.all([
       customerQuery.getRawOne(),
       supplierQuery.getRawOne(),
       invoiceQuery.getRawOne(),
+      disbursementQuery.getRawOne(),
       workflowQuery.getRawOne(),
     ]);
 
@@ -1041,7 +1296,7 @@ export class SuperAdminAnalyticsService {
       newSuppliers: toNumber(newSuppliersRaw?.count),
       newInvoices: toNumber(invoiceRaw?.count),
       invoiceAmount: toNumber(invoiceRaw?.invoiceAmount),
-      disbursedAmount: toNumber(invoiceRaw?.disbursedAmount),
+      disbursedAmount: toNumber(disbursementRaw?.amount),
       completedWorkflows: toNumber(workflowRaw?.completed),
       rejectedWorkflows: toNumber(workflowRaw?.rejected),
     };
@@ -1138,6 +1393,9 @@ export class SuperAdminAnalyticsService {
     roleDistribution: Awaited<ReturnType<SuperAdminAnalyticsService['getRoleDistribution']>>;
     partnerSanctionStats: Awaited<ReturnType<SuperAdminAnalyticsService['getPartnerSanctionStats']>>;
   }> {
+    // One pass over case history feeds every team-efficiency panel.
+    const activityPromise = this.getWorkflowActivity();
+
     const [
       overview,
       performanceRanking,
@@ -1157,13 +1415,13 @@ export class SuperAdminAnalyticsService {
       roleDistribution,
       partnerSanctionStats,
     ] = await Promise.all([
-      this.getDashboardOverview(),
+      activityPromise.then(activity => this.getDashboardOverview(activity)),
       this.getPerformanceRanking(period),
       this.getLowestPerformers(10),
-      this.getBucketPerformanceStats(),
-      this.getL1L2ProcessingComparison(),
-      this.getFastestClosersRanking(10),
-      this.getSlowestClosersRanking(10),
+      activityPromise.then(activity => this.getBucketPerformanceStats(activity)),
+      activityPromise.then(activity => this.getL1L2ProcessingComparison(activity)),
+      activityPromise.then(activity => this.getFastestClosersRanking(10, activity)),
+      activityPromise.then(activity => this.getSlowestClosersRanking(10, activity)),
       this.getHighestProductivityRanking(10),
       this.getBusinessOverview(),
       this.getFinancialSnapshot(),

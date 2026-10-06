@@ -1028,6 +1028,15 @@ Fintree Finance Pvt. Ltd.
       sanctionData,
     });
 
+    if (approved) {
+      await this.awardOpsApprovalRewards(
+        customerId,
+        userId,
+        previousStatus,
+        workflow.currentStatus,
+      );
+    }
+
     return workflow;
   }
 
@@ -1366,6 +1375,15 @@ Fintree Finance Pvt. Ltd.
       remarks,
       sanctionData,
     });
+
+    if (approved) {
+      await this.awardOpsApprovalRewards(
+        customerId,
+        userId,
+        previousStatus,
+        workflow.currentStatus,
+      );
+    }
 
     return workflow;
   }
@@ -2592,6 +2610,26 @@ Fintree Finance Pvt. Ltd.
           to: "submitted",
           description: "RM submitted case for credit review",
         },
+        credit_l1_approve: {
+          from: "submitted",
+          to: "credit_l1_approved",
+          description: "Credit L1 approved the case",
+        },
+        credit_l1_review_approve: {
+          from: "credit_l1_review",
+          to: "credit_l1_approved",
+          description: "Credit L1 approved the case",
+        },
+        credit_l2_approve: {
+          from: "credit_l1_approved",
+          to: "credit_l2_approved",
+          description: "Credit L2 approved the case",
+        },
+        credit_l2_review_approve: {
+          from: "credit_l2_review",
+          to: "credit_l2_approved",
+          description: "Credit L2 approved the case",
+        },
         ops_l1_approve: {
           from: "ops_l1_review",
           to: "ops_l1_approved",
@@ -2612,7 +2650,10 @@ Fintree Finance Pvt. Ltd.
       // Find matching approval transition
       for (const key of Object.keys(approvalTransitions)) {
         const transition = approvalTransitions[key];
-        if (previousStatus === transition.from && newStatus === transition.to) {
+        if (
+          String(previousStatus || "").toLowerCase() === transition.from &&
+          String(newStatus || "").toLowerCase() === transition.to
+        ) {
           // Calculate time taken for this approval stage
           const timeTakenMinutes = await this.calculateApprovalTime(
             customerId,
