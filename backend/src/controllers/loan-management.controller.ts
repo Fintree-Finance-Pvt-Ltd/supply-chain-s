@@ -104,6 +104,20 @@ export class LoanManagementController {
     }
   };
 
+  updateDemandAllocationSequence = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const demandIds = Array.isArray(req.body?.demandIds) ? req.body.demandIds : [];
+      const result = await loanManagementService.updateDemandAllocationSequence(req.params.lan, demandIds);
+      res.json({
+        success: true,
+        message: `Invoice sequence saved for LAN ${result.lan}; ${result.reallocatedCollections} collection(s) re-allocated`,
+        data: result,
+      });
+    } catch (error: any) {
+      res.status(400).json({ success: false, message: error.message || 'Failed to update invoice sequence' });
+    }
+  };
+
   deleteInvoicesByLan = async (req: Request, res: Response): Promise<void> => {
     try {
       const result = await loanManagementService.deleteInvoicesByLan(req.params.lan);

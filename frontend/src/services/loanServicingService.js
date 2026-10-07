@@ -70,6 +70,12 @@ export const loanServicingService = {
     return response.data
   },
 
+  // demandIds: every active demand of the LAN in the new allocation order
+  updateDemandSequence: async (lan, demandIds) => {
+    const response = await api.put(API_ENDPOINTS.LOAN_SERVICING_DEMAND_SEQUENCE(lan), { demandIds })
+    return response.data
+  },
+
   getStatement: async (lan, filters = {}) => {
     const response = await api.get(`${API_ENDPOINTS.LOAN_SERVICING_STATEMENT(lan)}${buildQuery(filters)}`)
     return response.data

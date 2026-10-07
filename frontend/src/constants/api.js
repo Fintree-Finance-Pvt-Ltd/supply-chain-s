@@ -157,6 +157,7 @@ DASHBOARD_OPERATIONS_SUPPLIERS: '/workflows/suppliers/dashboard/operations',
   // Loan Servicing
   LOAN_SERVICING_ACCOUNT: (lan) => `/loan-servicing/accounts/${lan}`,
   LOAN_SERVICING_SCHEDULE: (lan) => `/loan-servicing/accounts/${lan}/schedule`,
+  LOAN_SERVICING_DEMAND_SEQUENCE: (lan) => `/loan-servicing/accounts/${lan}/demand-sequence`,
   LOAN_SERVICING_STATEMENT: (lan) => `/loan-servicing/accounts/${lan}/statement`,
   LOAN_SERVICING_COLLECTION_DETAIL: (lan, utr) => `/loan-servicing/collections/${lan}/${utr}`,
   LOAN_SERVICING_COLLECTIONS_BY_LAN: (lan) => `/loan-servicing/collections/${lan}`,

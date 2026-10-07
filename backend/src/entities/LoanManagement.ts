@@ -242,6 +242,11 @@ export class LoanDemand {
   @Column({ type: 'decimal', precision: 15, scale: 2 })
   outstandingAmount: number;
 
+  // Manual collection allocation order among demands with the same due date
+  // (lower first). Null = not sequenced; falls after sequenced demands, then by id.
+  @Column({ type: 'int', nullable: true })
+  allocationSequence: number | null;
+
   @Column({
     type: 'enum',
     enum: DEMAND_STATUS,

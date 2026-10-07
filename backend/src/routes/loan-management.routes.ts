@@ -67,6 +67,12 @@ router.get(
   loanManagementController.getDemandSchedule,
 );
 
+router.put(
+  '/accounts/:lan/demand-sequence',
+  roleMiddleware([ROLES.OPERATIONS_HEAD]),
+  loanManagementController.updateDemandAllocationSequence,
+);
+
 router.get(
   '/accounts/:lan/statement',
   roleMiddleware(OPS_ROLES),

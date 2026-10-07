@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import {
+  FiArrowDown,
+  FiArrowUp,
   FiCreditCard,
   FiDollarSign,
   FiDownload,
   FiFileText,
+  FiList,
   FiRefreshCw,
   FiSearch,
   FiTrash2,
@@ -93,6 +96,14 @@ const buildCustomerFromAccount = (accountData) => {
   };
 };
 
+const SEQUENCE_EDITOR_ROLES = [ROLES.OPERATIONS_HEAD]
+  .filter(Boolean)
+  .map((role) => String(role).toLowerCase());
+
+const isSameDueDate = (a, b) =>
+  Boolean(a && b) &&
+  String(a.dueDate || "").slice(0, 10) === String(b.dueDate || "").slice(0, 10);
+
 const getLanOptionLabel = (loanAccount) =>
   [
     loanAccount.lanId,
@@ -120,6 +131,9 @@ const OpsLoanSearch = () => {
   const isSuperAdmin = userRoles.includes(
     String(ROLES.SUPERADMIN || "superadmin").toLowerCase(),
   );
+  const canEditSequence = userRoles.some((role) =>
+    SEQUENCE_EDITOR_ROLES.includes(role),
+  );
   const [filters, setFilters] = useState({ startDate: "", endDate: "" });
   const [lan, setLan] = useState("");
   const [customerSearch, setCustomerSearch] = useState("");
@@ -133,6 +147,8 @@ const OpsLoanSearch = () => {
   const [downloadingReport, setDownloadingReport] = useState(null);
   const [deletingCollections, setDeletingCollections] = useState(false);
   const [deletingInvoices, setDeletingInvoices] = useState(false);
+  const [sequenceDraft, setSequenceDraft] = useState(null);
+  const [savingSequence, setSavingSequence] = useState(false);
 
   const snapshot = account?.snapshot;
   const demandTotals = useMemo(() => {
@@ -219,6 +235,7 @@ const OpsLoanSearch = () => {
       setLan(cleanLan);
       setAccount(accountData);
       setSchedule(scheduleRes.data || []);
+      setSequenceDraft(null);
       setStatement(statementRes.data || []);
       setSelectedCustomer(matchedCustomer);
       setCustomerSearch(
@@ -393,6 +410,50 @@ const OpsLoanSearch = () => {
       );
     } finally {
       setDeletingInvoices(false);
+    }
+  };
+
+  const startSequenceEdit = () => {
+    setSequenceDraft(schedule.filter((row) => row.status !== "REVERSED"));
+  };
+
+  // Invoices can only move among neighbours with the same due date.
+  const moveSequenceRow = (index, direction) => {
+    setSequenceDraft((rows) => {
+      const target = index + direction;
+      if (!rows || !isSameDueDate(rows[index], rows[target])) return rows;
+      const next = [...rows];
+      [next[index], next[target]] = [next[target], next[index]];
+      return next;
+    });
+  };
+
+  const saveSequence = async () => {
+    const cleanLan = lan.trim().toUpperCase();
+    if (!cleanLan || !sequenceDraft) return;
+
+    const confirmed = window.confirm(
+      `Save invoice sequence for LAN ${cleanLan}? All collections of this LAN will be re-allocated in the new order.`,
+    );
+    if (!confirmed) return;
+
+    try {
+      setSavingSequence(true);
+      const response = await loanServicingService.updateDemandSequence(
+        cleanLan,
+        sequenceDraft.map((row) => row.id),
+      );
+      toast.success(response.message || "Invoice sequence saved");
+      await loadLan(cleanLan);
+    } catch (error) {
+      console.error("Invoice sequence update failed:", error);
+      toast.error(
+        error.response?.data?.message ||
+          error.message ||
+          "Failed to save invoice sequence",
+      );
+    } finally {
+      setSavingSequence(false);
     }
   };
 
@@ -711,17 +772,117 @@ const OpsLoanSearch = () => {
 
       {!loading && account && (
         <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
-          <div className="border-b border-slate-100 px-5 py-4">
-            <h2 className="text-lg font-bold text-slate-950">
-              Demand Schedule
-            </h2>
-            <p className="text-sm text-slate-500">
-              Due {formatCurrency(demandTotals.due)}, paid{" "}
-              {formatCurrency(demandTotals.paid)}, outstanding{" "}
-              {formatCurrency(demandTotals.outstanding)}
-            </p>
+          <div className="flex flex-col gap-3 border-b border-slate-100 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-lg font-bold text-slate-950">
+                Demand Schedule
+              </h2>
+              <p className="text-sm text-slate-500">
+                Due {formatCurrency(demandTotals.due)}, paid{" "}
+                {formatCurrency(demandTotals.paid)}, outstanding{" "}
+                {formatCurrency(demandTotals.outstanding)}
+              </p>
+            </div>
+            {canEditSequence && (
+              <div className="flex flex-wrap gap-2">
+                {sequenceDraft ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setSequenceDraft(null)}
+                      disabled={savingSequence}
+                      className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-300"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={saveSequence}
+                      disabled={savingSequence}
+                      className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:bg-slate-300"
+                    >
+                      {savingSequence ? "Saving..." : "Save Sequence"}
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={startSequenceEdit}
+                    disabled={schedule.length < 2}
+                    className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-300"
+                  >
+                    <FiList />
+                    Edit Invoice Sequence
+                  </button>
+                )}
+              </div>
+            )}
           </div>
-          <DataTable data={schedule} columns={scheduleColumns} />
+          {sequenceDraft ? (
+            <div className="overflow-x-auto">
+              <p className="px-5 pt-4 text-sm text-slate-500">
+                Collections are allocated top to bottom. Invoices can be moved
+                only within the same due date.
+              </p>
+              <table className="mt-2 min-w-full text-sm">
+                <thead>
+                  <tr className="border-b border-slate-100 text-left text-xs font-semibold uppercase text-slate-500">
+                    <th className="px-5 py-2">#</th>
+                    <th className="px-5 py-2">Invoice</th>
+                    <th className="px-5 py-2">Due Date</th>
+                    <th className="px-5 py-2">Principal</th>
+                    <th className="px-5 py-2">Status</th>
+                    <th className="px-5 py-2 text-right">Move</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sequenceDraft.map((row, index) => {
+                    const startsGroup = !isSameDueDate(sequenceDraft[index - 1], row);
+                    return (
+                      <tr
+                        key={row.id}
+                        className={`border-b border-slate-50 ${startsGroup && index > 0 ? "border-t-2 border-t-slate-200" : ""}`}
+                      >
+                        <td className="px-5 py-2 text-slate-500">{index + 1}</td>
+                        <td className="px-5 py-2 font-medium text-slate-900">
+                          {row.invoiceNumber || `Demand #${row.id}`}
+                        </td>
+                        <td className="px-5 py-2">{formatDate(row.dueDate)}</td>
+                        <td className="px-5 py-2">{formatCurrency(row.principalDue)}</td>
+                        <td className="px-5 py-2">
+                          <StatusBadge status={row.status} label={row.status} />
+                        </td>
+                        <td className="px-5 py-2">
+                          <div className="flex justify-end gap-1">
+                            <button
+                              type="button"
+                              aria-label="Move up"
+                              onClick={() => moveSequenceRow(index, -1)}
+                              disabled={savingSequence || !isSameDueDate(sequenceDraft[index - 1], row)}
+                              className="rounded border border-slate-200 p-1.5 text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-200"
+                            >
+                              <FiArrowUp />
+                            </button>
+                            <button
+                              type="button"
+                              aria-label="Move down"
+                              onClick={() => moveSequenceRow(index, 1)}
+                              disabled={savingSequence || !isSameDueDate(sequenceDraft[index + 1], row)}
+                              className="rounded border border-slate-200 p-1.5 text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-200"
+                            >
+                              <FiArrowDown />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <DataTable data={schedule} columns={scheduleColumns} />
+          )}
         </section>
       )}
 

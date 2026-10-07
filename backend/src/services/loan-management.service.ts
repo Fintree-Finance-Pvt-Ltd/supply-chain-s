@@ -1014,6 +1014,150 @@ private calculateAccruedCharges(
     });
   }
 
+  /**
+   * Set the collection allocation order of a LAN's demands (invoices) and
+   * re-allocate its existing collections in that order. Demand ids are never
+   * changed, so allocations always stay linked to the right invoice.
+   * demandIds must list every active demand of the LAN, in the new order;
+   * the order may only change within the same due date.
+   */
+  async updateDemandAllocationSequence(lan: string, demandIds: number[]): Promise<{
+    lan: string;
+    sequencedDemands: number;
+    reallocatedCollections: number;
+    snapshot: LoanAccountSnapshot;
+  }> {
+    return AppDataSource.transaction(async (manager) => {
+      const cleanLan = String(lan || '').trim().toUpperCase();
+      if (!cleanLan) throw new Error('LAN is required');
+
+      const loanAccount = await manager.getRepository(LoanAccount).findOne({
+        where: { lanId: cleanLan },
+      });
+      if (!loanAccount) throw new Error(`LAN ${cleanLan} not found`);
+
+      const demandRepository = manager.getRepository(LoanDemand);
+      const demands = await demandRepository.find({
+        where: { loanAccountId: loanAccount.id, status: Not(In([DEMAND_STATUS.REVERSED])) },
+      });
+      const demandById = new Map(demands.map((demand) => [demand.id, demand]));
+
+      const orderedIds = (demandIds || []).map((id) => this.toNumber(id));
+      if (
+        orderedIds.length !== demands.length ||
+        new Set(orderedIds).size !== orderedIds.length ||
+        orderedIds.some((id) => !demandById.has(id))
+      ) {
+        throw new Error(`Sequence must list each of the ${demands.length} active invoice(s) of LAN ${cleanLan} exactly once`);
+      }
+
+      const orderedDemands = orderedIds.map((id) => demandById.get(id) as LoanDemand);
+      for (let index = 1; index < orderedDemands.length; index += 1) {
+        const previous = this.toDateOnly(orderedDemands[index - 1].dueDate).getTime();
+        const current = this.toDateOnly(orderedDemands[index].dueDate).getTime();
+        if (current < previous) {
+          throw new Error('Invoices can only be re-ordered within the same due date');
+        }
+      }
+
+      orderedDemands.forEach((demand, index) => {
+        demand.allocationSequence = index + 1;
+      });
+      await demandRepository.save(orderedDemands);
+
+      const reallocatedCollections = await this.reallocateCollectionsForLoanAccount(manager, loanAccount);
+
+      await this.recalculateLedgerRunningBalances(manager, loanAccount.id);
+      const snapshot = await this.refreshSnapshot(manager, loanAccount.id);
+
+      return {
+        lan: cleanLan,
+        sequencedDemands: orderedDemands.length,
+        reallocatedCollections,
+        snapshot,
+      };
+    });
+  }
+
+  /**
+   * Rebuild all allocations of a LAN from scratch: clear allocations and their
+   * ledger entries, reset demands/disbursements to unpaid, then replay every
+   * active collection in date order through the normal posting logic.
+   */
+  private async reallocateCollectionsForLoanAccount(
+    manager: EntityManager,
+    loanAccount: LoanAccount,
+  ): Promise<number> {
+    const repaymentRepository = manager.getRepository(Repayment);
+    const allocationRepository = manager.getRepository(RepaymentAllocation);
+    const demandRepository = manager.getRepository(LoanDemand);
+    const disbursementRepository = manager.getRepository(LoanDisbursement);
+
+    const repayments = await repaymentRepository.find({
+      where: { loanAccountId: loanAccount.id, status: Not(In([REPAYMENT_STATUS.REVERSED])) },
+      order: { repaymentDate: 'ASC', id: 'ASC' },
+    });
+    if (repayments.length === 0) return 0;
+
+    const repaymentIds = repayments.map((repayment) => repayment.id);
+
+    await manager
+      .createQueryBuilder()
+      .delete()
+      .from(LoanLedgerEntry)
+      .where('loanAccountId = :loanAccountId', { loanAccountId: loanAccount.id })
+      .andWhere('entryType = :entryType', { entryType: LEDGER_ENTRY_TYPE.ALLOCATION })
+      .andWhere('repaymentId IN (:...repaymentIds)', { repaymentIds })
+      .execute();
+    await allocationRepository.delete({ repaymentId: In(repaymentIds) });
+
+    const demands = await demandRepository.find({
+      where: { loanAccountId: loanAccount.id, status: Not(In([DEMAND_STATUS.REVERSED])) },
+    });
+    demands.forEach((demand) => {
+      demand.principalPaid = 0;
+      demand.interestPaid = 0;
+      demand.penalPaid = 0;
+      demand.feePaid = 0;
+      demand.totalPaid = 0;
+      demand.outstandingAmount = this.roundMoney(this.toNumber(demand.totalDue));
+      demand.status = this.getDemandStatus(demand);
+    });
+    if (demands.length > 0) {
+      await demandRepository.save(demands);
+    }
+
+    const disbursementIds = Array.from(new Set(demands.map((demand) => demand.loanDisbursementId)));
+    const disbursements = disbursementIds.length > 0
+      ? await disbursementRepository.find({ where: { id: In(disbursementIds) } })
+      : [];
+    disbursements.forEach((disbursement) => {
+      disbursement.principalOutstanding = this.roundMoney(this.toNumber(disbursement.disbursementAmount));
+    });
+    if (disbursements.length > 0) {
+      await disbursementRepository.save(disbursements);
+    }
+
+    for (const repayment of repayments) {
+      const repaymentDate = this.toDateOnly(repayment.repaymentDate);
+      await this.refreshAccruedInterestForOpenDemands(manager, loanAccount.id, repaymentDate);
+      const allocations = await this.allocateRepayment(manager, repayment, loanAccount.id);
+      const amount = this.roundMoney(this.toNumber(repayment.amount));
+      const allocatedAmount = allocations.reduce((sum, allocation) => sum + this.toNumber(allocation.totalAmount), 0);
+      repayment.allocatedAmount = this.roundMoney(allocatedAmount);
+      repayment.unappliedAmount = this.roundMoney(amount - allocatedAmount);
+      repayment.status =
+        repayment.unappliedAmount <= 0
+          ? REPAYMENT_STATUS.ALLOCATED
+          : repayment.allocatedAmount > 0
+            ? REPAYMENT_STATUS.PARTIALLY_ALLOCATED
+            : REPAYMENT_STATUS.POSTED;
+      await repaymentRepository.save(repayment);
+    }
+
+    return repayments.length;
+  }
+
   async deleteInvoicesByLan(lan: string): Promise<{
     lan: string;
     customerId: number;
@@ -1141,13 +1285,12 @@ private calculateAccruedCharges(
     const allocations: RepaymentAllocation[] = [];
     const demandRepository = manager.getRepository(LoanDemand);
 
-    const demands = await demandRepository.find({
+    const demands = (await demandRepository.find({
       where: {
         lan: repayment.lan,
         status: Not(In(CLOSED_DEMAND_STATUSES)),
       },
-      order: { dueDate: 'ASC', id: 'ASC' },
-    });
+    })).sort(this.compareDemandsForAllocation);
 
     for (const demand of demands) {
       if (available <= 0) break;
@@ -1234,6 +1377,16 @@ private calculateAccruedCharges(
 
     return applied;
   }
+
+  // Collection allocation order: due date, then Ops-set allocationSequence
+  // (unsequenced last), then id.
+  private compareDemandsForAllocation = (a: LoanDemand, b: LoanDemand): number => {
+    const dueDiff = this.toDateOnly(a.dueDate).getTime() - this.toDateOnly(b.dueDate).getTime();
+    if (dueDiff) return dueDiff;
+    const seqA = a.allocationSequence ?? Number.MAX_SAFE_INTEGER;
+    const seqB = b.allocationSequence ?? Number.MAX_SAFE_INTEGER;
+    return seqA - seqB || this.toNumber(a.id) - this.toNumber(b.id);
+  };
 
   private getDemandStatus(demand: LoanDemand): DEMAND_STATUS {
     if (this.toNumber(demand.outstandingAmount) <= 0) return DEMAND_STATUS.PAID;
@@ -1461,11 +1614,10 @@ private calculateAccruedCharges(
       await this.refreshAccruedInterestForOpenDemands(AppDataSource.manager, loanAccount.id);
     }
 
-    const demands = await this.demandRepository.find({
+    const demands = (await this.demandRepository.find({
       where: { lan },
       relations: ['invoice'],
-      order: { dueDate: 'ASC', id: 'ASC' },
-    });
+    })).sort(this.compareDemandsForAllocation);
 
     return {
       success: true,
@@ -1474,6 +1626,7 @@ private calculateAccruedCharges(
         lan: demand.lan,
         invoiceId: demand.invoiceId,
         invoiceNumber: demand.invoice?.invoiceNumber || null,
+        allocationSequence: demand.allocationSequence,
         demandDate: demand.demandDate,
         dueDate: demand.dueDate,
         principalDue: this.toNumber(demand.principalDue),
@@ -2537,7 +2690,8 @@ private calculateAccruedCharges(
       order: { dueDate: 'ASC', id: 'ASC',},
     });
 
-  let filteredDemands = this.filterByDateRange(demands, 'dueDate', reportFilters);
+  let filteredDemands = this.filterByDateRange(demands, 'dueDate', reportFilters)
+    .sort(this.compareDemandsForAllocation);
 
    if (options?.dueWithinDays) {
   const asOfTime =
