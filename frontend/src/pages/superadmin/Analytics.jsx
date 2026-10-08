@@ -16,11 +16,13 @@ import {
 } from 'react-icons/fi'
 import {
   Bar,
-  BarChart,
   CartesianGrid,
+  Cell,
   ComposedChart,
   Legend,
   Line,
+  Pie,
+  PieChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -42,6 +44,8 @@ const PERIOD_OPTIONS = [
   { value: '180', label: '180D' },
   { value: 'all', label: 'All' },
 ]
+
+const pipelineColors = ['#2563eb', '#059669', '#d97706', '#7c3aed', '#0f766e', '#dc2626']
 
 const toNumber = (value) => {
   const parsed = Number(value ?? 0)
@@ -250,6 +254,98 @@ const TrendTooltip = ({ active, payload, label }) => {
   )
 }
 
+const PipelineTooltip = ({ active, payload }) => {
+  if (!active || !payload?.length) return null
+  const row = payload[0].payload
+
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs shadow-md">
+      <p className="mb-1 font-semibold text-slate-900">{row.name}</p>
+      <p className="text-slate-600">Open cases: <span className="font-semibold text-slate-900">{formatNumber(row.openCases)}</span></p>
+      <p className="text-slate-600">Stuck: <span className="font-semibold text-rose-700">{formatNumber(row.staleCases)}</span></p>
+    </div>
+  )
+}
+
+const CasePipelineCard = ({ pipeline }) => {
+  const totalOpen = toNumber(pipeline?.totalOpen)
+  const totalStale = toNumber(pipeline?.totalStale)
+  const chartData = (pipeline?.departments || [])
+    .map((dept) => ({
+      name: dept.label || formatLabel(dept.key),
+      openCases: toNumber(dept.openCases),
+      staleCases: toNumber(dept.staleCases),
+    }))
+    .filter((dept) => dept.openCases > 0)
+
+  return (
+    <Card>
+      <CardHeader
+        title="Case Pipeline"
+        subtitle={`Open cases by department; stuck means no movement for over ${pipeline?.staleAfterDays ?? 3} days`}
+        scope="Live"
+        right={<FiActivity className="h-5 w-5 text-slate-400" />}
+      />
+      {totalOpen > 0 && chartData.length > 0 ? (
+        <div className="space-y-4 p-5">
+          <div className="relative h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={chartData}
+                  dataKey="openCases"
+                  nameKey="name"
+                  innerRadius="62%"
+                  outerRadius="86%"
+                  paddingAngle={2}
+                  stroke="#ffffff"
+                  strokeWidth={2}
+                >
+                  {chartData.map((entry, index) => (
+                    <Cell key={entry.name} fill={pipelineColors[index % pipelineColors.length]} />
+                  ))}
+                </Pie>
+                <Tooltip content={<PipelineTooltip />} />
+              </PieChart>
+            </ResponsiveContainer>
+            <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center">
+              <span className="text-2xl font-bold tabular-nums text-slate-900">{formatNumber(totalOpen)}</span>
+              <span className="text-xs font-medium uppercase tracking-wide text-slate-500">Open</span>
+            </div>
+          </div>
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <Stat label="Open cases" value={formatNumber(totalOpen)} accent="border-blue-500" />
+              <Stat label="Stuck cases" value={formatNumber(totalStale)} accent="border-rose-500" />
+            </div>
+            <ul className="space-y-2">
+              {chartData.map((item, index) => (
+                <li key={item.name} className="rounded-lg bg-slate-50 px-3 py-2">
+                  <div className="flex items-center justify-between gap-3 text-sm">
+                    <span className="flex min-w-0 items-center gap-2">
+                      <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ background: pipelineColors[index % pipelineColors.length] }} />
+                      <span className="truncate font-medium text-slate-700">{item.name}</span>
+                    </span>
+                    <span className="shrink-0 tabular-nums text-slate-900">{formatNumber(item.openCases)}</span>
+                  </div>
+                  <div className="mt-1 flex items-center justify-between gap-3 text-xs text-slate-500">
+                    <span>{formatPercent(percentOf(item.openCases, totalOpen))} of open cases</span>
+                    <span className={item.staleCases > 0 ? 'font-semibold text-rose-700' : 'text-slate-400'}>
+                      {formatNumber(item.staleCases)} stuck
+                    </span>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      ) : (
+        <EmptyState label="No open cases in the live pipeline." />
+      )}
+    </Card>
+  )
+}
+
 /* ---------- Page ---------- */
 
 const Analytics = () => {
@@ -318,7 +414,7 @@ const Analytics = () => {
   const period = analytics?.periodActivity || {}
   const statusBreakdowns = analytics?.statusBreakdowns || {}
   const monthlyTrend = analytics?.monthlyTrend || []
-  const workflowPipeline = analytics?.workflowPipeline || []
+  const casePipeline = analytics?.casePipeline || {}
   const bucketStats = analytics?.bucketStats || []
   const l1l2 = analytics?.l1L2Comparison || {}
   const partnerSanctions = partnerData.rows || []
@@ -353,13 +449,6 @@ const Analytics = () => {
     { label: 'In pipeline', value: financial.outstandingInvoiceAmount, tone: 'amber' },
     { label: 'Financed', value: financial.financedInvoiceAmount, tone: 'emerald' },
   ]
-
-  const pipelineChart = workflowPipeline.map((item) => ({
-    name: item.label || formatLabel(item.workflowType),
-    Active: toNumber(item.active),
-    Completed: toNumber(item.completed),
-    Rejected: toNumber(item.rejected),
-  }))
 
   const exportReport = async () => {
     let allPartners = partnerSanctions
@@ -649,27 +738,7 @@ const Analytics = () => {
           </div>
         </Card>
 
-        <Card>
-          <CardHeader title="Workflow Pipeline" subtitle="Cases by workflow type and outcome" scope="All time" />
-          <div className="h-72 px-3 py-4">
-            {pipelineChart.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={pipelineChart} layout="vertical" margin={{ top: 4, right: 8, left: 8, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e2e8f0" />
-                  <XAxis type="number" allowDecimals={false} tickLine={false} axisLine={false} fontSize={12} />
-                  <YAxis type="category" dataKey="name" tickLine={false} axisLine={false} width={80} fontSize={12} />
-                  <Tooltip cursor={{ fill: '#f8fafc' }} />
-                  <Legend iconType="square" iconSize={10} wrapperStyle={{ fontSize: 12 }} />
-                  <Bar dataKey="Active" stackId="a" fill="#2563eb" maxBarSize={22} />
-                  <Bar dataKey="Completed" stackId="a" fill="#059669" maxBarSize={22} />
-                  <Bar dataKey="Rejected" stackId="a" fill="#dc2626" radius={[0, 4, 4, 0]} maxBarSize={22} />
-                </BarChart>
-              </ResponsiveContainer>
-            ) : (
-              <EmptyState label="No workflow data." />
-            )}
-          </div>
-        </Card>
+        <CasePipelineCard pipeline={casePipeline} />
       </div>
 
       {/* Partner mix */}

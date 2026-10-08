@@ -67,6 +67,32 @@ const APPROVER_ROLE_ALIASES: Record<string, string> = {
   rm: 'relationship_manager',
 };
 
+// Departments shown in the "where are the cases" pipeline, in the order a case normally travels.
+const CASE_DEPARTMENTS = [
+  { key: 'rm', label: 'Relationship Manager' },
+  { key: 'credit', label: 'Credit' },
+  { key: 'management', label: 'MD' },
+  { key: 'customer', label: 'Customer' },
+  { key: 'operations', label: 'Operations' },
+  { key: 'on_hold', label: 'On Hold' },
+  { key: 'other', label: 'Other' },
+] as const;
+
+type CaseDepartment = typeof CASE_DEPARTMENTS[number]['key'];
+
+// currentApproverRoleName values that mean the case is no longer waiting on anyone.
+const CLOSED_APPROVER_ROLES = new Set(['', 'NONE', 'ARCHIVED']);
+
+const getApproverDepartment = (role: string): CaseDepartment => {
+  if (role === 'RM' || role === 'RELATIONSHIP_MANAGER') return 'rm';
+  if (role.startsWith('CREDIT')) return 'credit';
+  if (role.startsWith('OPERATIONS') || role.startsWith('OPS')) return 'operations';
+  if (['MD', 'CEO', 'CFO', 'CREDIT_SANCTION_CUSTOMER_APPROVAL'].includes(role)) return 'management';
+  if (role === 'CUSTOMER') return 'customer';
+  if (role === 'ON_HOLD') return 'on_hold';
+  return 'other';
+};
+
 const L1_ROLES = new Set(['credit_team_l1', 'operations_team_l1']);
 const L2_ROLES = new Set(['credit_team_l2', 'operations_team_l2']);
 
@@ -1017,6 +1043,66 @@ export class SuperAdminAnalyticsService {
     });
   }
 
+  /**
+   * Where open cases are sitting right now: counts per department (RM / Credit / Ops / ...).
+   */
+  async getCasePipeline(): Promise<{
+    totalOpen: number;
+    totalStale: number;
+    staleAfterDays: number;
+    departments: Array<{ key: CaseDepartment; label: string; openCases: number; staleCases: number }>;
+  }> {
+    const staleBefore = new Date();
+    staleBefore.setDate(staleBefore.getDate() - STALE_CASE_DAYS);
+
+    const rows = await AppDataSource.query(
+      `
+      SELECT UPPER(TRIM(COALESCE(workflow.currentApproverRoleName, ''))) AS approverRole,
+             LOWER(TRIM(COALESCE(workflow.currentStatus, ''))) AS currentStatus,
+             UPPER(TRIM(COALESCE(workflow.workflowType, ''))) AS workflowType,
+             COUNT(*) AS openCases,
+             SUM(CASE WHEN COALESCE(lastMove.lastAt, workflow.updatedAt) < ? THEN 1 ELSE 0 END) AS staleCases
+      FROM case_workflows workflow
+      LEFT JOIN (
+        SELECT caseWorkflowId, MAX(createdAt) AS lastAt
+        FROM case_status_history
+        GROUP BY caseWorkflowId
+      ) lastMove ON lastMove.caseWorkflowId = workflow.id
+      WHERE workflow.isCompleted = 0 AND workflow.isRejected = 0
+      GROUP BY approverRole, currentStatus, workflowType
+      `,
+      [staleBefore]
+    );
+
+    const totals = new Map(CASE_DEPARTMENTS.map(dept => [dept.key, { openCases: 0, staleCases: 0 }]));
+    rows.forEach((row: any) => {
+      // Some writers store several roles comma-separated; the first one is the current approver.
+      const role = String(row.approverRole || '').split(',')[0].trim();
+      if (CLOSED_APPROVER_ROLES.has(role)) return;
+
+      const department = getApproverDepartment(role);
+      const status = String(row.currentStatus || '');
+      const workflowType = String(row.workflowType || '');
+      if (department === 'rm' && ['credit_l2_approved', 'md_approved'].includes(status)) return;
+      if (department === 'operations' && workflowType !== 'CUSTOMER_ONBOARDING') return;
+
+      const total = totals.get(department)!;
+      total.openCases += toNumber(row.openCases);
+      total.staleCases += toNumber(row.staleCases);
+    });
+
+    const departments = CASE_DEPARTMENTS
+      .map(({ key, label }) => ({ key, label, ...totals.get(key)! }))
+      .filter(dept => dept.openCases > 0 || !['on_hold', 'other', 'customer'].includes(dept.key));
+
+    return {
+      totalOpen: departments.reduce((sum, dept) => sum + dept.openCases, 0),
+      totalStale: departments.reduce((sum, dept) => sum + dept.staleCases, 0),
+      staleAfterDays: STALE_CASE_DAYS,
+      departments,
+    };
+  }
+
   private async getStatusBreakdown<T extends ObjectLiteral>(
     repository: Repository<T>,
     alias: string,
@@ -1386,6 +1472,7 @@ export class SuperAdminAnalyticsService {
     businessOverview: Awaited<ReturnType<SuperAdminAnalyticsService['getBusinessOverview']>>;
     financialSnapshot: Awaited<ReturnType<SuperAdminAnalyticsService['getFinancialSnapshot']>>;
     workflowPipeline: Awaited<ReturnType<SuperAdminAnalyticsService['getWorkflowPipeline']>>;
+    casePipeline: Awaited<ReturnType<SuperAdminAnalyticsService['getCasePipeline']>>;
     statusBreakdowns: Awaited<ReturnType<SuperAdminAnalyticsService['getStatusBreakdowns']>>;
     recentCases: Awaited<ReturnType<SuperAdminAnalyticsService['getRecentCases']>>;
     monthlyTrend: Awaited<ReturnType<SuperAdminAnalyticsService['getMonthlyTrend']>>;
@@ -1408,6 +1495,7 @@ export class SuperAdminAnalyticsService {
       businessOverview,
       financialSnapshot,
       workflowPipeline,
+      casePipeline,
       statusBreakdowns,
       recentCases,
       monthlyTrend,
@@ -1426,6 +1514,7 @@ export class SuperAdminAnalyticsService {
       this.getBusinessOverview(),
       this.getFinancialSnapshot(),
       this.getWorkflowPipeline(),
+      this.getCasePipeline(),
       this.getStatusBreakdowns(),
       this.getRecentCases(8),
       this.getMonthlyTrend(6),
@@ -1454,6 +1543,7 @@ export class SuperAdminAnalyticsService {
       businessOverview,
       financialSnapshot,
       workflowPipeline,
+      casePipeline,
       statusBreakdowns,
       recentCases,
       monthlyTrend,
