@@ -27,7 +27,7 @@ const misReportExports = [
     id: "collections",
     label: "Collection Format",
     fileName: "All_Customers_SCF_Collection_Format.xlsx",
-    description: "Collection allocation format for all posted repayments.",
+    description: "Collection allocations with interest periods and days for all posted repayments.",
     dateBasis: "Collection date",
   },
 ];
