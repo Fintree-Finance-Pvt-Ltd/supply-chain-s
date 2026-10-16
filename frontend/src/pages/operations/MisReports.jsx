@@ -20,14 +20,14 @@ const misReportExports = [
     id: "asOfNow",
     label: "As of Now",
     fileName: "All_Customers_SCF_As_of_Now_Format.xlsx",
-    description: "Current outstanding position with interest periods and days at the last collection, including paid invoices.",
+    description: "Current outstanding position across every customer LAN.",
     dateBasis: "As-of date",
   },
   {
     id: "collections",
     label: "Collection Format",
     fileName: "All_Customers_SCF_Collection_Format.xlsx",
-    description: "Collection allocation format for all posted repayments.",
+    description: "Collection allocations with interest periods and days for all posted repayments.",
     dateBasis: "Collection date",
   },
 ];

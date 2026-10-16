@@ -2569,17 +2569,6 @@ private calculateAccruedCharges(
     const rules = this.getAccrualRules(loanAccount);
     const charges = this.calculateAccruedCharges(demand, disbursement, demand.invoice, asOfDate, rules);
     const allocations = this.getAllocationTotals(demand, asOfDate);
-    const asOfTime = this.toDateOnly(asOfDate).getTime();
-    const collectionHistory = this.getSettledDemandAllocations(demand)
-      .filter(allocation => this.toDateOnly(allocation.allocationDate).getTime() <= asOfTime);
-    const lastCollection = collectionHistory[collectionHistory.length - 1];
-    const previousCollection = collectionHistory[collectionHistory.length - 2];
-    const interestDaysTillLastCollection = lastCollection
-      ? this.getInterestDayCount(disbursementDate, lastCollection.allocationDate, rules)
-      : null;
-    const previousCollectionInterestDays = previousCollection
-      ? this.getInterestDayCount(disbursementDate, previousCollection.allocationDate, rules)
-      : 0;
     const isPaidClosedDemand = options.closePaidDemands === true && demand.status === DEMAND_STATUS.PAID;
     const interestAccrued = this.toNumber(charges.interestDue);
     const chargesAccrued = this.toNumber(charges.penalDue);
@@ -2649,12 +2638,6 @@ private calculateAccruedCharges(
       roi: this.toNumber(disbursement?.interestRate ?? demand.invoice?.roiPercentage),
       penalRate: normalizeMonthlyPenalRate(disbursement?.penalRate ?? demand.invoice?.penalCharges),
       lastPaymentDate: allocations.lastPaymentDate,
-      lastCollectionInterestFrom: lastCollection ? previousCollection?.allocationDate || disbursementDate : null,
-      lastCollectionInterestTo: lastCollection?.allocationDate || null,
-      lastCollectionInterestDays: interestDaysTillLastCollection === null
-        ? null
-        : Math.max(0, interestDaysTillLastCollection - previousCollectionInterestDays),
-      interestDaysTillLastCollection,
       calculationTill,
       interestDays,
       defaultInterestDays: interestTenureBreakup.defaultInterestDays,
@@ -3164,10 +3147,6 @@ private async getScfCollectionRows(filters?: ScfReportFilters,): Promise<any[]> 
           'Total O/S',
           'Last Payment',
           'Calc. Till',
-          'Last Collection Interest From',
-          'Last Collection Interest To',
-          'Last Collection Interest Days',
-          'Interest Days Till Last Collection',
         ],
         ...rows.map((row, index) => {
           const rowNumber = index + 2;
@@ -3211,10 +3190,6 @@ private async getScfCollectionRows(filters?: ScfReportFilters,): Promise<any[]> 
           },
           row.lastPaymentDate,
           row.calculationTill,
-          row.lastCollectionInterestFrom,
-          row.lastCollectionInterestTo,
-          row.lastCollectionInterestDays,
-          row.interestDaysTillLastCollection,
         ];
         }),
       ],
@@ -3241,6 +3216,9 @@ private async getScfCollectionRows(filters?: ScfReportFilters,): Promise<any[]> 
           'Last Payment Date',
           'Principal',
           'Tenure Updated',
+          'Interest From Date',
+          'Interest To Date',
+          'Interest Days',
           'Interest',
           'Previous Interest Accrued',
           'Charges',
@@ -3269,6 +3247,9 @@ private async getScfCollectionRows(filters?: ScfReportFilters,): Promise<any[]> 
           row.lastPaymentDate,
           row.principal,
           row.tenureUpdated,
+          row.interestFromDate,
+          row.interestToDate,
+          row.soaInterestDays,
           row.interest,
           row.previousInterestAccrued,
           row.charges,
