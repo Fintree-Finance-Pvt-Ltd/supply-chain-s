@@ -427,6 +427,7 @@ private calculateAccruedCharges(
   let accumulatedFee = 0;
   let accumulatedPenal = 0;
   let settledInterest = 0;
+  let normalInterestAccrued = 0;
   let allocationIndex = 0;
 
   const applyAllocationToOutstanding = (allocation: RepaymentAllocation): void => {
@@ -441,8 +442,9 @@ private calculateAccruedCharges(
   for (let day = 1; day <= dayCount; day += 1) {
     const accrualDate = this.getAccrualDate(disbursementDate, day, rules);
 
-    // Apply collections before the day starts. Once overdue, interest and
-    // penal both use outstanding principal plus unpaid accrued interest.
+    // Collections reduce the next day's opening balance. After the normal
+    // period, only unpaid normal-period interest is added to principal;
+    // newly accrued overdue interest never enters the interest/penal base.
     while (
       allocationIndex < allocations.length &&
       this.toDateOnly(allocations[allocationIndex].allocationDate).getTime() < accrualDate.getTime()
@@ -451,14 +453,18 @@ private calculateAccruedCharges(
       allocationIndex += 1;
     }
 
-    const openingInterestOutstanding = this.roundMoney(
-      Math.max(accumulatedInterest - settledInterest, 0),
+    const normalInterestOutstanding = this.roundMoney(
+      Math.max(normalInterestAccrued - settledInterest, 0),
     );
-    const overdueBase = this.roundMoney(principal + openingInterestOutstanding);
+    const overdueBase = this.roundMoney(principal + normalInterestOutstanding);
 
     const interestBase = day >= rules.penalStartDay ? overdueBase : principal;
 
-    accumulatedInterest += this.calculatePercentageAmountRaw(interestBase, interestRate, 1);
+    const dailyInterest = this.calculatePercentageAmountRaw(interestBase, interestRate, 1);
+    accumulatedInterest += dailyInterest;
+    if (day < rules.penalStartDay) {
+      normalInterestAccrued += dailyInterest;
+    }
     accumulatedFee += this.calculatePercentageAmountRaw(principal, serviceFeeRate, 1);
 
     if (day >= rules.penalStartDay && overdueBase > 0) {
