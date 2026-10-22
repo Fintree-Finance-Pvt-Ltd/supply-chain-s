@@ -166,7 +166,6 @@ function App() {
                   ROLES.OPERATIONS_HEAD,
                   ROLES.CEO,
                   ROLES.CFO,
-                  ROLES.MD,
                 ]}
               >
                 <CaseCalendar />

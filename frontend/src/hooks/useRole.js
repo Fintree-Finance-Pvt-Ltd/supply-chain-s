@@ -73,7 +73,6 @@ export const ROLE_MENU_CONFIG = {
   [ROLES.MD]: [
     { path: '/management/dashboard', label: 'Management Dashboard', icon: 'FiHome' },
     { path: '/management/ceo-approvals', label: 'Pending Approvals', icon: 'FiCheckCircle' },
-    { path: '/calendar', label: 'Calendar', icon: 'FiCalendar' },
     { path: '/invoice-discounting/md', label: 'Invoice Discounting', icon: 'FiFileText' },
   ],
   [ROLES.SUPERADMIN]: [

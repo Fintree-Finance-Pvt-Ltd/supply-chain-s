@@ -19,7 +19,6 @@ const CALENDAR_ROLES = [
   ROLES.OPERATIONS_HEAD,
   ROLES.CEO,
   ROLES.CFO,
-  ROLES.MD,
 ];
 
 const parseDate = (value: unknown): Date | undefined => {
@@ -51,7 +50,7 @@ router.get('/customers/:customerId/renewals', async (req: Request, res: Response
 
 router.post(
   '/customers/:customerId/renewals/start',
-  roleMiddleware(CALENDAR_ROLES),
+  roleMiddleware([...CALENDAR_ROLES, ROLES.MD]),
   async (req: Request, res: Response) => {
     try {
       const result = await caseLifecycleService.startRenewal(
