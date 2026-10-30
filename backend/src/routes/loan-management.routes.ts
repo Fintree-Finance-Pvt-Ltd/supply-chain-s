@@ -45,13 +45,13 @@ router.post(
 
 router.delete(
   '/collections/:lan',
-  roleMiddleware([ROLES.OPERATIONS_HEAD, ROLES.SUPERADMIN, ROLES.ADMIN]),
+  roleMiddleware([ROLES.OPERATIONS_HEAD]),
   loanManagementController.deleteCollectionsByLan,
 );
 
 router.delete(
   '/invoices/:lan',
-  roleMiddleware([ROLES.OPERATIONS_HEAD, ROLES.SUPERADMIN, ROLES.ADMIN]),
+  roleMiddleware([ROLES.OPERATIONS_HEAD]),
   loanManagementController.deleteInvoicesByLan,
 );
 
