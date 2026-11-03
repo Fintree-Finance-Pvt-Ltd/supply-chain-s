@@ -2915,6 +2915,9 @@ private async getScfCollectionRows(filters?: ScfReportFilters,): Promise<any[]> 
         customerCode:
           state.customerCode,
 
+        customerName:
+          state.customerName,
+
         lan: allocation.lan,
 
         transactionSerial:
@@ -3209,6 +3212,7 @@ private async getScfCollectionRows(filters?: ScfReportFilters,): Promise<any[]> 
       rows: [
         [
           'Customer',
+          'Customer Name',
           'Account ID',
           'Transaction Serial',
           'Product',
@@ -3240,6 +3244,7 @@ private async getScfCollectionRows(filters?: ScfReportFilters,): Promise<any[]> 
         ],
         ...rows.map(row => [
           row.customerCode,
+          row.customerName,
           row.lan,
           row.transactionSerial,
           row.product,
