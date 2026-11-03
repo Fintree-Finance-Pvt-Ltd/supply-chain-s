@@ -2304,11 +2304,15 @@ private calculateAccruedCharges(
     };
   }
 
-  private calculateScfDelayedInterestAfterDefault(
+  // Settled interest is applied to normal-period interest first, so only the
+  // part of it exceeding the normal-period accrual counts as delayed interest
+  // settled (capped at the delayed interest actually accrued).
+  private calculateScfDelayedInterestSettled(
     demand: LoanDemand,
     disbursement: LoanDisbursement | null | undefined,
     invoice: Invoice | null | undefined,
     asOfDate: Date,
+    settledInterest: number,
     rules: AccrualRules,
   ): number {
     const currentCharges = this.calculateAccruedCharges(demand, disbursement, invoice, asOfDate, rules);
@@ -2328,9 +2332,52 @@ private calculateAccruedCharges(
       rules,
     );
 
-    return this.roundMoney(
-      Math.max(this.toNumber(currentCharges.interestDue) - this.toNumber(interestBeforeDefault.interestDue), 0),
+    const normalInterestAccrued = this.toNumber(interestBeforeDefault.interestDue);
+    const delayedInterestAccrued = Math.max(
+      this.toNumber(currentCharges.interestDue) - normalInterestAccrued,
+      0,
     );
+    const settledBeyondNormal = Math.max(this.toNumber(settledInterest) - normalInterestAccrued, 0);
+
+    return this.roundMoney(Math.min(delayedInterestAccrued, settledBeyondNormal));
+  }
+
+  private hasAllocationAfter(demand: LoanDemand, asOfDate: Date): boolean {
+    const asOfTime = this.toDateOnly(asOfDate).getTime();
+    return (demand.allocations || []).some(allocation =>
+      allocation.repayment?.status !== REPAYMENT_STATUS.REVERSED &&
+      this.toDateOnly(allocation.allocationDate).getTime() > asOfTime,
+    );
+  }
+
+  // Interest/charges accrued up to the previous allocation that were still
+  // unpaid after it, i.e. the amounts carried forward into the current one.
+  private getScfCarriedForwardDue(
+    demand: LoanDemand,
+    previousAllocation: RepaymentAllocation | null,
+  ): { interest: number; charges: number } {
+    if (!previousAllocation) return { interest: 0, charges: 0 };
+
+    const rules = this.getAccrualRules(demand.loanAccount);
+    const charges = this.calculateAccruedCharges(
+      demand,
+      demand.disbursement || null,
+      demand.invoice,
+      this.toDateOnly(previousAllocation.allocationDate),
+      rules,
+    );
+    const ordered = this.getSettledDemandAllocations(demand);
+    const settled = ordered.slice(
+      0,
+      ordered.findIndex(allocation => allocation.id === previousAllocation.id) + 1,
+    );
+    const settledInterest = settled.reduce((sum, allocation) => sum + this.toNumber(allocation.interestAmount), 0);
+    const settledPenal = settled.reduce((sum, allocation) => sum + this.toNumber(allocation.penalAmount), 0);
+
+    return {
+      interest: this.roundMoney(Math.max(this.toNumber(charges.interestDue) - settledInterest, 0)),
+      charges: this.roundMoney(Math.max(this.toNumber(charges.penalDue) - settledPenal, 0)),
+    };
   }
 
   private calculateScfInterestTenureBreakup(
@@ -2575,7 +2622,17 @@ private calculateAccruedCharges(
     const rules = this.getAccrualRules(loanAccount);
     const charges = this.calculateAccruedCharges(demand, disbursement, demand.invoice, asOfDate, rules);
     const allocations = this.getAllocationTotals(demand, asOfDate);
-    const isPaidClosedDemand = options.closePaidDemands === true && demand.status === DEMAND_STATUS.PAID;
+    // A demand that is PAID today is only closed for this report if every
+    // allocation falls on/before the as-of date; otherwise it was still open then.
+    const isPaidNow = options.closePaidDemands === true && demand.status === DEMAND_STATUS.PAID;
+    const isPaidClosedDemand = isPaidNow && !this.hasAllocationAfter(demand, asOfDate);
+    const status = isPaidNow && !isPaidClosedDemand
+      ? allocations.total > 0
+        ? DEMAND_STATUS.PARTIAL
+        : this.toDateOnly(demand.dueDate).getTime() < this.toDateOnly(asOfDate).getTime()
+          ? DEMAND_STATUS.OVERDUE
+          : DEMAND_STATUS.PENDING
+      : demand.status;
     const interestAccrued = this.toNumber(charges.interestDue);
     const chargesAccrued = this.toNumber(charges.penalDue);
     const interestOutstanding = isPaidClosedDemand
@@ -2607,11 +2664,12 @@ private calculateAccruedCharges(
     const calculationTill = isPaidClosedDemand
       ? allocations.lastPaymentDate || asOfDate
       : asOfDate;
-    const delayedInterestSettled = this.calculateScfDelayedInterestAfterDefault(
+    const delayedInterestSettled = this.calculateScfDelayedInterestSettled(
       demand,
       disbursement,
       demand.invoice,
       this.toDateOnly(calculationTill),
+      allocations.interest,
       rules,
     );
     const totalOutstanding = isPaidClosedDemand
@@ -2635,7 +2693,7 @@ private calculateAccruedCharges(
       product: this.getProductName(loanAccount),
       lan: demand.lan,
       invoiceId: this.getInvoiceDisplayId(demand),
-      status: demand.status,
+      status,
       dueDate: demand.dueDate,
       dpd: isPaidClosedDemand ? 0 : this.getOverdueDayCount(demand.dueDate, asOfDate),
       disbursementDate,
@@ -2697,6 +2755,11 @@ private calculateAccruedCharges(
     });
 
   let filteredDemands = this.filterByDateRange(demands, 'dueDate', reportFilters)
+    .filter((demand) => {
+      // Invoices disbursed after the as-of date did not exist yet on that date.
+      const disbursementDate = demand.disbursement?.disbursementDate || demand.demandDate;
+      return !disbursementDate || this.toDateOnly(disbursementDate).getTime() <= asOfDate.getTime();
+    })
     .sort(this.compareDemandsForAllocation);
 
    if (options?.dueWithinDays) {
@@ -2909,7 +2972,11 @@ private async getScfCollectionRows(filters?: ScfReportFilters,): Promise<any[]> 
           )
         );
 
-      // keep your existing return object here
+      const carriedForward =
+        this.getScfCarriedForwardDue(
+          demand,
+          previousAllocation,
+        );
 
       return {
         customerCode:
@@ -3014,7 +3081,7 @@ private async getScfCollectionRows(filters?: ScfReportFilters,): Promise<any[]> 
           ),
 
         previousInterestAccrued:
-          state.previousInterest,
+          carriedForward.interest,
 
         charges:
           this.toNumber(
@@ -3046,7 +3113,7 @@ private async getScfCollectionRows(filters?: ScfReportFilters,): Promise<any[]> 
           state.principalDue,
 
         previousChargesDue:
-          state.previousCharges,
+          carriedForward.charges,
 
         chargesDue:
           state.chargesDue,
@@ -3261,13 +3328,13 @@ private async getScfCollectionRows(filters?: ScfReportFilters,): Promise<any[]> 
           row.interestFromDate,
           row.interestToDate,
           row.soaInterestDays,
-          row.interest,
+          row.soaInterest,
           row.previousInterestAccrued,
-          row.charges,
+          row.soaCharges,
           row.principalSettled,
           row.interestSettled,
           row.chargesSettled,
-          row.chargesDays,
+          row.soaChargesDays,
           row.interestDue,
           row.principalDue,
           row.previousChargesDue,
